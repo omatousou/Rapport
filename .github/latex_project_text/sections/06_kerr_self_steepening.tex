@@ -35,8 +35,10 @@ Cet indice de réfraction dépend donc de l'intensité. C'est l'origine de l'eff
 \mathbf{P}_{\text{NL}} = \frac{3}{4}\varepsilon_0 \chi^{(3)}\vert{}\mathcal{E}\vert{}^2 \mathbf{E}
 \end{equation}
 
-La phase d'une impulsion laser femtoseconde dans un diélectrique dépend de l'indice de réfraction non-linéaire : $\Phi(t) = nk_0z - \omega_0 t = n_0k_0z + n_2k_0zI - \omega_0 t$. Comme l'intensité d'une telle impulsion est suffisamment courte, l'évolution temporelle de l'intensité a un effet sur les composantes fréquentielles de l'impulsion. L'évolution de la phase subit un effet d'auto-raidissement : l'évolution de la fréquence est décalée lorsque l'impulsion se propage dans le matériau. Si le profil d'intensité en entrée est symétrique, ce qui serait le cas d'un faisceau gaussien parfait, le spectre peut donc rester symétrique.
-
+La phase d'une impulsion laser femtoseconde dans un diélectrique dépend de l'indice de réfraction non-linéaire : $\Phi(t) = nk_0z - \omega_0 t = n_0k_0z + n_2k_0zI - \omega_0 t$. En dérivant par rapport au temps, on obtient le décalage instantané de fréquence dû à l'automodulation de phase :
 \begin{equation}
 \frac{d\Phi}{dt} = -\omega_0 + n_2z\frac{\omega_0}{c}\frac{dI(t)}{dt}
 \end{equation}
+Sur le front montant de l'impulsion, $dI/dt > 0$ et la fréquence instantanée est décalée vers le rouge, alors que sur le front descendant, $dI/dt < 0$ et elle est décalée vers le bleu.
+
+Cette automodulation de phase seule, dans l'approximation de l'enveloppe lentement variable, ne déforme pas le profil temporel de l'impulsion : elle ajoute uniquement une dérive de fréquence sans changer la forme de $I(t)$. L'auto-raidissement proprement dit est un effet distinct, porté par le terme de choc $(2n_2/c)\,\partial(|\mathcal{E}|^2\mathcal{E})/\partial t$, qui vient du fait que la vitesse de groupe dépend elle-même de l'intensité par l'intermédiaire de $n_2 I$~\cite{rothenberg1992}. Le sommet de l'impulsion, plus intense, se propage donc plus lentement que les ailes, ce qui rapproche progressivement le maximum d'intensité du front arrière et raidit ce front de manière croissante avec la distance de propagation~\cite{couairon2007}. Contrairement à ce que suggère une lecture rapide de l'équation d'automodulation de phase seule, ce terme de choc déforme le profil temporel de façon intrinsèquement asymétrique, même pour une impulsion gaussienne parfaitement symétrique en entrée, et il est identifié comme responsable de l'asymétrie observée dans les spectres de génération de supercontinuum~\cite{rothenberg1992,gaeta2000}.
