@@ -1,6 +1,7 @@
-\documentclass[a4paper,10pt]{article}
+\documentclass[a4paper,11pt]{article}
 
 \usepackage[utf8]{inputenc}
+\usepackage[margin=2.7cm]{geometry}
 \usepackage{hyperref}
 \usepackage{physics}
 \usepackage{booktabs}
@@ -25,15 +26,53 @@
 \definecolor{kicol}{RGB}{24,95,165}    % blue  -- electron before
 \definecolor{kfcol}{RGB}{15,110,86}    % green -- electron after
 \definecolor{qcol}{RGB}{153,60,29}     % brown -- phonon
+\definecolor{accent}{RGB}{24,95,165}   % titlepage accent rule
 
-% Déclaration des informations du titre (Préambule)
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=accent,
+    urlcolor=accent,
+    pdftitle={Beam Propagation Simulation in SiO2},
+    pdfauthor={Anatole Cremel--Schlemer}
+}
+
 \title{Beam Propagation Simulation in $\mathrm{SiO}_2$}
 \author{Anatole CREMEL--SCHLEMER \\ The University of Tokyo}
 \date{\today}
 
 \begin{document}
 
-\maketitle
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\Large\scshape The University of Tokyo\par}
+    \vspace{3cm}
+
+    \rule{\linewidth}{0.6mm}\\[0.5cm]
+    {\huge\bfseries Beam Propagation Simulation\\[0.3cm] in $\mathrm{SiO}_2$\par}
+    \vspace{0.5cm}
+    \rule{\linewidth}{0.6mm}\\[2cm]
+
+    \begin{minipage}{0.45\textwidth}
+        \begin{flushleft}\large
+            \textit{Author}\\
+            Anatole \textsc{Cremel--Schlemer}
+        \end{flushleft}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.45\textwidth}
+        \begin{flushright}\large
+            \textit{Date}\\
+            \today
+        \end{flushright}
+    \end{minipage}
+
+    \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
 
 \input{sections/01_introduction}
 \input{sections/02_free_carriers_excitation}
