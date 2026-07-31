@@ -1,25 +1,33 @@
-\subsection{Excitons Formation}
+\subsection{Formation des excitons}
 
-When an electron is promoted from the valence band to the conduction band for example via optical absorption it leaves behind a hole with an effective positive charge $+e$. Conduction band electrons can experience the potential created by valence band holes. Such electrostatic attraction can be modeled by a Coulomb potential allowing the Schrödinger equation to be solved for a composite particle known as an exciton consisting of a conduction band electron and a valence band hole. This quasiparticle has a reduced mass defined by $\frac{1}{\mu} = \frac{1}{m_e}+\frac{1}{m_h}$ and a quantized hydrogen like energy spectrum.
+Lorsqu'un électron est promu de la bande de valence vers la bande de conduction, par absorption optique par exemple, il laisse derrière lui un trou de charge effective $+e$. Les électrons de la bande de conduction peuvent ressentir le potentiel créé par les trous de la bande de valence. Cette attraction électrostatique peut être modélisée par un potentiel de Coulomb, permettant de résoudre l'équation de Schrödinger pour une particule composite appelée \textbf{exciton}, constituée d'un électron de la bande de conduction et d'un trou de la bande de valence.
 
-In the absence of Coulomb interaction the minimum energy required to create a free electron hole pair corresponds to the bandgap energy $E_g$. However due to the attractive Coulomb potential between the electron and the hole they can form a bound state. The accessible energy levels lie below the conduction band. These states can be populated directly via the process described previously but also through non radiative relaxation mechanisms such as the Auger effect or phonon exciton interactions. This formation process is very fast, \cite{mao2004}  say it is often below $1$ ps for wide band gap materials.
+Cette quasi-particule possède une masse réduite définie par $\frac{1}{\mu} = \frac{1}{m_e} + \frac{1}{m_h}$ et un spectre d'énergie quantifié de type hydrogénoïde.
 
-The relative motion of this electron hole pair can be modeled using a hydrogenic Schrödinger equation. The stationary Schrödinger equation for the relative coordinate $\mathbf{r}$ can be expressed with strictly positive terms as follows:
+En l'absence d'interaction de Coulomb, l'énergie minimale requise pour créer une paire électron-trou libre correspond à l'énergie de gap $E_g$. Cependant, en raison du potentiel attractif de Coulomb entre l'électron et le trou, ils peuvent former un état lié. Les niveaux d'énergie accessibles se situent alors en dessous de la bande de conduction. Ces états peuvent être peuplés directement via le processus décrit précédemment, mais aussi par des mécanismes de relaxation non radiatifs tels que l'effet Auger ou les interactions exciton-phonon. Comme le souligne Mao et al.~\cite{mao2004}, ce processus de formation est très rapide, souvent inférieur à $1 \text{ ps}$ pour les matériaux à large gap.
 
- $$\left[ \frac{\hbar^2}{2\mu} \nabla^2 + \frac{e^2}{4\pi \epsilon_0 \epsilon_r r} \right] \psi(\mathbf{r}) = E_b \psi(\mathbf{r})$$ 
-where $\epsilon = \epsilon_0 \epsilon_r$ is the dielectric permittivity of the medium and $E_b > 0$ is the binding energy of the exciton. The relationship between the bandgap energy $E_g$ the binding energy term and the required excitation energy $E_n$ for the $n$ th exciton state is given by:
+Le mouvement relatif de cette paire électron-trou peut être modélisé par une équation de Schrödinger hydrogénoïde. L'équation stationnaire pour la coordonnée relative $\mathbf{r}$ s'écrit :
+\begin{equation}
+    \left[ \frac{\hbar^2}{2\mu} \nabla^2 + \frac{e^2}{4\pi \epsilon_0 \epsilon_r r} \right] \psi(\mathbf{r}) = E_b \psi(\mathbf{r}),
+\end{equation}
+où $\epsilon = \epsilon_0 \epsilon_r$ est la permittivité diélectrique du milieu et $E_b > 0$ est l'énergie de liaison de l'exciton.
 
- $$E_g = E_n + \frac{R_\chi}{n^2}$$ 
-where $R_\chi$ is the effective exciton Rydberg energy:
+La relation entre l'énergie de gap $E_g$, le terme d'énergie de liaison et l'énergie d'excitation $E_n$ requise pour le $n$-ième état de l'exciton est donnée par :
+\begin{equation}
+    E_g = E_n + \frac{R_\chi}{n^2},
+\end{equation}
+où $R_\chi$ est l'énergie de Rydberg effective de l'exciton :
+\begin{equation}
+    R_\chi = \frac{\mu e^4}{2(4\pi \epsilon)^2 \hbar^2} = R_H \left(\frac{\mu}{m_0}\right) \frac{1}{\epsilon_r^2}.
+\end{equation}
+Ici, $R_H \approx 13.6\text{ eV}$ est la constante de Rydberg de l'atome d'hydrogène, $m_0$ est la masse de l'électron libre et $\epsilon_r$ est la constante diélectrique relative du matériau.
 
- $$R_\chi = \frac{\mu e^4}{2(4\pi \epsilon)^2 \hbar^2} = R_H \left(\frac{\mu}{m_0}\right) \frac{1}{\epsilon_r^2}$$ 
-Here $R_H \approx 13.6\text{ eV}$ is the Rydberg constant of the hydrogen atom $m_0$ is the free electron mass and $\epsilon_r$ is the relative dielectric constant of the material.
+Pour évaluer l'extension spatiale de la fonction d'onde de l'exciton, on définit le rayon de Bohr de l'exciton $a_\chi$ :
+\begin{equation}
+    a_\chi = \frac{4\pi \epsilon \hbar^2}{\mu e^2} = a_0 \cdot \epsilon_r \left(\frac{m_0}{\mu}\right),
+\end{equation}
+où $a_0 \approx 0.53\text{ \AA}$ est le rayon de Bohr atomique.
 
-To evaluate the spatial extent of the exciton wave function we define the exciton Bohr radius $a_\chi$:
+Dans les matériaux à large gap, les électrons sont fortement liés à leurs atomes, ce qui signifie que la permittivité diélectrique relative est faible pour le $\mathrm{SiO}_2$ ou les halogénures alcalins, où la constante diélectrique relative est typiquement de l'ordre de $2$ à $4$. Par conséquent, le matériau offre un faible écrantage diélectrique de l'attraction de Coulomb, maintenant un puits de potentiel profond.
 
- $$a_\chi = \frac{4\pi \epsilon \hbar^2}{\mu e^2} = a_0 \cdot \epsilon_r \left(\frac{m_0}{\mu}\right)$$ 
-where $a_0 \approx 0.53\text{ \AA}$ is the atomic Bohr radius. The spatial profile and binding energy of the exciton are governed directly by $\epsilon_r$.
-
-In wide bandgap materials, elecrons are tighly bound to their atomes this the electric relative permitivity is low for $\text{SiO}_2$ or alkali halides where the relative dielectric constant is small being typically around $2$ to $4$. Consequently the material provides poor dielectric screening of the Coulomb attraction maintaining a strong potential well.
-
-A low permittivity directly leads to a reduction of the exciton Bohr radius down to a few Ångströms. When \(a_{\chi }\) becomes comparable to the interatomic lattice spacing, the exciton localization no longer spreads over multiple atoms of the lattice, switching instead toward a tightly bound regime. The binding energy also increases, preventing thermal dissociation and promoting ultra-fast energy relaxation. During this process, the excess electrostatic potential energy of the unshielded exciton is abruptly discharged into local lattice vibrations (phonons) via massive exciton-phonon coupling within picoseconds. Consequently, this induces a localized lattice distortion and leads to the formation of a self-trapped exciton (STE).
+Une faible permittivité conduit directement à une réduction du rayon de Bohr de l'exciton, jusqu'à quelques angströms. Lorsque $a_\chi$ devient comparable à l'espacement interatomique du réseau, la localisation de l'exciton ne s'étend plus sur plusieurs atomes du réseau, mais bascule vers un régime fortement lié. L'énergie de liaison augmente également, empêchant la dissociation thermique et favorisant une relaxation ultra-rapide de l'énergie. Pendant ce processus, l'excès d'énergie potentielle électrostatique de l'exciton non écranté est brusquement déchargé dans les vibrations locales du réseau (phonons) via un couplage exciton-phonon massif en quelques picosecondes. Cela induit une distorsion locale du réseau et conduit à la formation d'un exciton auto-piégé (STE).

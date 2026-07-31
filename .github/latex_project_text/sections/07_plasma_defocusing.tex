@@ -1,69 +1,57 @@
-\subsection{Plasma defocusing}
-Several effects are at the origin of electrons in the conduction band : thermal excitation, tunneling ionization, multiphoton ionization, free electrons resulting from cristal defects. All of these free carriers reacts to the incident electric field. The simplest modelisation is to treat the conduction electrons as a free-electron gas subject to the friction
- $\gamma = 1/\tau$ of Eq.~\eqref{eq:tau_result}, the equation of motion in a field
- $\vec{E}(t) = \vec{E}_0\, e^{-i\omega_0 t}$ reads
+\subsection{Défocalisation par plasma}
+
+Plusieurs effets sont à l'origine des électrons dans la bande de conduction : l'excitation thermique, l'ionisation par effet tunnel, l'ionisation multiphotonique, ou encore les électrons libres résultant de défauts cristallins. Tous ces porteurs libres réagissent au champ électrique incident. La modélisation la plus simple consiste à traiter les électrons de conduction comme un gaz d'électrons libres soumis à la friction $\gamma = 1/\tau$ de l'équation~\eqref{eq:tau_result}. L'équation du mouvement dans un champ $\vec{E}(t) = \vec{E}_0\, e^{-i\omega_0 t}$ s'écrit :
 \begin{equation}
   m^\ast \frac{d^2}{dt^2}\vec{x} = -e\vec{E} - \frac{m^\ast}{\tau}\, \frac{d}{dt}\vec{x}
   \,\Longrightarrow\,
-  \vec{x}
-  = \frac{\tau e\vec{E}}{m^\ast \omega_0\left(\omega_0\tau + i\right)}
+  \vec{x} = \frac{\tau e\vec{E}}{m^\ast \omega_0\left(\omega_0\tau + i\right)}
 \end{equation}
-The polarisation of the free carriers $\vec{P}_{\mathrm{free}} = -eN\vec{x}$ follows as
-\begin{equation}
-  \vec{P}_{\mathrm{free}} = -eN\vec{x}
- =-\frac{\omega_p^2\tau}{ \omega_0\left(\omega_0\tau + i\right)}\varepsilon_0\vec{E}
-\end{equation}
-Introducing the plasma frequency
- $\omega_p^2 = \dfrac{Ne^2}{\varepsilon_0 m^\ast}$.
 
-The valence electrons are not removed by the excitation, and their polarisation
- $\vec{P}_{\mathrm{bound}} = \varepsilon_0 \chi^{(1)} \vec{E}$ must be retained. Both
-populations are driven by the same macroscopic field and respond linearly, so their
-contributions add.Introducing the linear index
- $n_0^2 = 1 + \chi^{(1)}$ of the unexcited medium, so that the relative permitivity read : 
+La polarisation des porteurs libres $\vec{P}_{\mathrm{free}} = -eN\vec{x}$ en découle :
 \begin{equation}
-  \varepsilon_r = \frac{D}{\varepsilon_0 E} = \frac{1}{\varepsilon_0\vec{E}}\left(\varepsilon_0 \vec{E} + \vec{P}_{\mathrm{bound}} + \vec{P}_{\mathrm{free}}\right)
-     =  n_0^2
-    - \frac{\omega_p^2\tau}{\omega_0(\omega_0\tau + i)}
+  \vec{P}_{\mathrm{free}} = -eN\vec{x} = -\frac{\omega_p^2\tau}{ \omega_0\left(\omega_0\tau + i\right)}\varepsilon_0\vec{E}
 \end{equation}
-multiplying numerator and denominator by the complex conjugate and separates the real and imaginary parts we obtain 
+en introduisant la fréquence plasma $\omega_p^2 = \dfrac{Ne^2}{\varepsilon_0 m^\ast}$.
+
+Les électrons de valence ne sont pas retirés par l'excitation, et leur polarisation $\vec{P}_{\mathrm{bound}} = \varepsilon_0 \chi^{(1)} \vec{E}$ doit être conservée. Les deux populations sont pilotées par le même champ macroscopique et répondent linéairement, donc leurs contributions s'additionnent. En introduisant l'indice linéaire $n_0^2 = 1 + \chi^{(1)}$ du milieu non excité, la permittivité relative s'écrit :
+\begin{equation}
+  \varepsilon_r = \frac{D}{\varepsilon_0 E} = \frac{1}{\varepsilon_0\vec{E}}\left(\varepsilon_0 \vec{E} + \vec{P}_{\mathrm{bound}} + \vec{P}_{\mathrm{free}}\right) =  n_0^2 - \frac{\omega_p^2\tau}{\omega_0(\omega_0\tau + i)}
+\end{equation}
+
+En multipliant numérateur et dénominateur par le conjugué complexe et en séparant les parties réelle et imaginaire, nous obtenons :
 \begin{align}
-\varepsilon_r &= \varepsilon_1 + i\varepsilon_2\\
+\varepsilon_r &= \varepsilon_1 + i\varepsilon_2 \\
   \varepsilon_1 &= n_0^2 - \frac{\omega_p^2\tau^2}{1 + \omega_0^2\tau^2} , \\
   \varepsilon_2 &= \frac{\omega_p^2\tau}{\omega_0\left(1 + \omega_0^2\tau^2\right)} > 0 ,
 \end{align}
 
-The complex index follows from $\tilde{n} = n + i\kappa = \sqrt{\varepsilon_r}$, so that
- $\varepsilon_1 = n^2 - \kappa^2$ and $\varepsilon_2 = 2n\kappa$.
+L'indice complexe suit de $\tilde{n} = n + i\kappa = \sqrt{\varepsilon_r}$, donc $\varepsilon_1 = n^2 - \kappa^2$ et $\varepsilon_2 = 2n\kappa$.
 
-In the case here the number of oscillations before collision is high, the real part of the
-refractive index simplify
+Dans le cas où le nombre d'oscillations avant collision est élevé, la partie réelle de l'indice de réfraction se simplifie :
 \begin{equation}
   n = \sqrt{\varepsilon_1} = \left(n_0^2 - \frac{\omega_p^2\tau^2}{1 + \omega_0^2\tau^2}\right)^\frac{1}{2} \approx n_0\left(1 - \frac{\omega_p^2}{n_0^2\,\omega_0^2}\right)^\frac{1}{2}
 \end{equation}
-The square root must be real, which imposes
- $\dfrac{\omega_p^2}{n_0^2\,\omega_0^2} \leq 1$. Writing out the definition of the plasma
-frequency,
+
+La racine carrée doit être réelle, ce qui impose $\dfrac{\omega_p^2}{n_0^2\,\omega_0^2} \leq 1$. En développant la définition de la fréquence plasma, nous obtenons :
 \begin{equation}
   \frac{Ne^2}{n_0^2\,\varepsilon_0 m^\ast \omega_0^2} \leq 1
   \,\Longrightarrow\,
   N \leq \frac{n_0^2\,\varepsilon_0 m^\ast \omega_0^2}{e^2}
 \end{equation}
-Defining the critical density $N_c$ as the density at which the plasma frequency equals the
-laser frequency, $\omega_p(N_c) = \omega_0$,
+
+En définissant la densité critique $N_c$ comme la densité à laquelle la fréquence plasma est égale à la fréquence laser, $\omega_p(N_c) = \omega_0$, nous avons :
 \begin{equation}
   N_c = \frac{\varepsilon_0 m^\ast \omega_0^2}{e^2}
   \,\Longrightarrow\,
   \frac{\omega_p^2}{\omega_0^2} = \frac{N}{N_c}
 \end{equation}
-the condition becomes $N \leq n_0^2 N_c$, beyond which the wave is evanescent and the
-plasma is reflective. The index is then
+
+La condition devient alors $N \leq n_0^2 N_c$, au-delà de laquelle l'onde est évanescente et le plasma est réfléchissant. L'indice est alors :
 \begin{equation}
-  n = n_0\sqrt{1 - \frac{\omega_p^2}{n_0^2\,\omega_0^2}}
-    = n_0\sqrt{1 - \frac{N}{n_0^2 N_c}}
+  n = n_0\sqrt{1 - \frac{\omega_p^2}{n_0^2\,\omega_0^2}} = n_0\sqrt{1 - \frac{N}{n_0^2 N_c}}
 \end{equation}
-In the case of an underdense plasma, $N \ll n_0^2 N_c$, the real part of the refractive
-index can be expanded as
+
+Dans le cas d'un plasma sous-dense, $N \ll n_0^2 N_c$, la partie réelle de l'indice de réfraction peut être développée comme :
 \begin{equation}
   n \simeq n_0 - \frac{N}{2\,n_0 N_c}
   \label{eq:delta_n_plasma}

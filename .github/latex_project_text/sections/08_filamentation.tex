@@ -1,43 +1,22 @@
 \subsection{Filamentation}
 
-Femtosecond laser pulse propagation in transparent dielectrics such as $\mathrm{SiO}_2$ can lead to the formation of \textbf{filaments}, which are self-guided light channels resulting from a dynamic balance between \textbf{Kerr self-focusing} and \textbf{plasma defocusing}. This phenomenon occurs when the input power exceeds a critical value, denoted as $P_{cr}$.
+La propagation d'impulsions laser femtosecondes dans des diélectriques transparents comme le $\mathrm{SiO}_2$ peut conduire à la formation de \textbf{filaments}, des canaux auto-guidés résultant d'un équilibre dynamique entre l'\textbf{auto-focalisation de Kerr} et la \textbf{défocalisation par plasma}. Ce phénomène se produit lorsque la puissance d'entrée dépasse une valeur critique, notée $P_{cr}$.
 
-\subsubsection{Critical Power for Self-Focusing}
-The critical power $P_{cr}$ is derived from the balance between the nonlinear self-focusing effect and diffraction. For a Gaussian beam, the critical power is given by:
+\subsubsection{Puissance critique et auto-focalisation}
+
+La puissance critique $P_{cr}$ découle de l'équilibre entre l'effet non-linéaire d'auto-focalisation et la diffraction. Pour un faisceau gaussien, elle s'exprime par :
 \begin{equation}
     P_{cr} = \frac{3.77 \lambda_0^2}{8 \pi n_0 n_2},
 \end{equation}
-where $\lambda_0$ is the laser wavelength, $n_0$ is the linear refractive index, and $n_2$ is the nonlinear refractive index coefficient.
+où $\lambda_0$ est la longueur d'onde du laser, $n_0$ l'indice de réfraction linéaire et $n_2$ le coefficient d'indice non-linéaire.
 
-For fused silica, typical values are:
-\begin{itemize}
-    \item Linear refractive index: $n_0 \approx 1.45$ (at $\lambda_0 = 800 \text{ nm}$).
-    \item Nonlinear refractive index: $n_2 \approx 2.7 \times 10^{-20} \text{ m}^2/\text{W}$ (at $\lambda_0 = 800 \text{ nm}$).
-\end{itemize}
+Pour la silice fondue, les valeurs typiques à $\lambda_0 = 800 \text{ nm}$ sont $n_0 \approx 1.45$ et $n_2 \approx 2.7 \times 10^{-20} \text{ m}^2/\text{W}$. En utilisant ces valeurs, on calcule $P_{cr} \approx 2.5 \text{ MW}$. À $\lambda_0 = 1030 \text{ nm}$, avec $n_2 \approx 2.2 \times 10^{-20} \text{ m}^2/\text{W}$, on obtient $P_{cr} \approx 4.1 \text{ MW}$.
 
-\subsubsection{Calculation for $\mathrm{SiO}_2$}
-Using the above values, we calculate $P_{cr}$ for two common wavelengths:
+\subsubsection{Lien avec l'intensité et comparaison expérimentale}
 
-\begin{enumerate}
-    \item \textbf{For $\lambda_0 = 800 \text{ nm}$:}
-    \begin{equation}
-        P_{cr} = \frac{3.77 \times (800 \times 10^{-9})^2}{8 \pi \times 1.45 \times 2.7 \times 10^{-20}} \approx 2.5 \text{ MW}.
-    \end{equation}
-
-    \item \textbf{For $\lambda_0 = 1030 \text{ nm}$:}
-    Assuming $n_2 \approx 2.2 \times 10^{-20} \text{ m}^2/\text{W}$ (slightly lower at longer wavelengths),
-    \begin{equation}
-        P_{cr} = \frac{3.77 \times (1030 \times 10^{-9})^2}{8 \pi \times 1.45 \times 2.2 \times 10^{-20}} \approx 4.1 \text{ MW}.
-    \end{equation}
-\end{enumerate}
-
-\subsubsection{Link to Intensity and PhysRevB.71.125435}
-The critical power is related to the laser intensity $I$ through the beam area. For a Gaussian beam with radius $w_0$, the peak intensity is:
+La puissance critique est reliée à l'intensité laser $I$ par la surface du faisceau. Pour un faisceau gaussien de rayon $w_0$, l'intensité crête vaut :
 \begin{equation}
     I_0 = \frac{2 P}{\pi w_0^2}.
 \end{equation}
-Assuming a typical beam radius of $w_0 \approx 10 \text{ $\mu$m}$ (for tightly focused pulses as in Ref.~\cite{PhysRevB.71.125435}), the peak intensity for $P = P_{cr}$ is:
-\begin{equation}
-    I_0 \approx \frac{2 \times 2.5 \times 10^6}{\pi \times (10 \times 10^{-6})^2} \approx 1.6 \times 10^{13} \text{ W/cm}^2.
-\end{equation}
-This is consistent with the intensities around $5 \times 10^{13} \text{ W/cm}^2$ reported in Ref.~\cite{PhysRevB.71.125435}, where filamentation and damage tracks were observed. The discrepancy arises because filamentation can occur at powers \textbf{slightly above} $P_{cr}$, especially in the presence of plasma defocusing and other nonlinear effects.
+
+Avec un rayon typique $w_0 \approx 10 \text{ $\mu$m}$ (faisceaux fortement focalisés comme dans la référence~\cite{PhysRevB.71.125435}), l'intensité pour $P = P_{cr}$ est d'environ $1.6 \times 10^{13} \text{ W/cm}^2$. Cela correspond aux intensités autour de $5 \times 10^{13} \text{ W/cm}^2$ rapportées dans~\cite{PhysRevB.71.125435}, où filamentation et traces de dommage ont été observées. L'écart s'explique car la filamentation peut survenir à des puissances légèrement supérieures à $P_{cr}$, surtout en présence de défocalisation par plasma et d'autres effets non-linéaires.
