@@ -24,18 +24,22 @@ The Keldysh photoionization rate is defined as follows:
 \begin{equation}
 W_{PI}(|\mathcal{E}|) = \frac{2\omega_0}{9\pi}\bigg(\frac{\omega_0m}{\hbar\sqrt{\gamma_1}}\bigg)^{\frac{3}{2}}Q(\gamma,x)\exp(-\alpha\lceil x+1\rceil)
 \end{equation}
-With $\gamma_1 = \frac{\gamma^2}{1+\gamma^2}$, $\gamma_2 = \frac{1}{1+\gamma^2}$ and $x = \frac{2}{\pi}\frac{U_iE(\gamma_2)}{\hbar\omega_0\sqrt{\gamma_1}}$ \begin{equation}
+With $\gamma_1 = \frac{\gamma^2}{1+\gamma^2}$, $\gamma_2 = \frac{1}{1+\gamma^2}$ and $x = \frac{2}{\pi}\frac{U_iE(\gamma_2)}{\hbar\omega_0\sqrt{\gamma_1}}$ 
+\begin{equation}
 Q(\gamma,x) = \frac{\pi}{2K(\gamma_2)}\sum^\infty_{n=0}\exp \bigg(-n\pi\frac{K(\gamma_1)-E(\gamma_1)}{E(\gamma_2)}\bigg)\Phi\bigg(\frac{\pi}{2}\sqrt{\frac{n+2\lceil x + 1\rceil-2x}{K(\gamma_2)E(\gamma_2)}}\bigg)
 \end{equation}
 
- $\Phi$ is the Dawson function $\Phi(z) = e^{-z^2}\int^z_0e^{y^2}dy$ and $K$ and $E$ are the complete elliptic integral of the first and second kind, respectively, with parameter $m = k^2 $ \begin{align}
+$\Phi$ is the Dawson function $\Phi(z) = e^{-z^2}\int^z_0e^{y^2}dy$ and $K$ and $E$ are the complete elliptic integral of the first and second kind, respectively, with parameter $m = k^2$ 
+\begin{align}
 K(m) &= \int_0^{\pi/2} [1 - m \sin(t)^2]^{-1/2} dt \\
 E(m) &= \int_0^{\pi/2} [1 - m \sin(t)^2]^{1/2} dt
 \end{align}
 
+As observed in Ref.~\cite{PhysRevB.71.125435}, filamentation in fused silica typically occurs at intensities around $5 \times 10^{13} \text{ W/cm}^2$, where both multiphoton and tunnel ionization contribute significantly.
+
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=1\linewidth]{sections/téléchargement.png}
+    \includegraphics[width=1\linewidth]{sections/t\u00e9l\u00e9chargement.png}
     \caption{The photoionization rate $W_{\text{PI}}$ in fused silica ($U_i = 9 \text{ eV}$) is plotted as a function of laser intensity for $\lambda = 800 \text{ nm}$ and $\lambda = 1030 \text{ nm}$. The black solid line represents the full Keldysh general formula, while the red dotted and green dash-dotted lines show its exact analytical asymptotes for the multiphoton ($\gamma \gg 1$) and tunnel ($\gamma \ll 1$) limits, respectively. The blue dashed line corresponds to the standard perturbative MPI law ($W_{\text{MPI}} = \sigma_K I^K \rho_{\text{at}}$). The vertical gray line indicates the typical intensity clamping level ($\sim 5 \times 10^{13} \text{ W/cm}^2$) reached in 800 nm filamentation simulations.}
     \label{fig:placeholder}
 \end{figure}
