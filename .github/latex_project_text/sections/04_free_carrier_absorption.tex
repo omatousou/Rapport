@@ -1,0 +1,25 @@
+\subsection{Free-carrier absorption}
+
+Once electrons are promoted to the conduction band, they behave as quasi-free carriers: the laser field accelerates them, and they drift in opposition to $\vec{E}$ \cite{mao2004}. One might expect these carriers to keep absorbing photons and gain energy directly. However, a single-photon absorption event by an isolated free electron is forbidden, because it cannot satisfy energy and momentum conservation at the same time.
+
+For the absorption of one photon $(\omega_0,\vec{k}_{\text{ph}})$ by an electron of initial wavevector $\vec{k}_i$ to a final state of wavevector $\vec{k}_f$, energy and momentum conservation laws must be satisfied. They read
+\begin{equation}
+  E_f = E_i + \hbar\omega_0 , \qquad \vec{k}_f = \vec{k}_i + \vec{k}_{\text{ph}}.
+  \label{eq:const}
+\end{equation}
+Using the parabolic band $E = \hbar^2 k^2 / 2m^\ast$ and the photon momentum $k_{\text{ph}} = \omega_0/c = 2\pi/\lambda_0$, Eq.~\eqref{eq:const} becomes
+\begin{equation}
+  \frac{\hbar^2 k_f^2}{2m^\ast} = \frac{\hbar^2 k_i^2}{2m^\ast} + \hbar\omega_0 , \qquad k_f = k_i + \frac{2\pi}{\lambda_0}.
+\end{equation}
+The photon momentum is set by the wavelength alone: at $\lambda_0 = 1030~\mathrm{nm}$, $k_{\text{ph}} = 2\pi/\lambda_0 \approx 6.1\times10^{6}~\mathrm{m^{-1}}$. The electron momentum, in contrast, is fixed by its kinetic energy in the conduction band. Taking a representative value $E_i \sim 1~\mathrm{eV}$ (any eV-scale energy leads to the same conclusion) gives
+\begin{equation}
+  k_i = \frac{\sqrt{2 m^\ast E_i}}{\hbar} \approx 5\times10^{9}~\mathrm{m^{-1}}, \qquad \frac{k_{\text{ph}}}{k_i} \approx 10^{-3}.
+\end{equation}
+Momentum conservation therefore imposes $k_f \approx k_i$, hence $E_f \approx E_i$, which contradicts $E_f = E_i + \hbar\omega_0$ unless $\hbar\omega_0 \approx 0$.
+
+The process becomes allowed if a third body carries away the momentum mismatch. In a polar dielectric such as $\mathrm{SiO_2}$ this is a phonon of wavevector $\vec{q}$ and energy $\hbar\omega_q$, so that
+\begin{equation}
+  E_f = E_i + \hbar\omega_0 \pm \hbar\omega_q , \qquad \vec{k}_f = \vec{k}_i + \vec{k}_{\text{ph}} \pm \vec{q}.
+\end{equation}
+Since phonon wavevectors span the whole Brillouin zone : 
+ $$q \lesssim \tfrac\pi a \sim 10^{10}~\mathrm{m^{-1}} \gtrsim k_i$$ The momentum can now be balanced, while $\hbar\omega_q \sim 0.06$--$0.15~\mathrm{eV} \ll \hbar\omega_0$ leaves the energy balance essentially unchanged. This phonon-assisted mechanism is the free-carrier absorption (FCA), equivalently inverse Bremsstrahlung \cite{mao2004, bulgakova2010}.

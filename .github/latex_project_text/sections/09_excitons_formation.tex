@@ -1,0 +1,25 @@
+\subsection{Excitons Formation}
+
+When an electron is promoted from the valence band to the conduction band for example via optical absorption it leaves behind a hole with an effective positive charge $+e$. Conduction band electrons can experience the potential created by valence band holes. Such electrostatic attraction can be modeled by a Coulomb potential allowing the Schrödinger equation to be solved for a composite particle known as an exciton consisting of a conduction band electron and a valence band hole. This quasiparticle has a reduced mass defined by $\frac{1}{\mu} = \frac{1}{m_e}+\frac{1}{m_h}$ and a quantized hydrogen like energy spectrum.
+
+In the absence of Coulomb interaction the minimum energy required to create a free electron hole pair corresponds to the bandgap energy $E_g$. However due to the attractive Coulomb potential between the electron and the hole they can form a bound state. The accessible energy levels lie below the conduction band. These states can be populated directly via the process described previously but also through non radiative relaxation mechanisms such as the Auger effect or phonon exciton interactions. This formation process is very fast, \cite{mao2004}  say it is often below $1$ ps for wide band gap materials.
+
+The relative motion of this electron hole pair can be modeled using a hydrogenic Schrödinger equation. The stationary Schrödinger equation for the relative coordinate $\mathbf{r}$ can be expressed with strictly positive terms as follows:
+
+ $$\left[ \frac{\hbar^2}{2\mu} \nabla^2 + \frac{e^2}{4\pi \epsilon_0 \epsilon_r r} \right] \psi(\mathbf{r}) = E_b \psi(\mathbf{r})$$ 
+where $\epsilon = \epsilon_0 \epsilon_r$ is the dielectric permittivity of the medium and $E_b > 0$ is the binding energy of the exciton. The relationship between the bandgap energy $E_g$ the binding energy term and the required excitation energy $E_n$ for the $n$ th exciton state is given by:
+
+ $$E_g = E_n + \frac{R_\chi}{n^2}$$ 
+where $R_\chi$ is the effective exciton Rydberg energy:
+
+ $$R_\chi = \frac{\mu e^4}{2(4\pi \epsilon)^2 \hbar^2} = R_H \left(\frac{\mu}{m_0}\right) \frac{1}{\epsilon_r^2}$$ 
+Here $R_H \approx 13.6\text{ eV}$ is the Rydberg constant of the hydrogen atom $m_0$ is the free electron mass and $\epsilon_r$ is the relative dielectric constant of the material.
+
+To evaluate the spatial extent of the exciton wave function we define the exciton Bohr radius $a_\chi$:
+
+ $$a_\chi = \frac{4\pi \epsilon \hbar^2}{\mu e^2} = a_0 \cdot \epsilon_r \left(\frac{m_0}{\mu}\right)$$ 
+where $a_0 \approx 0.53\text{ \AA}$ is the atomic Bohr radius. The spatial profile and binding energy of the exciton are governed directly by $\epsilon_r$.
+
+In wide bandgap materials, elecrons are tighly bound to their atomes this the electric relative permitivity is low for $\text{SiO}_2$ or alkali halides where the relative dielectric constant is small being typically around $2$ to $4$. Consequently the material provides poor dielectric screening of the Coulomb attraction maintaining a strong potential well.
+
+A low permittivity directly leads to a reduction of the exciton Bohr radius down to a few Ångströms. When \(a_{\chi }\) becomes comparable to the interatomic lattice spacing, the exciton localization no longer spreads over multiple atoms of the lattice, switching instead toward a tightly bound regime. The binding energy also increases, preventing thermal dissociation and promoting ultra-fast energy relaxation. During this process, the excess electrostatic potential energy of the unshielded exciton is abruptly discharged into local lattice vibrations (phonons) via massive exciton-phonon coupling within picoseconds. Consequently, this induces a localized lattice distortion and leads to the formation of a self-trapped exciton (STE).

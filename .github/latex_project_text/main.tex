@@ -1,0 +1,52 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{hyperref}
+\usepackage{physics}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{gensymb}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{braket}
+\usepackage{enumitem}
+\usepackage{empheq}
+\usepackage{tikz}
+\usepackage{adjustbox}
+\usetikzlibrary{arrows.meta}
+
+\definecolor{photon}{RGB}{240,200,0}    % jaune / photon
+\definecolor{electron}{RGB}{0,160,60}   % vert  / électron
+\usetikzlibrary{arrows.meta,angles,quotes,calc,positioning}
+
+\definecolor{kicol}{RGB}{24,95,165}    % blue  -- electron before
+\definecolor{kfcol}{RGB}{15,110,86}    % green -- electron after
+\definecolor{qcol}{RGB}{153,60,29}     % brown -- phonon
+
+% Déclaration des informations du titre (Préambule)
+\title{Beam Propagation Simulation in $\mathrm{SiO}_2$}
+\author{Anatole CREMEL--SCHLEMER \\ The University of Tokyo}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+%, , , , , , , , , , , -Contenu, , , , , , , , , , , , --
+
+\input{sections/01_introduction}
+\input{sections/02_free_carriers_excitation}
+\input{sections/03_photoionization}
+\input{sections/04_free_carrier_absorption}
+\input{sections/05_avalanche_ionization}
+\input{sections/06_kerr_self_steepening}
+\input{sections/07_plasma_defocusing}
+\input{sections/08_filamentation}
+\input{sections/09_excitons_formation}
+\input{sections/10_self_trapped_excitons}
+
+\input{sections/bibliography}
+
+\end{document}
