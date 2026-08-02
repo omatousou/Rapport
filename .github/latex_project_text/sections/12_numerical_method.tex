@@ -37,3 +37,42 @@ with $S$ and $L$ evaluated from the trapezoidal average of the intensity depende
 x(t_j+\Delta t) = x(t_j)\,e^{L\Delta t} + S\,\Delta t\,\varphi_1(L\Delta t), \qquad \varphi_1(z) = \frac{e^z-1}{z}
 \end{equation}
 detailed in Algorithm~\ref{alg:exact_exp}, with a Taylor fallback for $\varphi_1$ when $L\Delta t$ is close to zero to avoid a $0/0$ division. This is an exact integrator for the frozen coefficient problem, it does not accumulate truncation error from the time stepping itself, only from the assumption that $S$ and $L$ are constant over each short interval, which is a much better approximation than freezing the full nonlinear right hand side of a generic ODE.
+
+\subsection{The Main Propagation Loop}
+
+Figure~\ref{fig:main_loop} puts the three preceding subsections together into the single loop that \texttt{Integrator.propagate} runs once per $z$ step, combining Algorithms~\ref{alg:integrator_main} and~\ref{alg:integrator_stepping}.
+
+\begin{figure}[h!]
+    \centering
+    \begin{tikzpicture}[
+        node distance=8mm and 14mm,
+        box/.style={draw, thick, rounded corners, align=center, minimum width=4.6cm, minimum height=9mm, fill=blue!4},
+        deco/.style={draw, thick, rounded corners, align=center, minimum width=4.6cm, minimum height=9mm, fill=yellow!12},
+        dec/.style={draw, thick, diamond, aspect=2.4, align=center, minimum width=3.4cm, inner sep=1pt},
+        arr/.style={-stealth, thick}
+    ]
+        \node[box] (rate) {Update $N$, $N_{STE}$\\ \footnotesize CUDA rate kernel, Alg.~\ref{alg:rate_kernel_1}--\ref{alg:rate_kernel_2}};
+        \node[box, below=of rate] (diff1) {Half diffraction\\ \footnotesize QDHT, Alg.~\ref{alg:linear_operator}};
+        \node[box, below=of diff1] (disp1) {Half dispersion\\ \footnotesize FFT, Alg.~\ref{alg:linear_operator}};
+        \node[deco, below=of disp1] (abs1) {Absorption half-step\\ \footnotesize exact exponential};
+        \node[box, below=of abs1] (rk4) {RK4 nonlinear substep\\ \footnotesize Kerr, self-steepening, plasma phase};
+        \node[deco, below=of rk4] (abs2) {Absorption half-step};
+        \node[box, below=of abs2] (disp2) {Half dispersion};
+        \node[box, below=of disp2] (diff2) {Half diffraction};
+        \node[dec, below=of diff2] (test) {$z < z_{\text{end}}$?};
+        \node[box, below=10mm of test] (save) {Save \texttt{result.npz}};
+
+        \draw[arr] (rate) -- (diff1);
+        \draw[arr] (diff1) -- (disp1);
+        \draw[arr] (disp1) -- (abs1);
+        \draw[arr] (abs1) -- (rk4);
+        \draw[arr] (rk4) -- (abs2);
+        \draw[arr] (abs2) -- (disp2);
+        \draw[arr] (disp2) -- (diff2);
+        \draw[arr] (diff2) -- (test);
+        \draw[arr] (test) -- node[right] {no} (save);
+        \draw[arr] (test.west) -- ++(-2.4,0) node[midway, above] {yes, $z \mathrel{+}= dz$} |- (rate.west);
+    \end{tikzpicture}
+    \caption{One iteration of the main propagation loop in \texttt{Integrator.propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$ (Section~13), then applies the symmetric Strang sequence of diffraction, dispersion, and nonlinear substeps derived above to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps (omitted here for clarity) before the loop repeats until $z$ reaches the end of the propagation window.}
+    \label{fig:main_loop}
+\end{figure}
