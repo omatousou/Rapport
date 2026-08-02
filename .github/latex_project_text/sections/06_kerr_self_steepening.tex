@@ -30,10 +30,48 @@ Comparing this expression with the standard form $n = n_0 + n_2 I$, where the in
 n_2 = \frac{3\chi^{(3)}}{4n_0^2 c \varepsilon_0}
 \end{equation}
 
-This refractive index therefore depends on intensity. This is the origin of the optical Kerr effect. Since the intensity $I(r)$ of a Gaussian laser beam is higher at the center than at the edges, the beam experiences a higher refractive index at the center than at the periphery, provided $\chi^{(3)} > 0$. This spatial variation of the refractive index acts exactly like a graded index lens. The medium bends the wavefronts toward the high intensity axis. This phenomenon, known as self-focusing, is governed by the effective nonlinear polarization~\cite{mao2004}:
+This refractive index therefore depends on intensity. This is the origin of the optical Kerr effect. Since the intensity $I(r)$ of a Gaussian laser beam is higher at the center than at the edges, the beam experiences a higher refractive index at the center than at the periphery, provided $\chi^{(3)} > 0$. This spatial variation of the refractive index acts exactly like a graded index lens, shown in Figure~\ref{fig:kerr_lens}. The medium bends the wavefronts toward the high intensity axis. This phenomenon, known as self-focusing, is governed by the effective nonlinear polarization~\cite{mao2004}:
 \begin{equation}
 \mathbf{P}_{\text{NL}} = \frac{3}{4}\varepsilon_0 \chi^{(3)}\vert{}\mathcal{E}\vert{}^2 \mathbf{E}
 \end{equation}
+
+\begin{figure}[h!]
+    \centering
+    \begin{tikzpicture}[scale=1.0]
+        \draw[thick, kicol, domain=-2.2:2.2, samples=80, smooth]
+            plot (\x, {3.4+1.1*exp(-1.1*\x*\x)});
+        \node[kicol, above] at (0,4.6) {\footnotesize $I(r)$};
+
+        \draw[fill=blue!5, draw=none] (-2.2,0) rectangle (2.2,3.0);
+        \foreach \i/\o in {0/6, 1/16, 2/28, 3/42, 4/60} {
+            \fill[blue!\o!white] (-2.2+\i*0.11,0) rectangle (2.2-\i*0.11,3.0);
+        }
+        \draw[thick] (-2.2,0) rectangle (2.2,3.0);
+        \node[below] at (0,-0.05) {\footnotesize medium, $n(r) = n_0 + n_2 I(r)$};
+
+        \foreach \y in {-1.9,-1.1,-0.3,0.5,1.3,2.1} {
+            \draw[-stealth, thin] (-4.0,\y+1.5) -- (-2.2,\y+1.5);
+        }
+        \draw[thin] (-2.2,3.4) -- (-1.1,2.15);
+        \draw[thin] (-2.2,2.6)  -- (-1.1,1.85);
+        \draw[thin] (-2.2,1.8)  -- (-1.1,1.6);
+        \draw[thin] (-2.2,1.0)  -- (-1.1,1.4);
+        \draw[thin] (-2.2,0.2)  -- (-1.1,1.15);
+        \draw[thin] (-2.2,-0.6) -- (-1.1,0.85);
+
+        \draw[thin] (-1.1,2.15) -- (2.2,1.5);
+        \draw[thin] (-1.1,1.85) -- (2.2,1.5);
+        \draw[thin] (-1.1,1.6)  -- (2.2,1.5);
+        \draw[thin] (-1.1,1.4)  -- (2.2,1.5);
+        \draw[thin] (-1.1,1.15) -- (2.2,1.5);
+        \draw[thin] (-1.1,0.85) -- (2.2,1.5);
+
+        \draw[-stealth, thick, kfcol] (2.2,1.5) -- (4.2,1.5);
+        \filldraw[kfcol] (2.2,1.5) circle (2pt) node[below right] {\footnotesize focus};
+    \end{tikzpicture}
+    \caption{Kerr self-focusing as a graded index lens. The refractive index $n(r)=n_0+n_2I(r)$ follows the transverse intensity profile of the beam, higher on axis where $I(r)$ peaks. Rays entering parallel are bent progressively more strongly as they approach the axis, exactly as in a conventional graded index lens, and converge toward a nonlinear focus.}
+    \label{fig:kerr_lens}
+\end{figure}
 
 The phase of a femtosecond laser pulse in a dielectric depends on the nonlinear refractive index, $\Phi(t) = nk_0z - \omega_0 t = n_0k_0z + n_2k_0zI - \omega_0 t$. Differentiating with respect to time gives the instantaneous frequency shift due to self-phase modulation:
 \begin{equation}
