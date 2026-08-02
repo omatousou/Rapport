@@ -1,31 +1,31 @@
-\subsection{Absorption par porteurs libres}
+\subsection{Free Carrier Absorption}
 
-Une fois les électrons promus dans la bande de conduction, ils se comportent comme des porteurs quasi-libres : le champ laser les accélère, et ils dérivent en opposition à $\vec{E}$~\cite{mao2004}. On pourrait s'attendre à ce que ces porteurs continuent à absorber des photons et à gagner de l'énergie directement. Cependant, une absorption simple-photon par un électron libre isolé est interdite, car elle ne peut pas satisfaire simultanément la conservation de l'énergie et de la quantité de mouvement.
+Once electrons are promoted to the conduction band, they behave as quasi free carriers. The laser field accelerates them, and they drift opposite to $\vec{E}$~\cite{mao2004}. One might expect these carriers to keep absorbing photons and gaining energy directly. However, single photon absorption by an isolated free electron is forbidden, because it cannot simultaneously satisfy conservation of energy and conservation of momentum.
 
-Pour l'absorption d'un photon $(\omega_0,\vec{k}_{\text{ph}})$ par un électron de vecteur d'onde initial $\vec{k}_i$ vers un état final de vecteur d'onde $\vec{k}_f$, les lois de conservation de l'énergie et de la quantité de mouvement doivent être satisfaites. Elles s'écrivent :
+For the absorption of a photon $(\omega_0,\vec{k}_{\text{ph}})$ by an electron with initial wave vector $\vec{k}_i$ moving to a final state with wave vector $\vec{k}_f$, the laws of conservation of energy and momentum must be satisfied. They read:
 \begin{equation}
   E_f = E_i + \hbar\omega_0 , \qquad \vec{k}_f = \vec{k}_i + \vec{k}_{\text{ph}}.
   \label{eq:const}
 \end{equation}
 
-En utilisant la bande parabolique $E = \hbar^2 k^2 / 2m^\ast$ et la quantité de mouvement du photon $k_{\text{ph}} = \omega_0/c = 2\pi/\lambda_0$, l'équation~\eqref{eq:const} devient :
+Using the parabolic band $E = \hbar^2 k^2 / 2m^\ast$ and the photon momentum $k_{\text{ph}} = \omega_0/c = 2\pi/\lambda_0$, equation~\eqref{eq:const} becomes:
 \begin{equation}
   \frac{\hbar^2 k_f^2}{2m^\ast} = \frac{\hbar^2 k_i^2}{2m^\ast} + \hbar\omega_0 , \qquad k_f = k_i + \frac{2\pi}{\lambda_0}.
 \end{equation}
 
-La quantité de mouvement du photon est fixée par la longueur d'onde seule : à $\lambda_0 = 1030~\mathrm{nm}$, $k_{\text{ph}} = 2\pi/\lambda_0 \approx 6.1\times10^{6}~\mathrm{m^{-1}}$. La quantité de mouvement de l'électron, en revanche, est fixée par son énergie cinétique dans la bande de conduction. En prenant une valeur représentative $E_i \sim 1~\mathrm{eV}$ (toute énergie de l'ordre de l'eV conduit à la même conclusion), nous obtenons :
+The photon momentum is set by the wavelength alone. At $\lambda_0 = 1030~\mathrm{nm}$, $k_{\text{ph}} = 2\pi/\lambda_0 \approx 6.1\times10^{6}~\mathrm{m^{-1}}$. The electron momentum, on the other hand, is set by its kinetic energy in the conduction band. Taking a representative value $E_i \sim 1~\mathrm{eV}$, and any energy of order one eV leads to the same conclusion, we obtain:
 \begin{equation}
   k_i = \frac{\sqrt{2 m^\ast E_i}}{\hbar} \approx 5\times10^{9}~\mathrm{m^{-1}}, \qquad \frac{k_{\text{ph}}}{k_i} \approx 10^{-3}.
 \end{equation}
 
-La conservation de la quantité de mouvement impose donc $k_f \approx k_i$, d'où $E_f \approx E_i$, ce qui contredit $E_f = E_i + \hbar\omega_0$ sauf si $\hbar\omega_0 \approx 0$.
+Conservation of momentum therefore forces $k_f \approx k_i$, hence $E_f \approx E_i$, which contradicts $E_f = E_i + \hbar\omega_0$ unless $\hbar\omega_0 \approx 0$.
 
-Le processus devient autorisé si un troisième corps emporte le déséquilibre de quantité de mouvement. Dans un diélectrique polaire comme $\mathrm{SiO_2}$, il s'agit d'un phonon de vecteur d'onde $\vec{q}$ et d'énergie $\hbar\omega_q$, de sorte que :
+The process becomes allowed if a third body carries away the momentum mismatch. In a polar dielectric such as $\mathrm{SiO_2}$, this third body is a phonon of wave vector $\vec{q}$ and energy $\hbar\omega_q$, so that:
 \begin{equation}
   E_f = E_i + \hbar\omega_0 \pm \hbar\omega_q , \qquad \vec{k}_f = \vec{k}_i + \vec{k}_{\text{ph}} \pm \vec{q}.
 \end{equation}
 
-Comme les vecteurs d'onde des phonons couvrent toute la zone de Brillouin :
+Since phonon wave vectors span the entire Brillouin zone:
 $$q \lesssim \tfrac\pi a \sim 10^{10}~\mathrm{m^{-1}} \gtrsim k_i$$
 
-La quantité de mouvement peut maintenant être équilibrée, tandis que $\hbar\omega_q \sim 0.06$--$0.15~\mathrm{eV} \ll \hbar\omega_0$ laisse le bilan énergétique essentiellement inchangé. Ce mécanisme assisté par phonons est l'absorption par porteurs libres (FCA), équivalemment le Bremsstrahlung inverse~\cite{mao2004, bulgakova2010}.
+Momentum can now be balanced, while $\hbar\omega_q \sim 0.06$--$0.15~\mathrm{eV} \ll \hbar\omega_0$ leaves the energy balance essentially unchanged. This phonon assisted mechanism is free carrier absorption (FCA), equivalently inverse Bremsstrahlung~\cite{mao2004, bulgakova2010}.

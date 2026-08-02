@@ -17,16 +17,30 @@
 \usepackage{empheq}
 \usepackage{tikz}
 \usepackage{adjustbox}
+\usepackage{algorithm2e}
 \usetikzlibrary{arrows.meta}
 
 \definecolor{photon}{RGB}{240,200,0}    % jaune / photon
 \definecolor{electron}{RGB}{0,160,60}   % vert  / électron
-\usetikzlibrary{arrows.meta,angles,quotes,calc,positioning}
+\usetikzlibrary{arrows.meta,angles,quotes,calc,positioning,decorations.pathmorphing}
 
 \definecolor{kicol}{RGB}{24,95,165}    % blue  -- electron before
 \definecolor{kfcol}{RGB}{15,110,86}    % green -- electron after
 \definecolor{qcol}{RGB}{153,60,29}     % brown -- phonon
 \definecolor{accent}{RGB}{24,95,165}   % titlepage accent rule
+\definecolor{notecolor}{RGB}{180,120,0}
+
+% Visible review marker for points that need a second look or a future revision.
+% Usage: \authornote{text explaining the simplification or assumption made here}
+\newcommand{\authornote}[1]{%
+    \par\noindent
+    \fcolorbox{notecolor}{notecolor!8}{%
+        \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+            \textbf{\textcolor{notecolor}{Note for revision.}} #1%
+        }%
+    }%
+    \par\vspace{0.3em}%
+}
 
 \hypersetup{
     colorlinks=true,
@@ -84,7 +98,18 @@
 \input{sections/08_filamentation}
 \input{sections/09_excitons_formation}
 \input{sections/10_self_trapped_excitons}
+\input{sections/11_propagation_equation}
+\input{sections/12_numerical_method}
+\input{sections/13_cuda_acceleration}
+\input{sections/14_interferometry_abel}
 
 \input{sections/bibliography}
+
+\appendix
+\section{Algorithm Listings}
+\label{sec:algorithm_listings}
+The pseudocode below gives the exact, line by line correspondence with \texttt{NewSim3juillet.py} referenced throughout Sections~11 to~13.
+
+\input{sections/pseudocode_algorithms}
 
 \end{document}
