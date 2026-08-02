@@ -1,0 +1,39 @@
+\section{Numerical Method}
+
+The propagation equation of Section~11 mixes a transverse diffraction term, a temporal dispersion term, and a nonlinear term that depends locally on the field at every point in space and time. No single numerical scheme handles all three cheaply. The code therefore treats each physical mechanism with the tool best suited to it, and recombines them at every propagation step through operator splitting. This section explains the three pieces in turn: the radial basis used for diffraction, the time stepping scheme that combines them, and the population equations that must be solved alongside the field.
+
+\subsection{Quasi Discrete Hankel Transform for the Radial Coordinate}
+
+The beam has cylindrical symmetry, so the transverse Laplacian $\nabla_\perp^2$ acting on a field that depends only on $r$ reduces to $\frac{1}{r}\frac{\partial}{\partial r}\big(r\frac{\partial}{\partial r}\big)$. The natural basis for this operator is not the Fourier basis but the Hankel transform of order zero, since a plane diffracting wave with cylindrical symmetry is a superposition of Bessel functions $J_0(\rho r)$ rather than complex exponentials. In this basis, diffraction becomes a simple multiplication by a phase factor, exactly as dispersion becomes a multiplication in the temporal Fourier domain.
+
+The continuous Hankel transform cannot be evaluated on a computer, so the code uses the quasi discrete Hankel transform (QDHT) of Guizar-Sicairos and Gutierrez-Vega. The key idea is to sample the field not on a uniform radial grid, but at the zeros $j_1, j_2, \dots, j_N$ of the Bessel function $J_0$. On this specific grid, the forward and inverse Hankel transforms both collapse to the same linear transformation, represented by a single symmetric matrix $Y$:
+\begin{equation}
+Y_{mn} = \frac{2}{j_N}\,\frac{J_0(j_mj_n/j_N)}{J_1(j_m)^2}
+\end{equation}
+Multiplying a field sampled at the radii $r_m = j_m R/j_N$ by $Y$ gives its Hankel transform sampled at the spatial frequencies $\rho_m = j_m/R$, and multiplying by $Y$ a second time returns the original field, since $Y$ is self-inverse. This is exactly what \texttt{build\_grids} constructs in Algorithm~\ref{alg:build_grids_1}, step 2, and what \texttt{LinearOperator.half\_diffraction} uses in Algorithm~\ref{alg:linear_operator}, applying $Y$ before and after multiplying by the free space diffraction phase $\exp\!\big(-i\rho^2 dz/(2k_0)\big)$.
+
+\authornote{The derivation of why sampling at the Bessel zeros makes the discrete transform exact, rather than merely approximate, follows from the orthogonality relation of $J_0$ over $[0,R]$ with these specific nodes. If you want the full derivation from the continuous Hankel transform included here for completeness, let me know and I will add it with the original Guizar-Sicairos and Gutierrez-Vega, Optics Letters 29, 1978 (2004) reference.}
+
+\subsection{Strang Splitting of the Propagation Step}
+
+The full propagation equation of Section~11 can be written schematically as $\partial_z u = (\mathcal{L}+\mathcal{N})u$, where $\mathcal{L}$ groups the linear, z-independent operators, diffraction and dispersion, and $\mathcal{N}$ groups the nonlinear terms, Kerr, self-steepening, and the two loss channels. Solving $\mathcal{L}$ alone and $\mathcal{N}$ alone are both computationally cheap, diffraction and dispersion are diagonal in the Hankel and Fourier bases respectively, and the nonlinear term is diagonal in real space. Solving $\mathcal{L}+\mathcal{N}$ together is not.
+
+Strang splitting exploits this by approximating the exact evolution operator $e^{(\mathcal{L}+\mathcal{N})dz}$ with the symmetric product:
+\begin{equation}
+e^{(\mathcal{L}+\mathcal{N})dz} \approx e^{\mathcal{L}\,dz/2}\,e^{\mathcal{N}\,dz}\,e^{\mathcal{L}\,dz/2}
+\end{equation}
+Because the operators do not commute, this product differs from the exact evolution, but the error is only third order in $dz$ per step, compared to second order for the naive non symmetric splitting $e^{\mathcal{L}dz}e^{\mathcal{N}dz}$. This is what \texttt{Integrator.step}, Algorithm~\ref{alg:integrator_stepping}, implements: a half diffraction step, a half dispersion step, the full nonlinear step, then dispersion and diffraction again in reverse order. The code further splits the linear half step itself into diffraction and dispersion applied one after the other, which introduces a smaller additional splitting error between these two commuting free space operators, negligible compared to the Kerr and dispersion length scales of the problem.
+
+Inside the nonlinear half step, the code separates two things that behave very differently. The absorption coefficient $\alpha_{ion}+\sigma_\omega N/2$, from photoionization loss and plasma absorption, only reduces the amplitude of $u$ without exchanging energy between frequency components, so it is applied exactly as a multiplicative exponential factor $u \to u\,e^{-\alpha\,dz/2}$ around the rest of the nonlinear step. The remaining part, Kerr, self-steepening, and the dispersive part of the plasma response, is a genuine differential equation in $z$ and is integrated with a fourth order Runge-Kutta scheme over the nonlinear substep, following exactly the four stage update visible in \texttt{Integrator.step}.
+
+\subsection{Population Rate Equations on the GPU}
+
+The rate equations of Section~11.2 are solved separately from the field envelope, using an explicit time marching scheme along the temporal axis at fixed radius, before every propagation step. Because the equations for $N$ and $N_{STE}$ are stiff, the photoionization and avalanche rates can change by orders of magnitude within a single time sample, a naive explicit Euler step would require an impractically small $\Delta t$. The code avoids this by treating the coupled pair as a locally linear system over each time interval $[t_j,t_{j+1}]$,
+\begin{equation}
+\frac{dx}{dt} = S + Lx
+\end{equation}
+with $S$ and $L$ evaluated from the trapezoidal average of the intensity dependent rates at $t_j$ and $t_{j+1}$, exactly as detailed in Algorithm~\ref{alg:rate_kernel_2}. This linear equation has the closed form solution:
+\begin{equation}
+x(t_j+\Delta t) = x(t_j)\,e^{L\Delta t} + S\,\Delta t\,\varphi_1(L\Delta t), \qquad \varphi_1(z) = \frac{e^z-1}{z}
+\end{equation}
+detailed in Algorithm~\ref{alg:exact_exp}, with a Taylor fallback for $\varphi_1$ when $L\Delta t$ is close to zero to avoid a $0/0$ division. This is an exact integrator for the frozen coefficient problem, it does not accumulate truncation error from the time stepping itself, only from the assumption that $S$ and $L$ are constant over each short interval, which is a much better approximation than freezing the full nonlinear right hand side of a generic ODE.

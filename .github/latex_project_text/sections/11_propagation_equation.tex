@@ -1,0 +1,75 @@
+\section{Propagation Equation and Population Rate Equations}
+
+Before describing how the simulation code is built, we assemble the full envelope propagation equation and the carrier density rate equations exactly as they are implemented in \texttt{NewSim3juillet.py}. The physical building blocks were derived separately in the previous sections. Kerr self-focusing and self-steepening in Section~6, plasma defocusing and absorption in Section~7, photoionization in Section~3, and avalanche and self-trapping in Section~5. Here we put them together into the single equation that the code actually integrates, and we label every term so that the correspondence with the source code is explicit.
+
+\subsection{Slowly Varying Envelope Equation}
+
+Following the same derivation as in Section~6, the electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the resulting propagation equation used in the code reads:
+\begin{align}
+\frac{\partial u}{\partial z} =\;
+&\underbrace{\frac{i}{2k_0}\nabla_\perp^2 u}_{\text{diffraction}}
+\;-\;
+\underbrace{\Big[k'_\omega\frac{\partial}{\partial t}+\frac{i k''_\omega}{2}\frac{\partial^2}{\partial t^2}+\dots\Big]u}_{\text{dispersion, all orders in the code}} \nonumber\\[4pt]
+&+\;\underbrace{i\!\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)^{\!2}\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
+&+\;\underbrace{i\!\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)^{\!2}\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
+&-\;\underbrace{\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)\frac{U_i\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2}(N_{at}-N)\,u}_{\text{photoionization energy loss}}
+\;-\;\underbrace{\frac{\sigma_\omega}{2}\big(1+i\omega_0\tau_c\big)N\,u}_{\text{plasma absorption and defocusing}} \nonumber\\[4pt]
+&+\;\underbrace{i\,\frac{\omega_0}{2n_0c\,\rho_c}\frac{\omega_0^2}{\omega_{tr}^2-\omega_0^2}\,N_{STE}\,u}_{\text{bound STE polarizability, new in Section~11.4}}
+\end{align}
+
+Each underbraced term maps onto a specific piece of the code. The diffraction term is applied by \texttt{LinearOperator.half\_diffraction}, in the quasi discrete Hankel basis described in Section~12. The dispersion term is applied by \texttt{LinearOperator.half\_dispersion}. Rather than truncating the Taylor expansion of $k(\omega)$ at second order as we did analytically in the derivation of Section~6, the code evaluates $k(\omega)$ directly from the Sellmeier relation for every frequency component and subtracts the linear term $k_0+k'_\omega\Omega$, so the operator \texttt{delta\_k} used in the code already contains dispersion to all orders, not just group velocity dispersion.
+
+The Kerr, self-steepening, and Raman terms are computed together in \texttt{NonlinearOperator.split}. The instantaneous part $(1-f_R)|u|^2$ and the delayed Raman part $f_R\,(R * |u|^2)$, obtained by convolving the intensity with the retarded Raman response function $R(t)$, are summed before multiplying by $u$, which is why they are written here as two separate lines rather than as two independent physical effects. The self-steepening operator $\big(1+\tfrac{i}{\omega_0}\partial_t\big)$ is applied in the frequency domain as \texttt{T\_op} $= 1+\Omega/\omega_0$, following the same operator introduced by Mao et al.~\cite{mao2004} for free carrier absorption and used identically here for the Kerr response.
+
+The photoionization loss term removes energy from the field at exactly the rate needed to promote $N_{at}-N$ remaining neutral centers to the conduction band at the Keldysh rate $W_{PI}$, consistent with the ionization loss derivation of Section~11.3 below. $N_{at}$ is the total density of ionizable sites (\texttt{rho\_max} in the code) and $N$ is the current free electron density. The plasma absorption and plasma induced defocusing are grouped into a single term above since the code computes them together as the real and imaginary parts of the same Drude response derived in Section~7, with $\sigma_\omega$ the inverse Bremsstrahlung cross section already introduced in Section~5.
+
+\authornote{The Raman response function $R(t)$ used in the code, with time constants \texttt{tau\_s} and \texttt{tau\_d}, is the standard damped oscillator form used for silica nonlinear optics. If you want the explicit derivation of $R(t)$ from a driven harmonic oscillator model included here, let me know and I will add it with the matching reference.}
+
+\paragraph{Update relative to the July solver (\texttt{deliverable~(3)}).} Checking this equation directly against Eq.~(4) of Couairon et al.~\cite{PhysRevB.71.125435} in the source text shows that the self-steepening operator is squared on the Kerr and Raman terms, $\big(1+\tfrac{i}{\omega_0}\partial_t\big)^2$, and appears only to the first power on the photoionization loss term, with no self-steepening operator at all on the plasma term. The July code in \texttt{NewSim3juillet.py} applied the same single operator \texttt{T\_op} to both the Kerr and the photoionization terms, which is what is corrected above. The new solver in \texttt{deliverable~(3)/sim/filament\_sim.py} implements this correctly, \texttt{NL\_freq = fft(kerr term)*T\_op**2 - fft(photo term)*T\_op}, and adds a spectral mask \texttt{spec\_mask} multiplying \texttt{T\_op}, since $T=1+\Omega/\omega_0$ becomes negative for absolute frequencies below zero and this sign flip was found to be numerically unstable, amplified by up to a factor $9$ per step once the operator is squared. The mask is a smooth tanh window that suppresses the field outside the wavelength range where the Sellmeier fit is valid, $\lambda\in[0.18,5]\ \mu\text{m}$, and is controlled by \texttt{enable\_spectral\_filter}, default on. It has no effect on the physical, non-negative-frequency part of the spectrum. Six new boolean switches, \texttt{enable\_kerr\_instantaneous}, \texttt{enable\_kerr\_raman}, \texttt{enable\_self\_steepening}, \texttt{enable\_photoionization\_loss}, \texttt{enable\_plasma\_defocusing}, \texttt{enable\_plasma\_absorption}, were also added so each term above can be switched off independently, which is what the ablation study of the accompanying notebook uses to test what every term actually does to the beam rather than only reading it from the equation.
+
+\subsection{Carrier Density Rate Equations}
+
+The code integrates two coupled populations, the free electron density $N$ and the self-trapped exciton density $N_{STE}$, exactly as introduced in Section~5:
+\begin{align}
+\frac{dN}{dt} =\;
+&\underbrace{W_{PI}(|u|)\,(N_{at}-N)}_{\text{direct photoionization, depletes available sites}} \nonumber\\[4pt]
+&+\;\underbrace{\Big[W_{PI}(|u_x|)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization of trapped excitons}} \nonumber\\[4pt]
+&+\;\underbrace{\frac{\sigma_\omega}{U_i} I\, N\,(1-N/N_{at})}_{\text{avalanche ionization}}
+\;-\;\underbrace{\frac{N}{\tau_r}}_{\text{trapping into the STE channel}}
+\end{align}
+\begin{align}
+\frac{dN_{STE}}{dt} =\;
+&\underbrace{\frac{N}{\tau_r}}_{\text{trapping}}
+\;-\;\underbrace{\Big[W_{PI}(|u_x|)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization}}
+\end{align}
+where $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field evaluated with the smaller gap $U_s$ of the trapped state instead of $U_i$, so that $W_{PI}(|u_x|)$ is the Keldysh rate computed for the shallower STE gap, and $\beta_s$ is the avalanche coefficient for the STE channel. This two population model with a distinct gap $U_s$ for the trapped state follows the parametrization used in the code (\texttt{Us\_eV}, labeled Chimier PRB 2011 in the source comments).
+
+\authornote{I have not been able to check this rate equation against the original Chimier, PRB 84, 075092 (2011) paper, since it is not among the sources currently in the repository. If you upload it, I will verify the coefficients $\beta_s$ and $U_s$ against it directly and correct this section if needed.}
+
+Note the correspondence with Section~5. There, we wrote the same pair of equations with $\sigma/E_g$ in place of $\sigma_\omega/U_i$ and $\tau_x$ in place of $\tau_r$. These are the same quantities, only the notation has been aligned here with the variable names used in the code (\texttt{tau\_r} for the trapping time, \texttt{avalanche\_coef} for $\sigma_\omega/U_i$).
+
+\paragraph{Update relative to the July solver.} The July code only let the self-trapped exciton population decay by re-ionization back into the conduction band, the $\big[W_{PI}(|u_x|)+\beta_sIN\big]N_{STE}/N_{at}$ term above. The parametrization referenced in the code (Sakurai et al.) tabulates for fused silica both a trapping time of $150\ \text{fs}$, already present as $\tau_r$, and a separate relaxation time of the trapped state itself of about $1\ \text{ps}$, which was missing. \texttt{deliverable~(3)} adds an optional term $-N_{STE}/\tau_{STE}$ to the $dN_{STE}/dt$ equation, controlled by \texttt{Config.tau\_ste}, defaulting to \texttt{None} which reproduces the July behavior exactly. This mainly matters for the probe phase at picosecond delays, since it changes how long the STE population, and therefore the index change it produces (Section~11.4), survives after the pump pulse has left.
+
+\subsection{Photoionization Energy Loss}
+
+For completeness we derive the photoionization loss term used above, since it does not appear explicitly in the earlier sections. Each ionization event removes one photoelectron from the neutral population and costs at least the gap energy $U_i$, which is taken directly from the field. The absorbed power per unit volume is:
+\begin{equation}
+\mathcal{P}_{ion} = U_i\,(N_{at}-N)\,W_{PI}(|u|)
+\end{equation}
+Writing this as a loss term $-\alpha_{ion}I$ acting on the intensity $I=n_0c\varepsilon_0|u|^2/2$ and solving for $\alpha_{ion}$ gives the coefficient used above:
+\begin{equation}
+\alpha_{ion} = \frac{U_i\,(N_{at}-N)\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2/2}
+\end{equation}
+which is exactly the \texttt{photo} variable computed inside \texttt{NonlinearOperator.split}.
+
+\subsection{Bound Polarizability of Self-Trapped Excitons}
+
+This subsection documents a term that did not exist at all in the July solver and is new in \texttt{deliverable~(3)}. A self-trapped exciton is not a conduction band carrier. It is a pair of dangling bonds, $\text{Si}^\bullet$ and $\text{O}^\bullet$, left behind after the Si-O-Si bond breaks, described in Section~10, and its unpaired orbitals sit inside the gap rather than in the conduction band. It therefore does not drift in the field and does not contribute to the free carrier Drude response of Section~7. What it does instead is polarize as a bound oscillator with a resonance at the energy of its first excited level, following Mao et al.~\cite{mao2004}:
+\begin{equation}
+\Delta n_{STE} = \frac{N_{STE}\,e^2}{2n_0m_e\varepsilon_0}\,\frac{1}{\omega_{tr}^2-\omega^2}
+\end{equation}
+The July code, and the interferometry section of this report, only ever evaluated this formula for the probe beam in post-processing, in \texttt{unified\_filament\_slider\_v3.py}. It never entered the propagation equation itself, so the pump pulse never felt the index change its own trapped population produces. \texttt{deliverable~(3)} adds this contribution directly to the field equation as the fifth line above, controlled by \texttt{enable\_ste\_index}, default on, and implemented as a pure phase term with no associated loss, since the pump photon energy at $1.55\ \text{eV}$ is far from the STE resonance, so there is no one-photon absorption to account for on the pump itself. Because the pump lies below the resonance, $\omega_0<\omega_{tr}$, this term is positive and adds to the Kerr self-focusing rather than opposing it, which is also the mechanism identified as the permanent, fracture-free index change that Couairon et al. classify as type I damage.
+
+A second correction accompanies this addition. The resonance energy itself was taken as $5.2\ \text{eV}$ in the July code, but Mao et al. specify $5.2\ \text{eV}$ as the peak of the STE transient absorption band, not the resonance frequency to use for the refractive index formula above, for which they give the first excited level at $\omega_{tr}\approx 4.2\ \text{eV}$. \texttt{deliverable~(3)} corrects \texttt{E\_tr\_eV} to $4.2$, which changes the resonance denominator at the $490\ \text{nm}$ probe wavelength used in this report by a factor of about $1.84$.
+
+\authornote{I have not independently re-derived the bound oscillator formula for $\Delta n_{STE}$ from first principles here, I have only checked that the code matches the Mao et al. expression term for term. If you want the Lorentz oscillator derivation included for completeness, let me know.}
