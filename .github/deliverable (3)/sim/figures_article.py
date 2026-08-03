@@ -47,7 +47,8 @@ from scipy.constants import c, epsilon_0, m_e
 from scipy.interpolate import PchipInterpolator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from keldysh import n_sellmeier, KeldyshSiO2  # noqa: E402 -- shared with filament_sim.py
+from keldysh import (n_sellmeier, KeldyshSiO2, keldysh_multiphoton,  # noqa: E402
+                     keldysh_tunnel)          # shared with filament_sim.py
 
 _trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
@@ -135,6 +136,19 @@ def _axes(res):
     r = np.asarray(r, float)
     t = np.asarray(_get(res, "t_sub_fs"), float)
     return z, r, t
+
+def _r_cube(res):
+    """Grille radiale du cube (z,r,t).
+
+    Depuis l'ajout de `rho_r_stride` (le cube domine la taille du result.npz),
+    ce cube n'est plus forcement echantillonne sur `rlist` : le solveur ecrit
+    alors `r_sub`. Tout ce qui lit rho_rzt/I_rzt radialement DOIT passer par
+    ici, sinon les longueurs ne concordent plus (np.interp leve
+    "fp and xp are not of the same length")."""
+    rs = _get(res, "r_sub")
+    if rs is not None:
+        return np.asarray(rs, float)
+    return _axes(res)[1]
 
 def _iz_of(res, z, z_um):
     if z_um is None:
@@ -337,9 +351,10 @@ def _proj_chord(f_r, r, y=0.0, ns=600):
 def fig10_dephasage(res, prm: Params | None = None, z_um=None, band_um=0.0,
                     extend_fs=900.0, save=None, show=True):
     prm = prm or Params()
-    z, r, t = _axes(res)
+    z, _, t = _axes(res)
+    r = _r_cube(res)          # grille radiale DU CUBE (cf. rho_r_stride)
     iz = _iz_of(res, z, z_um)
-    rho_e = np.asarray(_get(res, "rho_rzt"),   np.float64)[iz]      # (Nr, Nt_sub)
+    rho_e = np.asarray(_get(res, "rho_rzt"),   np.float64)[iz]      # (Nr_sub, Nt_sub)
     rho_s = np.asarray(_get(res, "rho_s_rzt"), np.float64)[iz]
     I_rzt = _get(res, "I_rzt")
     I = (np.asarray(I_rzt, np.float64)[iz] if I_rzt is not None
@@ -420,44 +435,66 @@ if __name__ == "__main__":
 # ================================================================================
 #  FIG. 2 — taux d'ionisation W_PI(I) : Keldysh général vs limites MPI / tunnel
 # ================================================================================
-def fig2_ionization_rate(prm: Params | None = None, I_min=1e12, I_max=1.5e14,
+def fig2_ionization_rate(prm: Params | None = None, I_min=1e12, I_max=6e14,
                          sigma6=9.6e-70, rho_at=2.1e22, I_marker=5e13,
-                         save=None, show=True, xlim=None, ylim=(1e25, 1e35)):
+                         save=None, show=True, ax=None,
+                         xlim=None, ylim=(1e25, 3e37), title=None):
     """
-    Fig. 2 de Couairon 2005 : taux de photoionisation de la silice (gap 9 eV)
-    en fonction de l'intensité -- formule générale de Keldysh (continu),
-    comparée au taux multiphotonique W_MPI = sigma6 I^6 rho_at (tirets).
-    La verticale marque l'intensité maximale atteinte numériquement (~5e13).
+    Fig. 2 of Couairon 2005 -- photoionization rate of fused silica (9 eV gap)
+    versus laser intensity, with the two analytic limits of the same formula:
 
-    Ne demande AUCUNE simulation : c'est une pure évaluation de la formule
-    d'ionisation, donc c'est le test le plus direct que le W_PI utilisé par
-    le solveur est bien celui de l'article.
+      solid        general Keldysh formula, Eqs. (7)-(8)  [what the solver uses]
+      dotted       Keldysh multiphoton limit, gamma >> 1
+      dash-dotted  Keldysh tunnel limit, gamma << 1
+      dashed       W_MPI = sigma_6 I^6 rho_at
+      vertical     maximum intensity reached numerically
+
+    Requires no simulation: it is a direct evaluation of the ionization rate,
+    so it is the most direct check that the solver's W_PI is the paper's. The
+    two limits are asymptotics OF the general formula, so the solid curve
+    merging into each one at the appropriate end is a parameter-free test that
+    the formula is assembled correctly.
     """
     prm = prm or Params(wavelength=800e-9, Ui_eV=9.0)
-    I = np.logspace(np.log10(I_min), np.log10(I_max), 400)
-    W_keldysh = prm.W_vb(I)
-    W_mpi = sigma6 * I**6 * rho_at
+    I = np.logspace(np.log10(I_min), np.log10(I_max), 1400)
+    lam, Ui, meff, n0 = prm.wavelength, prm.Ui_eV, prm.meff, prm.n0
 
-    fig, ax = plt.subplots(figsize=(7.0, 5.0))
-    ax.loglog(I, np.clip(W_keldysh, 1e-30, None), "k-", lw=2.0,
+    W_gen = prm.W_vb(I)
+    W_mpi = keldysh_multiphoton(I, lam, Ui, meff, n0)
+    W_tun = keldysh_tunnel(I, lam, Ui, meff, n0)
+    W_pow = sigma6 * I**6 * rho_at
+
+    own = ax is None
+    fig, ax = (plt.subplots(figsize=(7.4, 5.6)) if own else (ax.figure, ax))
+    ax.loglog(I, np.clip(W_pow, 1e-30, None), "r--", lw=1.4,
+              label=r"$W_{\mathrm{MPI}}=\sigma_6 I^6 \rho_{\mathrm{at}}$")
+    ax.loglog(I, np.clip(W_mpi, 1e-30, None), "g:", lw=2.0,
+              label=r"Keldysh, multiphoton limit ($\gamma \gg 1$)")
+    ax.loglog(I, np.clip(W_tun, 1e-30, None), "b-.", lw=1.5,
+              label=r"Keldysh, tunnel limit ($\gamma \ll 1$)")
+    ax.loglog(I, np.clip(W_gen, 1e-30, None), "k-", lw=2.0,
               label="Keldysh, general formula (solver)")
-    ax.loglog(I, np.clip(W_mpi, 1e-30, None), "k--", lw=1.4,
-              label=r"$W_{MPI}=\sigma_6 I^6 \rho_{at}$")
-    if I_marker is not None:
-        ax.axvline(I_marker, color="crimson", ls=":", lw=1.2,
-                   label=f"I max reached numerically ≈ {I_marker:.0e}")
-    if xlim is not None: ax.set_xlim(*xlim)
-    else:                ax.set_xlim(I_min, I_max)
-    if ylim is not None: ax.set_ylim(*ylim)
-    ax.set_xlabel(r"Laser Intensity (W/cm$^2$)")
-    ax.set_ylabel(r"$W_{PI}$ (s$^{-1}$ cm$^{-3}$)")
-    ax.set_title("Fig. 2 — Ionization rate, fused silica (Ui = 9 eV)")
-    ax.legend(fontsize=8, loc="lower right")
+    if I_marker:
+        ax.axvline(I_marker, color="k", lw=1.2,
+                   label=rf"$I_{{\max}}$ reached numerically $\approx$ {I_marker:.0e}")
+
+    ax.set_xlim(*(xlim or (I_min, I_max)))
+    if ylim: ax.set_ylim(*ylim)
+    ax.set_xlabel(r"Laser intensity (W/cm$^2$)")
+    ax.set_ylabel(r"$W_{\mathrm{PI}}$ (s$^{-1}$ cm$^{-3}$)")
+    ax.set_title(title or f"Ionization rate, fused silica "
+                          f"($U_i$ = {Ui:g} eV, $\\lambda$ = {lam*1e9:.0f} nm)")
+    ax.text(0.06, 0.42, "Multiphoton", transform=ax.transAxes, fontsize=11)
+    ax.text(0.72, 0.80, "Tunnel", transform=ax.transAxes, fontsize=11)
+    ax.legend(loc="lower right", fontsize=8, framealpha=0.9)
     ax.grid(True, which="both", alpha=0.15)
-    fig.tight_layout()
-    if save: fig.savefig(save, dpi=180)
-    if show: plt.show()
+    ax.tick_params(which="both", direction="in", top=True, right=True)
+    if own:
+        fig.tight_layout()
+        if save: fig.savefig(save, dpi=180)
+        if show: plt.show()
     return fig
+
 
 # ================================================================================
 #  FIG. 10 — rho_e(t) avec / sans avalanche + intensité, à z fixé
@@ -529,27 +566,51 @@ def fig10_avalanche_vs_time(res, prm: Params | None = None, z_um=None, dt_fs=0.5
 #  E_g0 = 9 eV, f_R = 0.18, m_r = 0.5 m_e, t_tr = 150 fs, omega0*tau_c = 3.
 # ================================================================================
 _BULG_LEVELS = {
-    "fluence":  ([0.20, 0.80, 1.4, 1.9],        "fluence (J/cm²)"),
-    "absorbed": ([50.0, 600.0, 1200.0],          "absorbed energy (J/cm³)"),
-    "Ipeak":    ([2e12, 7e12, 3e13],             "peak intensity (W/cm²)"),
-    "rho":      ([1e15, 1e17, 1e19, 3e20],       "electron density (cm⁻³)"),
+    "fluence":  ([0.20, 0.80, 1.4, 1.9],   "fluence (J/cm$^2$)",              "viridis"),
+    "absorbed": ([50.0, 600.0, 1200.0],    "absorbed energy (J/cm$^3$)",      "inferno"),
+    "Ipeak":    ([2e12, 7e12, 3e13],       "peak intensity (W/cm$^2$)",       "magma"),
+    "rho":      ([1e15, 1e17, 1e19, 3e20], "electron density (cm$^{-3}$)",    "cividis"),
 }
 
-def _bulg_panel(ax, z_um, r_um, field, levels, label, focus_um=None,
-                xlim=(0, 150), rlim=(-5, 5), log=False):
-    """Un panneau en contours remplis niveaux de gris, convention Bulgakova."""
-    F = np.asarray(field, np.float64).T                      # (Nr, Nz)
-    lv = np.asarray(levels, np.float64)
-    Fp = np.clip(F, lv[0] * 1e-6, None)
-    cs = ax.contourf(z_um, r_um, Fp, levels=np.concatenate([[lv[0] * 1e-6], lv, [max(lv[-1] * 10, Fp.max())]]),
-                     colors=["white", "0.85", "0.6", "0.35", "0.1"][:len(lv) + 1])
+def _bulg_panel(ax, z_um, r_um, field, levels, label, cmap="viridis", focus_um=None,
+                xlim=(0, 150), rlim=(-5, 5), cbar=True, dyn_decades=4.0):
+    """One Bulgakova-style panel.
+
+    Filled contours at only 3-4 discrete levels (as the paper prints them)
+    saturate: everything above the top level collapses into one flat blob and
+    the structure inside it is invisible. Here the field is drawn as a
+    CONTINUOUS log-scaled image spanning `dyn_decades` below its maximum, with
+    the paper's levels overlaid as labelled contour lines -- so the gradient is
+    readable AND the reference levels stay comparable to the publication.
+    """
+    from matplotlib.colors import LogNorm
+    F = np.asarray(field, np.float64).T                       # (Nr, Nz)
+    vmax = float(np.nanmax(F))
+    if not np.isfinite(vmax) or vmax <= 0:
+        ax.text(0.5, 0.5, f"{label}: no signal", ha="center", va="center",
+                transform=ax.transAxes, fontsize=8)
+        ax.set_xlim(*xlim); ax.set_ylim(*rlim); ax.set_ylabel(r"$r$ ($\mu$m)")
+        return None
+    vmin = vmax * 10.0**(-dyn_decades)
+    im = ax.pcolormesh(z_um, r_um, np.clip(F, vmin, vmax),
+                       norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap,
+                       shading="auto", rasterized=True)
+    lv = [v for v in levels if vmin < v < vmax]
+    if lv:
+        cs = ax.contour(z_um, r_um, F, levels=lv, colors="white",
+                        linewidths=0.8, alpha=0.9)
+        ax.clabel(cs, inline=True, fontsize=6, fmt="%g")
     if focus_um is not None:
-        ax.axvline(focus_um, color="white", lw=1.2)
+        ax.axvline(focus_um, color="white", lw=1.0, ls="--", alpha=0.8)
+    if cbar:
+        cb = ax.figure.colorbar(im, ax=ax, pad=0.012, fraction=0.046)
+        cb.ax.tick_params(labelsize=7)
     ax.set_xlim(*xlim); ax.set_ylim(*rlim)
-    ax.set_ylabel("r (µm)")
+    ax.set_ylabel(r"$r$ ($\mu$m)")
     ax.text(0.985, 0.90, label, transform=ax.transAxes, ha="right", va="top",
-            fontsize=7, bbox=dict(fc="white", ec="none", alpha=0.75, pad=1.5))
-    return cs
+            fontsize=8, color="white",
+            bbox=dict(fc="black", ec="none", alpha=0.45, pad=1.8))
+    return im
 
 def fig11_bulgakova(res, z_shift_um=90.0, focus_um=90.0, save=None, show=True,
                     xlim=(0, 150), rlim=(-5, 5)):
@@ -569,18 +630,20 @@ def fig11_bulgakova(res, z_shift_um=90.0, focus_um=90.0, save=None, show=True,
         ("Ipeak",    _get(res, "Ipeak_rz"),    "c"),
         ("rho",      _get(res, "rho_rz_at"),   "d"),
     ]
-    fig, axes = plt.subplots(4, 1, figsize=(8.0, 7.2), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(9.0, 8.4), sharex=True)
     for ax, (key, fld, tag) in zip(axes, panels):
-        lv, name = _BULG_LEVELS[key]
+        lv, name, cmap = _BULG_LEVELS[key]
         if fld is None:
-            ax.text(0.5, 0.5, f"{name} unavailable\n(rerun with rho_snapshot_t_fs=50.0)",
+            ax.text(0.5, 0.5, f"{name} unavailable\n(re-run with rho_snapshot_t_fs=50.0)",
                     ha="center", va="center", fontsize=8, transform=ax.transAxes)
-            ax.set_ylabel("r (µm)"); ax.set_xlim(*xlim); ax.set_ylim(*rlim)
+            ax.set_ylabel(r"$r$ ($\mu$m)"); ax.set_xlim(*xlim); ax.set_ylim(*rlim)
             continue
-        _bulg_panel(ax, z_um, r_um, fld, lv, f"{tag}   {name}",
+        _bulg_panel(ax, z_um, r_um, fld, lv, f"({tag}) {name}", cmap=cmap,
                     focus_um=focus_um, xlim=xlim, rlim=rlim)
-    axes[-1].set_xlabel("z (µm)")
-    fig.suptitle("Fig. 11 — Bulgakova, Stoian & Rosenfeld: 800 nm, 120 fs, 1 µJ, w = 0.9 µm, focus at 90 µm",
+    axes[-1].set_xlabel(r"$z$ ($\mu$m)")
+    fig.suptitle("Bulgakova, Stoian & Rosenfeld Fig. 11 -- fused silica, 800 nm, "
+                 "120 fs, 1 $\\mu$J, $w$ = 0.9 $\\mu$m, focus at 90 $\\mu$m\n"
+                 "(dashed white line: geometric focus; white contours: published levels)",
                  fontsize=10)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
@@ -604,18 +667,112 @@ def fig12_bulgakova(res, z_shift_um=90.0, focus_um=None, save=None, show=True,
     z_um = np.asarray(_get(res, "z"), float) * 1e6 + z_shift_um
     r_um = np.asarray(_get(res, "r"), float) * 1e6
     edges = np.asarray(edges, float)
-    lv, _ = _BULG_LEVELS["absorbed"]
+    lv, _, cmap = _BULG_LEVELS["absorbed"]
 
+    # Common colour scale across the four windows, otherwise each panel is
+    # normalised to its own maximum and the sequence cannot be compared.
+    vmax = float(np.nanmax(bins))
     nb = bins.shape[1]
-    fig, axes = plt.subplots(nb, 1, figsize=(8.0, 1.75 * nb + 1.0), sharex=True)
+    fig, axes = plt.subplots(nb, 1, figsize=(9.0, 1.95 * nb + 1.2), sharex=True)
     axes = np.atleast_1d(axes)
     for b, ax in enumerate(axes):
-        _bulg_panel(ax, z_um, r_um, bins[:, b, :], lv,
-                    f"{edges[b]:+.0f} fs < t < {edges[b+1]:+.0f} fs",
+        fld = np.asarray(bins[:, b, :], np.float64)
+        fld = np.where(fld > 0, fld, 0.0)
+        fld[0, 0] = max(fld[0, 0], vmax)      # pin the shared scale
+        _bulg_panel(ax, z_um, r_um, fld, lv,
+                    f"{edges[b]:+.0f} fs < $t$ < {edges[b+1]:+.0f} fs", cmap=cmap,
                     focus_um=focus_um, xlim=xlim, rlim=rlim)
-    axes[-1].set_xlabel("z (µm)")
-    fig.suptitle("Fig. 12 — Sequential absorption, absorbed energy (J/cm³)", fontsize=10)
+    axes[-1].set_xlabel(r"$z$ ($\mu$m)")
+    fig.suptitle("Bulgakova, Stoian & Rosenfeld Fig. 12 -- sequential energy absorption "
+                 "(J/cm$^3$), same conditions as Fig. 11\n"
+                 "(pulse maximum at $t$ = 0; shared colour scale across the four windows)",
+                 fontsize=10)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
     if show: plt.show()
     return fig
+
+
+# ================================================================================
+#  Export: every figure into a single multi-page PDF, English throughout
+# ================================================================================
+def save_all_figures(results, pdf_path="figures.pdf", prm=None,
+                     paper_shift_um=75.0, bulg_shift_um=90.0,
+                     z_fig10_um=-18.0, verbose=True):
+    """
+    Render every reproduction figure into one multi-page PDF.
+
+    `results` is the notebook's dict {scenario_name: result}. Whatever is
+    present gets plotted, whatever is missing is skipped with a note -- so this
+    works after section 1 alone, or after the whole notebook.
+
+    Recognised keys:
+      couairon2005_1p1uJ  Couairon Figs. 6/7/9/12/13 + populations
+      couairon2005_1uJ    Couairon Fig. 10 (avalanche on/off, 1 uJ)
+      couairon2005_0.45uJ Couairon Fig. 7(a)
+      bulgakova_1uJ       Bulgakova Figs. 11 and 12
+    Any other key is treated as an ablation scenario and gets a summary page.
+
+    Every page carries an English title and legend. One file, so it can be
+    dropped straight into a report or shared as a single attachment.
+    """
+    from matplotlib.backends.backend_pdf import PdfPages
+    prm = prm or Params(wavelength=800e-9, Ui_eV=9.0, rho_max=2.1e22,
+                        tau_r=150e-15, n2=3.54e-20)
+    pdf_path = str(pdf_path)
+    made, skipped = [], []
+
+    def _try(name, fn):
+        try:
+            fig = fn()
+            if fig is not None:
+                pdf.savefig(fig, bbox_inches="tight")
+                plt.close(fig)
+                made.append(name)
+            else:
+                skipped.append((name, "returned None"))
+        except Exception as exc:
+            skipped.append((name, f"{type(exc).__name__}: {exc}"))
+            plt.close("all")
+
+    with PdfPages(pdf_path) as pdf:
+        # --- ionization rate: needs no run at all -------------------------
+        _try("Keldysh ionization rate (Couairon Fig. 2)",
+             lambda: fig2_ionization_rate(prm, show=False))
+
+        r11 = results.get("couairon2005_1p1uJ")
+        if r11 is not None:
+            _try("Electron density vs z (Couairon Fig. 13)",
+                 lambda: fig13_electron_density_vs_z(
+                     r11, prm, z_shift_um=paper_shift_um, show=False))
+            _try("Carrier populations vs time (Couairon Fig. 2 style)",
+                 lambda: fig2_populations(r11, prm, show=False))
+
+        r10 = results.get("couairon2005_1uJ")
+        if r10 is not None:
+            _try("Avalanche on/off vs time, 1 uJ (Couairon Fig. 10)",
+                 lambda: fig10_avalanche_vs_time(
+                     r10, prm, z_um=z_fig10_um, z_shift_um=paper_shift_um, show=False))
+
+        rb = results.get("bulgakova_1uJ")
+        if rb is not None:
+            _try("Bulgakova Fig. 11 (fluence / absorbed / intensity / density)",
+                 lambda: fig11_bulgakova(rb, z_shift_um=bulg_shift_um,
+                                         focus_um=90.0, show=False))
+            _try("Bulgakova Fig. 12 (sequential absorption)",
+                 lambda: fig12_bulgakova(rb, z_shift_um=bulg_shift_um, show=False))
+
+        # --- probe dephasing, only where the (r,t) cube was kept ----------
+        for name, res in results.items():
+            if _get(res, "rho_rzt") is None:
+                continue
+            _try(f"Probe dephasing -- {name}",
+                 lambda res=res: fig10_dephasage(res, prm, band_um=10.0, show=False))
+
+    if verbose:
+        print(f"{len(made)} figure(s) -> {pdf_path}")
+        for m in made:
+            print(f"   ok      {m}")
+        for n, why in skipped:
+            print(f"   skipped {n}  ({why})")
+    return pdf_path

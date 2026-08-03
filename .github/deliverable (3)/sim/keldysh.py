@@ -248,3 +248,58 @@ def validate(wavelength=800e-9, Ui_eV=9.0, meff_rel=0.64,
 
 if __name__ == "__main__":
     validate()
+
+
+# ================================================================================
+#  Analytic limits of the Keldysh rate -- the dotted / dash-dotted curves of
+#  Couairon 2005 Fig. 2. Both are asymptotics OF THE SAME formula, so they are
+#  the strongest available check that rate_raw() is assembled correctly: the
+#  general curve must merge into the multiphoton one at low intensity and into
+#  the tunnel one at high intensity, with no free parameter.
+# ================================================================================
+_HBAR = 1.054571817e-34
+
+def _gamma(I_Wcm2, omega, meff, U, n0):
+    E = np.sqrt(2.0 * np.asarray(I_Wcm2, float) * 1e4 / (n0 * c * epsilon_0))
+    return np.maximum(omega * np.sqrt(meff * U) / (q_e * np.maximum(E, 1e-300)), 1e-12)
+
+def keldysh_multiphoton(I_Wcm2, wavelength=800e-9, Ui_eV=9.0, meff=None, n0=None):
+    r"""Multiphoton limit, gamma >> 1 (cm^-3 s^-1).
+
+        W = (2w/9pi)(w m/hbar)^{3/2} Phi(sqrt(2 nu)) e^{2<x+1>} (16 gamma^2)^{-<x+1>}
+
+    This is the beta -> 1 limit of the general formula, hence the Phi(sqrt(2 nu)).
+    """
+    m_e_ = 9.1093837015e-31
+    meff = 0.64 * m_e_ if meff is None else meff
+    n0 = n_sellmeier(wavelength) if n0 is None else n0
+    w, U = 2 * np.pi * c / wavelength, Ui_eV * q_e
+    g = _gamma(I_Wcm2, w, meff, U, n0)
+    xt = (U / (_HBAR * w)) * (1.0 + 1.0 / (4.0 * g**2))
+    mx = np.floor(xt + 1.0)
+    nu = mx - xt
+    pref = (2.0 * w / (9.0 * np.pi)) * (w * meff / _HBAR) ** 1.5
+    W = (pref * dawsn(np.sqrt(2.0 * nu))
+         * np.exp(2.0 * mx * (1.0 - 1.0 / (4.0 * g**2)))
+         * (1.0 / (16.0 * g**2)) ** mx)
+    return np.nan_to_num(W, nan=0.0, posinf=0.0, neginf=0.0) * 1e-6
+
+def keldysh_tunnel(I_Wcm2, wavelength=800e-9, Ui_eV=9.0, meff=None, n0=None):
+    r"""Tunnel limit, gamma << 1 (cm^-3 s^-1).
+
+        W = (2/9pi^2)(m U/hbar^2)^{3/2}(U/hbar) (hbar w/(U gamma))^{5/2}
+            exp[-(pi/2) sqrt(m U) U/(hbar e E) (1 - gamma^2/8)]
+
+    The exponent scales as 1/E, the tunnelling signature.
+    """
+    m_e_ = 9.1093837015e-31
+    meff = 0.64 * m_e_ if meff is None else meff
+    n0 = n_sellmeier(wavelength) if n0 is None else n0
+    w, U = 2 * np.pi * c / wavelength, Ui_eV * q_e
+    E = np.sqrt(2.0 * np.asarray(I_Wcm2, float) * 1e4 / (n0 * c * epsilon_0))
+    g = _gamma(I_Wcm2, w, meff, U, n0)
+    pref = (2.0 / (9.0 * np.pi**2)) * (meff * U / _HBAR**2) ** 1.5 * (U / _HBAR)
+    scal = (_HBAR * w / (U * g)) ** 2.5
+    expo = np.exp(-(np.pi / 2.0) * np.sqrt(meff * U) * U
+                  / (_HBAR * q_e * np.maximum(E, 1e-300)) * (1.0 - g**2 / 8.0))
+    return np.nan_to_num(pref * scal * expo, nan=0.0, posinf=0.0, neginf=0.0) * 1e-6

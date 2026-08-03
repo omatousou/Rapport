@@ -215,8 +215,15 @@ def load_sim(sim_dir):
         raise RuntimeError(
             f"{sim_dir}/result.npz n'a pas de rho_rzt exploitable "
             "(relance filament_sim.run(..., rho_t_stride>0)).")
-    rlist_m = np.asarray(d["rlist"], dtype=np.float64) if "rlist" in d.files \
-        else np.asarray(d["r"], dtype=np.float64)[len(d["r"]) // 2:]
+    # Le cube (z,r,t) peut etre sous-echantillonne radialement (rho_r_stride) :
+    # dans ce cas le solveur ecrit r_sub, et c'est CETTE grille qui indexe
+    # rho_rzt/I_rzt, pas rlist.
+    if "r_sub" in d.files and np.asarray(d["r_sub"]).shape != ():
+        rlist_m = np.asarray(d["r_sub"], dtype=np.float64)
+    elif "rlist" in d.files:
+        rlist_m = np.asarray(d["rlist"], dtype=np.float64)
+    else:
+        rlist_m = np.asarray(d["r"], dtype=np.float64)[len(d["r"]) // 2:]
     sim = dict(
         rlist_um   = rlist_m * 1e6,
         z_sim_um   = np.asarray(d["z"], dtype=np.float64) * 1e6,
