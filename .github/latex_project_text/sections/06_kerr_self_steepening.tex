@@ -37,39 +37,35 @@ This refractive index therefore depends on intensity. This is the origin of the 
 
 \begin{figure}[h!]
     \centering
-    \begin{tikzpicture}[scale=1.0]
-        \draw[thick, kicol, domain=-2.2:2.2, samples=80, smooth]
-            plot (\x, {3.4+1.1*exp(-1.1*\x*\x)});
-        \node[kicol, above] at (0,4.6) {\footnotesize $I(r)$};
-
-        \draw[fill=blue!5, draw=none] (-2.2,0) rectangle (2.2,3.0);
-        \foreach \i/\o in {0/6, 1/16, 2/28, 3/42, 4/60} {
-            \fill[blue!\o!white] (-2.2+\i*0.11,0) rectangle (2.2-\i*0.11,3.0);
+    \begin{tikzpicture}
+        \pgfdeclareverticalshading{grin}{100bp}{
+            color(0bp)=(cyan!15!white);
+            color(25bp)=(cyan!35!blue!35);
+            color(50bp)=(blue!65!cyan!50);
+            color(75bp)=(cyan!35!blue!35);
+            color(100bp)=(cyan!15!white)
         }
-        \draw[thick] (-2.2,0) rectangle (2.2,3.0);
-        \node[below] at (0,-0.05) {\footnotesize medium, $n(r) = n_0 + n_2 I(r)$};
+        \fill[shading=grin] (0,-2) rectangle (4,2);
+        \draw[dashed, thick, black!80] (-3, 0) -- (6.5, 0);
 
-        \foreach \y in {-1.9,-1.1,-0.3,0.5,1.3,2.1} {
-            \draw[-stealth, thin] (-4.0,\y+1.5) -- (-2.2,\y+1.5);
+        \draw[thick, -latex] (-3, -2.2) -- (-1.2, -2.2) node[right] {\large $n$};
+        \draw[thick, -latex] (-3, -2.2) -- (-3, 2.3) node[right] {\large $r$};
+        \draw[green!60!black, thick, domain=-2.3:2.3, samples=100]
+            plot ({-3 + 1.6*exp(-\x*\x / 1.2)}, \x);
+        \node[white, anchor=west] at (0.5, 1.6) {$n(r) = n_0 + n_2 I(r)$};
+
+        \def\xe{4}
+        \def\xf{5.2}
+        \def\angle{15}
+        \foreach \y in {1.3, 0.45, -0.45, -1.3} {
+            \draw[red, line width=1.2pt] (-0.8, \y) -- (0, \y);
+            \draw[red, line width=1.2pt, domain=0:\xe, samples=50] plot (\x, {\y*cos(\x*\angle)});
+            \pgfmathsetmacro{\yexit}{\y*cos(\xe*\angle)}
+            \draw[red, line width=1.2pt, -{Latex[length=3mm, width=2mm]}]
+                (\xe, \yexit) -- ($(\xe, \yexit)!1.6!(\xf, 0)$);
         }
-        \draw[thin] (-2.2,3.4) -- (-1.1,2.15);
-        \draw[thin] (-2.2,2.6)  -- (-1.1,1.85);
-        \draw[thin] (-2.2,1.8)  -- (-1.1,1.6);
-        \draw[thin] (-2.2,1.0)  -- (-1.1,1.4);
-        \draw[thin] (-2.2,0.2)  -- (-1.1,1.15);
-        \draw[thin] (-2.2,-0.6) -- (-1.1,0.85);
-
-        \draw[thin] (-1.1,2.15) -- (2.2,1.5);
-        \draw[thin] (-1.1,1.85) -- (2.2,1.5);
-        \draw[thin] (-1.1,1.6)  -- (2.2,1.5);
-        \draw[thin] (-1.1,1.4)  -- (2.2,1.5);
-        \draw[thin] (-1.1,1.15) -- (2.2,1.5);
-        \draw[thin] (-1.1,0.85) -- (2.2,1.5);
-
-        \draw[-stealth, thick, kfcol] (2.2,1.5) -- (4.2,1.5);
-        \filldraw[kfcol] (2.2,1.5) circle (2pt) node[below right] {\footnotesize focus};
     \end{tikzpicture}
-    \caption{Kerr self-focusing as a graded index lens. The refractive index $n(r)=n_0+n_2I(r)$ follows the transverse intensity profile of the beam, higher on axis where $I(r)$ peaks. Rays entering parallel are bent progressively more strongly as they approach the axis, exactly as in a conventional graded index lens, and converge toward a nonlinear focus.}
+    \caption{Kerr self-focusing as a graded index lens. The refractive index $n(r)=n_0+n_2I(r)$, plotted in green on the left, follows the transverse intensity profile of the beam, higher on axis where the beam is brightest (shaded blue gradient). Rays entering parallel to the axis are bent progressively more strongly as they approach the center, exactly as in a conventional graded index lens, and converge toward a nonlinear focus.}
     \label{fig:kerr_lens}
 \end{figure}
 

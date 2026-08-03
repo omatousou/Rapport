@@ -4,34 +4,49 @@ Thermal fluctuations induce slight lattice vibrations that act as a trigger, cre
 
 \begin{figure}[h!]
     \centering
-    \begin{tikzpicture}[scale=1.0]
-        \draw[-stealth, thick] (-2.2,0) -- (7.5,0) node[right] {configuration coordinate $Q$};
-        \draw[-stealth, thick] (-2.2,0) -- (-2.2,5.3) node[above] {energy};
+    \begin{tikzpicture}[scale=0.92]
+        \draw[-stealth, thick] (-3.4,0) -- (5.6,0) node[right] {general coordinate $Q$};
+        \draw[-stealth, thick] (-3.4,-0.6) -- (-3.4,7.3) node[above] {energy};
 
-        \draw[thick, kicol, domain=-1.8:2.0, samples=100, smooth]
-            plot (\x, {2.8+0.55*(\x-0.1)*(\x-0.1)});
-        \node[kicol] at (0.1,2.55) {$\bullet$};
-        \node[kicol, right] at (1.9,4.2) {free exciton};
+        \draw[thick, dotted] (-3.0,6.5) to[out=5,in=175] (5.2,6.9);
+        \node[above] at (2.5,6.85) {\footnotesize free carrier continuum};
 
-        \draw[thick, qcol, domain=2.9:6.8, samples=100, smooth]
-            plot (\x, {0.5+1.05*(\x-4.85)*(\x-4.85)});
-        \node[qcol] at (4.85,0.5) {$\bullet$};
-        \node[qcol, right] at (6.4,3.6) {self-trapped exciton (STE)};
+        \draw[very thick, blue, domain=-2.0:2.0, samples=100, smooth]
+            plot (\x, {5.0+0.32*\x*\x});
+        \node[blue] at (0,5.0) {$\bullet$};
+        \node[blue, above left] at (-1.7,6.2) {exciton band};
 
-        \draw[dashed, gray] (-2.2,4.55) -- (7.3,4.55) node[right, black] {$E_g$};
+        \fill[red!20, opacity=0.8] plot[domain=1.2:4.6, samples=100]
+            (\x, {3.0+0.55*(\x-3.0)*(\x-3.0)}) -- (4.6,6.5) -- (1.2,6.5) -- cycle;
+        \draw[very thick, red, domain=1.2:4.6, samples=100, smooth]
+            plot (\x, {3.0+0.55*(\x-3.0)*(\x-3.0)});
+        \node[red] at (3.0,3.0) {$\bullet$};
+        \node[red, above right] at (3.6,4.6) {STE};
 
-        \draw[-stealth, thick, decorate, decoration={snake, amplitude=1.2pt, segment length=3pt}] (0.1,2.7) to[bend left=15] (1.4,2.35);
-        \node at (1.3,3.0) {\footnotesize thermal trigger};
+        \draw[very thick, green!55!black, domain=-2.7:2.7, samples=100, smooth]
+            plot (\x, {0+0.32*\x*\x});
+        \node[green!55!black, above] at (-0.18,0.02) {\footnotesize $+\;+$};
+        \node[green!55!black, below] at (-1.8,0.95) {ground state};
 
-        \draw[-stealth, thick] (1.8,2.35) to[bend right=25] (4.0,1.05);
-        \node at (3.6,2.35) {\footnotesize phonon emission};
+        \draw[-stealth, thick, red!70!black] (0.4,5.35) to[out=25,in=160] (2.4,5.85) to[out=-20,in=140] (3.0,3.65);
+        \node[red!70!black, above] at (1.7,5.9) {\footnotesize barrier};
 
-        \draw[<->, thick] (0.1,2.65) -- (0.1,0.75);
-        \node[left] at (0.1,1.7) {\footnotesize $E_b$};
+        \draw[dashed, gray] (-3.4,6.5) -- (5.2,6.5);
+        \draw[dashed, gray] (-3.4,5.0) -- (5.2,5.0);
+        \draw[dashed, gray] (-3.4,3.0) -- (5.2,3.0);
+        \draw[dashed, gray] (-3.4,0) -- (5.2,0);
 
-        \draw[<->, thick] (4.85,0.6) -- (4.85,2.6) node[midway, right] {\footnotesize $\Delta E_{\text{trap}}$};
+        \draw[<->, thick] (-3.0,6.5) -- (-3.0,5.0) node[midway, left] {\footnotesize $E_B$};
+        \draw[<->, thick] (4.9,5.0) -- (4.9,3.0) node[midway, right] {\footnotesize $E_{ST}$};
+
+        \draw[-stealth, ultra thick, blue] (-1.2,0) -- (-1.2,6.5) node[midway, left=1pt] {\footnotesize $E_{\text{gap}}$};
+        \draw[-stealth, ultra thick, green!55!black] (-0.6,0) -- (-0.6,5.0) node[midway, right=1pt] {\footnotesize FE};
+
+        \draw[-stealth, ultra thick, orange!90!red, decorate, decoration={snake, amplitude=1.4pt, segment length=3.2pt}]
+            (3.4,2.8) -- (4.3,1.35);
+        \node[orange!90!red, right] at (4.35,2.1) {\footnotesize emission};
     \end{tikzpicture}
-    \caption{Configuration coordinate diagram for self-trapping. The free exciton sits in a shallow well close to the gap $E_g$. A thermal fluctuation displaces the lattice along $Q$, and once the exciton-phonon coupling is strong enough there is no barrier back to a much deeper, displaced well, the self-trapped exciton state. The energy difference $\Delta E_{\text{trap}}$ between the two minima is released into local phonons.}
+    \caption{Configuration coordinate diagram for self-trapping, adapted to the general shape reported for oxide self-trapped excitons. Absorption near $E_{\text{gap}}$ populates the free carrier continuum, which relaxes into the exciton band, bound below the continuum by $E_B$. In materials with weak exciton-phonon coupling a barrier separates the exciton band from a deeper, displaced self-trapped exciton (STE) well, of depth $E_{ST}$ relative to the exciton band. In $\mathrm{SiO}_2$ the coupling is strong enough that this barrier is negligible, so self-trapping proceeds essentially without delay once the exciton is formed, as described in the text. The STE eventually relaxes back to the ground state, releasing its energy as an emission line strongly redshifted from $E_{\text{gap}}$ and, in $\mathrm{SiO}_2$, leaving behind the permanent bond rearrangement of Figure~\ref{fig:dangling_bonds}.}
     \label{fig:configuration_coordinate}
 \end{figure}
 

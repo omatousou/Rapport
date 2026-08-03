@@ -1,0 +1,280 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.7cm]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{physics}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\definecolor{notecolor}{RGB}{180,120,0}
+\newcommand{\authornote}[1]{%
+    \par\noindent
+    \fcolorbox{notecolor}{notecolor!8}{%
+        \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+            \textbf{\textcolor{notecolor}{Formula unclear, please check.}} #1%
+        }%
+    }%
+    \par\vspace{0.3em}%
+}
+
+\title{Reading Notes: Couairon \& Mysyrowicz, Phys. Rep. 441 (2007) 47--189\\\emph{Femtosecond filamentation in transparent media}}
+\author{Section by section summary}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section*{Purpose of this document}
+\texttt{copier\_coller\_couairon.txt} is a raw copy-paste of the PDF text of this review article. The PDF extraction breaks most equations, dropping symbols, subscripts, and Greek letters. This document goes through the article section by section, following its own table of contents, restores each formula in proper LaTeX, and gives a short summary of each part. Where a formula was too garbled to reconstruct with confidence, it is flagged instead of guessed.
+
+\section{Introduction}
+
+\subsection{Scope of the Paper}
+The review covers femtosecond filamentation in transparent, weakly ionized dielectric media, with typical peak intensities around $10^{13}\,\text{W/cm}^2$. This is distinct from relativistic filamentation, which occurs in fully ionized plasmas at much higher intensity ($I>10^{17}\,\text{W/cm}^2$) and is not treated here. The main case study throughout the review is air, with additional discussion of other gases and of condensed media such as transparent solids and liquids.
+
+The term "filamentation" is somewhat misleading: rather than an extended static light string, the phenomenon is a dynamic structure that shortens temporally and narrows spatially as it propagates, without any external guiding mechanism, over distances much larger than the ordinary diffraction length. Some authors reserve the term for cases where the core intensity is high enough ($10^{13}$--$10^{14}\,\text{W/cm}^2$) to ionize the medium; the review adopts a broader definition in which ionization is not a strict requirement. Historically, the first clear demonstration was by Braun et al. (1995), who observed unexplained mirror damage at increasing distances from a laser and correctly attributed it to beam self-focusing. Filamentation distances of tens of meters, hundreds of meters, and eventually kilometers were subsequently demonstrated.
+
+\subsection{Properties of Ultrashort Pulse Nonlinear Propagation}
+
+This section reviews, one physical effect at a time, everything that contributes to the formation and dynamics of a filament. The order follows the review's own logic: linear effects first (diffraction, space-time defocusing, group velocity dispersion), then nonlinear polarization effects (self-focusing, self-phase modulation, Raman contribution, self-steepening), then plasma-related effects (photoionization, plasma defocusing, plasma absorption, multiphoton absorption losses), and finally the resulting global dynamics (refocusing cycles, modulational instability).
+
+\subsubsection{Diffraction}
+The Rayleigh length, over which a collimated Gaussian beam with waist $w_0$ widens by a factor $\sqrt{2}$, is
+\begin{equation}
+L_{DF} = \frac{k w_0^2}{2} = \frac{n_0 w_0^2 \omega_0}{c},
+\end{equation}
+with $k\equiv n_0k_0$ the wavenumber in the medium, $k_0\equiv 2\pi/\lambda_0$ the vacuum wavenumber, and $n_0$ the linear refractive index. Numerically, a beam of waist $w_0=100\,\mu\text{m}$ at $\lambda_0=800\,\text{nm}$ in vacuum has $L_{DF}=3.9\,\text{cm}$.
+
+\subsubsection{Space--Time Defocusing}
+This short paragraph has no formula, only a qualitative statement. A laser pulse is not perfectly monochromatic, and within a beam of finite transverse size, bluer frequency components diffract less than redder ones. As a result, a detector of limited aperture placed after propagation records an apparently longer pulse, because the spectrum reaching it has narrowed relative to the original pulse.
+
+\subsubsection{Group Velocity Dispersion and Higher Order Dispersive Effects}
+In a region of normal dispersion, red frequencies travel faster than blue ones. An initially flat-phase pulse therefore develops a leading edge enriched in red frequencies and a trailing edge enriched in blue ones, which increases the pulse duration and decreases the peak intensity. This effect is characterized by the dispersion length
+\begin{equation}
+L_{GVD} = \frac{t_p^2}{2\,|k''|},
+\end{equation}
+where $t_p$ is the pulse duration and $k''\equiv \partial^2k/\partial\omega^2|_{\omega_0}$ is the coefficient of the quadratic term in the Taylor expansion of the wavenumber around the pulse's central frequency,
+\begin{equation}
+k(\omega) = \frac{n(\omega)\,\omega}{c} = k_0 + k'(\omega-\omega_0) + \frac{k''}{2}(\omega-\omega_0)^2 + \cdots
+\end{equation}
+As an example, a $t_p=10\,\text{fs}$ pulse at 800~nm increases in duration by 40\% after about $2.5\,\text{m}$ of propagation in air ($k''\approx0.2\,\text{fs}^2/\text{cm}$), but after only $1.4\,\text{mm}$ in glass ($k''\approx360\,\text{fs}^2/\text{cm}$), reflecting the much stronger dispersion of the solid.
+
+\subsubsection{Self-Focusing}
+In the presence of an intense field, the refractive index of the medium acquires an intensity-dependent term, $n=n_0+n_2I(r,t)$, with the nonlinear index $n_2$ related to the third order susceptibility by $\chi^{(3)}=\tfrac{4}{3}\varepsilon_0cn_0^2n_2$. Since the beam intensity is usually highest on axis, this creates a lens-like curvature of the wavefronts that, unlike an ordinary lens, accumulates continuously along the propagation direction and can lead, unopposed, to a catastrophic collapse of the beam.
+
+The self-focusing length, defined as the propagation distance over which the accumulated nonlinear phase (the B-integral, $B\equiv k_0\int_0^zn_2I\,dz$) grows by one, is expressed in terms of the peak intensity $I_0$ as
+\begin{equation}
+L_{SF} = \frac{1}{n_2 k_0 I_0}.
+\end{equation}
+What matters for whether collapse actually occurs is the beam's input power $P_{in}$, not its intensity. Collapse occurs only above a critical power (Marburger, 1975),
+\begin{equation}
+P_{cr} \equiv \frac{3.72\,\lambda_0^2}{8\pi n_0 n_2},
+\end{equation}
+valid for the specific beam profile known as the Townes beam, for which diffraction and self-focusing exactly balance. For a Gaussian beam, the numerical coefficient becomes $3.77$ instead of $3.72$. The propagation distance to collapse is given by a semi-empirical formula (Marburger, 1975; Dawes and Marburger, 1969),
+\begin{equation}
+L_c = \frac{0.367\,L_{DF}}{\sqrt{\big[(P_{in}/P_{cr})^{1/2}-0.852\big]^2 - 0.0219}},
+\end{equation}
+valid for Gaussian beams at moderate powers above threshold. If the beam is also focused by an external lens of focal length $f$, the collapse position shifts according to
+\begin{equation}
+\frac{1}{L_{c,f}} = \frac{1}{L_c} + \frac{1}{f}.
+\end{equation}
+For air at atmospheric pressure and 800~nm, $P_{cr}\approx3.2\,\text{GW}$, corresponding to roughly $0.4\,\text{mJ}$ for a 100~fs pulse. The text notes that for genuinely ultrashort pulses the physical picture becomes more complex, since other effects (group velocity dispersion, multiphoton absorption, plasma defocusing) enter simultaneously and add a temporal degree of freedom to what is, in the monochromatic case, a purely spatial collapse problem. In practice, the peak power of the pulse (energy divided by duration) is compared directly against the monochromatic-case $P_{cr}$.
+
+\subsubsection{Self-Phase Modulation}
+Because the refractive index $n=n_0+n_2I(r,t)$ now depends on time as the pulse intensity varies, new frequencies appear in the spectrum, an effect called self-phase modulation. In the simplest model, the instantaneous frequency shift is linked to the slope of the intensity profile,
+\begin{equation}
+\Delta\omega(t) = -\frac{\partial\Phi}{\partial t} \approx \omega_0 - \frac{n_2\omega_0}{c}\,z\,\frac{\partial I(r,t)}{\partial t}.
+\end{equation}
+In a purely Kerr medium, the front (rising) part of the pulse generates redder frequencies and the back (falling) part generates bluer ones. This mechanism is described as playing a significant role in the generation of the broadband visible-to-infrared continuum associated with filamentation.
+
+\subsubsection{Raman Contribution to the Kerr Effect}
+The optical Kerr effect can arise from two physically distinct contributions: a purely electronic response, with a response time below 1~fs, and a slower response due to nuclear motion (molecular reorientation). Which contribution dominates depends on the pulse duration relative to the material's Raman response time. For a 10~fs pulse in air, only the quasi-instantaneous electronic response contributes. In gaseous or liquid media containing anisotropic molecules, reorientation of the molecules under the field can make a major, much slower contribution (picoseconds or more, especially in liquids).
+
+\subsubsection{Self-Steepening}
+Self-steepening arises because the peak of the pulse, where the intensity-dependent index $n=n_2I$ is highest, effectively travels more slowly than the trailing edge. Starting from a symmetric Gaussian pulse, the peak lags behind the group velocity while the trailing part catches up, producing an increasingly steep trailing edge as propagation continues. This steepened trailing edge undergoes faster self-focusing than the leading part and generates an excess of blue-shifted frequencies there. Self-steepening is also identified as a cause of asymmetric pulse splitting.
+
+\subsubsection{Photo-Ionization}
+For filamentation to occur, the review argues that the photon energy $\hbar\omega_0$ must not be too small a fraction of the ionization potential $U_i$ of the medium; if $U_i<3\hbar\omega_0$, gradual two- or three-photon absorption attenuates the pulse too strongly for a narrow filament to form. This condition is satisfied in air at 800~nm ($\hbar\omega_0=1.5\,\text{eV}$, $U_i\sim12\,\text{eV}$ for oxygen, the first species to ionize). Ionization requires the near-simultaneous absorption of many photons ($\sim U_i/\hbar\omega_0$), which is highly improbable at low intensity but becomes significant once the beam approaches collapse and the intensity rises sharply.
+
+Two regimes are distinguished, together referred to as optical-field ionization. Multiphoton ionization (MPI) is described by perturbation theory, dominates at the intensities where filamentation first sets in, and has a rate scaling as $I^K$ with $K\sim8$ for oxygen at 800~nm. Tunnel ionization occurs at higher intensity, where the electron effectively escapes across the potential barrier formed jointly by the Coulomb potential and the strong external field. At still higher intensities, this barrier is fully suppressed and an electron is liberated at every oscillation cycle of the field.
+
+\subsubsection{Plasma Defocusing}
+The free electron density generated by ionization locally reduces the refractive index (Feit and Fleck, 1974),
+\begin{equation}
+n \approx n_0 - \frac{\rho(r,t)}{2\rho_c},
+\end{equation}
+with $\rho(r,t)$ the free electron density and $\rho_c\equiv \varepsilon_0m_e\omega_0^2/e^2$ the critical plasma density above which the plasma becomes opaque (about $1.7\times10^{21}\,\text{cm}^{-3}$ at 800~nm). By the same reasoning used to define $L_{SF}$, the characteristic length for plasma defocusing of a fully ionized gas of atomic density $\rho_{at}$ is
+\begin{equation}
+L_{PL} = \frac{2n_0\rho_c}{k_0\rho_{at}},
+\end{equation}
+and for a weakly ionized medium with electron density $\rho\ll\rho_{at}$ the effective length scales up as $L_{PL}\,\rho_{at}/\rho$. For $\rho_{at}=2\times10^{19}\,\text{cm}^{-3}$ and $\rho=10^{16}\,\text{cm}^{-3}$, this gives $L_{PL}\sim22\,\mu\text{m}$ and an effective length of about $44\,\text{cm}$.
+
+Because the forward part of the pulse generates the plasma that then defocuses mainly the trailing part, plasma defocusing acts asymmetrically in time as well as in space, and is one of the mechanisms behind the pulse compression effects discussed later in the review. Including the plasma contribution alongside ordinary Kerr self-phase modulation, the combined instantaneous frequency shift becomes
+\begin{equation}
+\Delta\omega(t) \approx \omega_0 + \frac{\omega_0 z}{c}\left[-n_2\frac{\partial I}{\partial t} + \frac{1}{2n_0\rho_c}\frac{\partial\rho}{\partial t}\right].
+\end{equation}
+The growing plasma also contributes a blue shift and spectral broadening in the leading part of the pulse, by analogy with spectral broadening in laser-breakdown plasmas. The review further notes that the plasma can locally modify group velocity dispersion enough to counteract normal dispersion in air at infrared wavelengths.
+
+\subsubsection{Losses Due to Plasma Absorption}
+Electrons produced by multiphoton or tunnel ionization can be further heated by the remaining part of the pulse through inverse Bremsstrahlung. If they gain enough kinetic energy, they can ionize further electrons on impact, triggering an avalanche process; this is identified as the mechanism behind electrical breakdown of long pulses in air or solids.
+
+To leading order, this is modeled with a Drude fluid picture, in which the electron plasma is treated as a fluid with current density $j=-e\rho v$ obeying
+\begin{equation}
+\frac{dj}{dt} = \frac{e^2}{m_e}\rho E - \frac{j}{\tau_c},
+\end{equation}
+with $\tau_c$ the electron collision time. In the frequency domain this gives
+\begin{equation}
+j = \frac{\tau_c(1+i\omega\tau_c)}{1+\omega^2\tau_c^2}\,\frac{e^2}{m_e}\rho E.
+\end{equation}
+The resulting absorbed power density is
+\begin{equation}
+\frac12\operatorname{Re}(j\cdot E^*) = \frac{\tau_c}{1+\omega^2\tau_c^2}\,\frac{e^2}{2m_e}\rho|E|^2 \equiv \beta_\omega I,
+\qquad I\equiv\frac12\varepsilon_0cn_0|E|^2,
+\end{equation}
+which defines the inverse Bremsstrahlung cross section (Raizer, 1965),
+\begin{equation}
+\beta_\omega = \frac{e^2}{\varepsilon_0m_ecn_0}\,\frac{\tau_c}{1+\omega^2\tau_c^2}.
+\end{equation}
+
+\subsubsection{Losses Due to Multiphoton Absorption}
+Optical field ionization is inherently a loss mechanism for the beam. It is described as a dissipative current $J_i$ satisfying
+\begin{equation}
+J_i\cdot E = \sum_k \rho_k\,W^{OFI}_k(I)\,U_{i,k},
+\end{equation}
+where the sum runs over species $k$ present in the medium, with density $\rho_k$, field-dependent ionization rate $W^{OFI}_k(I)$, and ionization potential $U_{i,k}$. For multiphoton ionization of a single species, the rate is written perturbatively as $W^{OFI}(I)=\sigma_KI^K$, with $K\equiv\lceil U_i/\hbar\omega_0+1\rceil$ the number of photons required to free an electron. The characteristic length over which a pulse of intensity $I$ is attenuated by multiphoton absorption by a factor $[(K+1)/2]^{1/(K-1)}$ is
+\begin{equation}
+L_{MPA} = \frac{1}{2K\hbar\omega_0\,\sigma_K I^{K-1}\rho_{at}}.
+\end{equation}
+
+For a filamented pulse at 800~nm in air ($K=8$, $\sigma_8=3.7\times10^{-96}\,\text{cm}^{16}\text{W}^{-8}\text{s}^{-1}$), typical values are $L_{MPA}\sim160\,\mu\text{m}$ for $I=5\times10^{13}\,\text{W/cm}^2$ and $L_{MPA}\sim12.6\,\mu\text{m}$ for $I=10^{13}\,\text{W/cm}^2$.
+
+\subsubsection{Refocusing Cycles}
+The combined action of Kerr self-focusing, multiphoton absorption, and plasma defocusing is described as producing not a single collapse but a series of focusing-defocusing cycles. A beam with power above $P_{cr}$ tends to collapse, but as it becomes intense enough, multiphoton absorption attenuates the core and generates a plasma that defocuses it; if the beam still carries power above threshold afterward, the cycle repeats. This recurring, aperiodic sequence of near-collapses is what sustains long-range, self-guided propagation. The review is explicit that this "self-guiding" terminology does not imply the filament is a soliton, nor that there is any delicate balance between the various index contributions; it is a dynamic competition rather than an equilibrium. Because self-phase modulation, group velocity dispersion, self-steepening, and plasma-induced shock formation all act simultaneously, this coupling between the spatial and temporal dynamics produces strong pulse distortions during propagation.
+
+\subsubsection{Modulational Instability}
+When the input power is well above $P_{cr}$, the beam does not collapse as a whole but breaks up into multiple filaments, seeded by the growth of specific transverse spatial frequency components of the beam profile. The growth rate of a perturbation of transverse wavenumber $k_\perp$ is
+\begin{equation}
+k_i(k_\perp) = \frac{k_\perp}{2k_0}\sqrt{\frac{8\pi I_0}{P_{cr}^G} - k_\perp^2},
+\qquad P_{cr}^G \equiv \frac{\lambda_0^2}{2\pi n_0n_2},
+\end{equation}
+with $I_0$ the laser intensity and $P_{cr}^G$ a Gaussian-beam estimate of the critical power for self-focusing used specifically in this instability analysis (Campillo et al., 1973, 1974). The fastest-growing wavenumber is
+\begin{equation}
+k_\perp^{opt} = 2\sqrt{\frac{\pi I_0}{P_{cr}^G}},
+\end{equation}
+and after exponential growth of the instability, $\sim\exp[k_i(k_\perp^{opt})z]$, saturation occurs in the form of filaments with a characteristic transverse spacing
+\begin{equation}
+d_{fil} = \frac{2\pi}{k_\perp^{opt}} = \sqrt{\frac{\pi P_{cr}^G}{I_0}}.
+\end{equation}
+Assuming a regular filamentation pattern, the power an individual filament can carry is estimated by integrating the intensity over a disk of this diameter,
+\begin{equation}
+P_{fil} = 2\pi\int_0^{d_{fil}} I_0\,r\,dr \sim \frac{\pi^2}{4}P_{cr}^G
+\end{equation}
+(Couairon and Bergé, 2000), giving an estimated filament count $N\sim P_{in}/P_{fil}$ for a beam of input power $P_{in}$ well above critical. The review cautions that this relies on a plane-wave, monochromatic instability analysis performed on the linear growth stage only, and should be treated as order-of-magnitude: for Gaussian pulses, the actual noise-triggered threshold for multiple filamentation was found closer to $100\,P_{cr}$, and nonlinear saturation after the linear stage is simply assumed not to destroy the filamentation pattern. The qualitative picture is not changed by including multiphoton ionization or absorption, though the spatial growth rate is reduced relative to a purely Kerr medium.
+
+\subsubsection{Filaments in Condensed Media}
+Condensed media have a nonlinear index roughly three orders of magnitude larger than gases, so the critical power for self-focusing falls into the megawatt range instead of the gigawatt range; only about $1\,\text{J}$ of energy is needed to self-focus a 100~fs pulse in a solid. Remarkably, the peak intensity reached inside the filament is almost the same as in gases, since a filament always carries roughly one critical power. Combining this peak intensity with the carried power gives an estimated filament diameter of a few to a few tens of microns, about 30 times narrower than in gases. The ionization mechanism itself is different: instead of ionizing gas atoms, the field promotes electrons from the valence band to the conduction band, reaching electron densities of $10^{18}$--$10^{20}\,\text{cm}^{-3}$, three orders of magnitude higher than in air but still a low density plasma overall. Because losses scale with this electron density, the laser energy reservoir is exhausted faster in solids, and filamentation stops once the pulse power drops below $P_{cr}$. Group velocity dispersion is also much stronger in condensed media, which matters directly for the next subsection.
+
+\subsubsection{Arrest of Collapse}
+Plasma defocusing is not the only mechanism that can halt the catastrophic collapse a purely Kerr medium would otherwise undergo above $P_{cr}$. Other candidates mentioned include saturation of the nonlinear index by a higher order defocusing nonlinearity, nonlocal effects, and nonlinear absorption. In gases, group velocity dispersion is too weak to matter for this purpose, but in solids, where it is much stronger, several studies show that it causes the pulse to split into two components moving apart in the frame of the input pulse, allowing propagation to continue beyond the nonlinear focus without plasma defocusing. This mechanism, however, is only relevant for pulses with peak power not too far above $P_{cr}$, since the effective collapse threshold in a dispersive medium increases with the strength of the dispersion. For pulses well above critical power, multiphoton absorption remains a more efficient arrest mechanism than GVD and produces multiple splitting events beyond the nonlinear focus. The overall conclusion is that pulse splitting is not automatically caused by GVD, but GVD, space-time focusing, and self-steepening generally all need to be included together to correctly describe propagation past the nonlinear focus.
+
+\subsection{Properties of Light Filaments}
+
+\subsubsection{Robustness of Filaments}
+Filaments appear across solid, liquid, and gaseous media whenever the photon energy stays well below the fundamental electronic transition energy, suggesting they behave as a robust attractor of the nonlinear propagation dynamics. They even regenerate after being physically blocked by a central stopper placed in their path, a property called self-healing, because they are continuously rebuilt from the surrounding energy reservoir. This robustness lets filaments persist through adverse atmospheric conditions such as fog or rain, which is of practical interest for long-range atmospheric applications.
+
+\subsubsection{Long Range Propagation}
+Filamentation can carry peak intensities above $10^{12}\,\text{W/cm}^2$ over several kilometers. Losses stay low because the intensity is continuously capped near or below the ionization threshold by the clamping mechanism described below, and because the short pulse duration limits how much energy the pulse can lose to the plasma through inverse Bremsstrahlung.
+
+\subsubsection{Spectral Broadening}
+Filamentation produces strong spectral broadening driven mainly by self-phase modulation, self-steepening, and ionization, all of which preferentially add new frequencies on the high energy (blue) side of the spectrum through the sharpened trailing edge of the pulse. An 800~nm pulse propagating in air can convert part of its energy into a continuum spanning the entire visible range and extending into the infrared, with the conversion efficiency ranging from a fraction of a percent for a collimated beam up to a significant fraction of the pulse energy for a converging beam.
+
+\subsubsection{Intensity Clamping}
+Since multiphoton ionization has a strongly threshold-like onset as a function of intensity ($\text{rate}\propto I^K$, typically $K>5$ in the infrared), the resulting electron density saturates self-focusing and caps the peak intensity by defocusing the beam once ionization becomes significant. Equating the Kerr-induced index change to the plasma-induced index change gives the clamping condition (Kasparian et al., 2000a; Becker et al., 2001a)
+\begin{equation}
+n_2 I = \frac{\rho(I)}{2\rho_c}.
+\end{equation}
+Using the rough estimate $\rho(I)\sim\sigma_K I^K\rho_{at}t_p$ for the electron density generated by multiphoton ionization over the pulse duration $t_p$, this gives the clamping intensity
+\begin{equation}
+I_{clamp} \sim \left(\frac{2n_2\rho_c}{\sigma_K t_p\rho_{at}}\right)^{\!1/(K-1)},
+\end{equation}
+which evaluates to $I_{clamp}\sim1.8\times10^{13}\,\text{W/cm}^2$ for a 100~fs pulse at 800~nm in air. Since a filament carries roughly one critical power $P_{cr}\approx3.2\,\text{GW}$, combining this with the clamping intensity gives an estimated filament transverse size of $w_0\approx105\,\mu\text{m}$ (Yablonovitch and Bloembergen, 1972). Independent evidence for clamping was also found in condensed media (water, chloroform, glass) from the observation that the maximum self-phase-modulation blueshift becomes independent of pulse energy above a critical value.
+
+\subsubsection{Conical Emission of White Light and Colored Rings}
+The white light generated during filamentation typically appears as a bright white core surrounded by rainbow-like conical rings, with bluer frequencies on the outer rings, opposite to the usual radial ordering seen in ordinary diffraction. This is considered a signature of filamentation. Several competing explanations have been proposed (Cerenkov-type radiation, self-phase modulation, four-wave mixing, X-waves) and the phenomenon is described as still not fully understood.
+
+\subsubsection{Pulse Self-Compression}
+Multiple effects reshape the pulse temporal profile during filamentation, and simulations show this can shorten pulses of a few tens of femtoseconds down to nearly a single optical cycle. Such intense single-cycle pulses are valuable for generating attosecond XUV pulses via high-harmonic generation, and filamentation-based self-compression is presented as a way to simplify the experimental route to phase-stabilized single-cycle pulses.
+
+\subsubsection{Pulse Mode Self-Cleaning}
+Examining the far-field pattern of the conical emission around a filament core (from a 400~nm pulse) shows that the conical emission itself forms an almost perfect single transverse spatial mode, while the remaining, non-filamented part of the beam retains poor beam quality. Filaments therefore improve beam quality spatially, in addition to compressing the pulse temporally and broadening its spectrum.
+
+\subsubsection{Filaments in Optical Parametric Amplifiers}
+Using a filament as the pump source for an optical parametric amplifier was shown to produce a widely tunable, diffraction-limited signal beam ($M^2<1.01$), shorter in duration and more stable in energy than the equivalent amplifier pumped by the same laser without filamentation, directly reflecting the self-cleaning, self-compression, and intensity-clamping properties of filaments.
+
+\subsubsection{Superluminal Velocity}
+The strong temporal and spatial reshaping of the pulse envelope during filamentation can make the motion of the intensity peak itself exceed the speed of light in the medium. Experimental evidence for this came from an experiment connecting two spatially separated plasma filaments generated by two pulses with different beam curvatures and a controlled delay, where achieving the connection required delaying the pulse with smaller curvature, showing that the filamented pulse had gained a timing advance over its non-filamented counterpart.
+
+\subsubsection{Generation of THz Radiation}
+Plasma channels left behind by filaments in air radiate electromagnetic pulses in the THz range, a frequency band that is otherwise hard to access coherently. Because filament locations can be controlled, this offers a way to generate coherent THz radiation at a chosen remote location, which is of interest for medical and other applications. Both radial and forward-cone THz emission from filaments have been reported.
+
+\subsubsection{Two-Colored Filamentation and Third Harmonic Generation}
+The Kerr effect responsible for filamentation comes from the real part of $\chi^{(3)}$; the imaginary part is associated with third harmonic generation, producing a wave at $3\omega_0$. Cross-phase modulation couples the fundamental and third-harmonic fields together (each modifies the other's effective refractive index), locking them at a fixed relative phase and allowing a UV filament at $3\omega_0$ to co-propagate with the fundamental filament over long distances, which is of interest for atmospheric remote sensing applications.
+
+\subsubsection{Multiple Filamentation}
+When the input power is far above $P_{cr}$, modulational instability breaks the beam up into a large number of filaments, roughly $N\sim P_{in}/P_{cr}$. At very high powers (above about $100\,P_{cr}$), this multiple filamentation onset distance scales as $1/P_{in}$; at lower powers it occurs beyond the ordinary collapse distance and scales instead as $1/\sqrt{P_{in}}$. These filaments can be randomly distributed or organized into patterns, and each one again carries roughly $P_{cr}$; once an individual filament's power drops below $P_{cr}$, it returns most of its remaining energy to a shared photon bath (the energy reservoir), which continues to feed other filaments and reshuffles their distribution. The filament count decreases with propagation distance as energy is lost to plasma and multiphoton absorption. Capturing this behavior numerically requires a full $(3+1)$-dimensional simulation (three spatial dimensions plus time), unlike the cylindrically symmetric, single-filament case.
+
+\subsubsection{Energy Reservoir}
+Photographs of a filamented beam at 50~m show that more than 90\% of the initial $\sim200\,\text{mJ}$ pulse energy remains within a 1~cm diameter region, even though the energy actually contained in the visible filament cores themselves is only around 30~mJ. Most of the beam energy therefore resides in a diffuse background, the energy reservoir, which links neighboring filaments through faint connecting channels and plays a central role in allowing filaments to persist, regenerate, and self-heal over long propagation distances.
+
+\section{Modeling Filamentation}
+
+\subsection{Model Scenarii}
+
+Filamentation traces back to early observations of long, narrow damage or fluorescence tracks in solids and liquids. Two historical models were proposed to explain this. The self-trapping model posits a strict equilibrium between diffraction and self-focusing, giving rise to the Townes mode, later understood as the self-similar blow-up profile a self-focusing beam approaches during collapse regardless of its initial shape. The moving focus model instead treats the apparent filament as an illusion created by a sequence of distinct focal points. A large fraction of nanosecond-pulse experiments were explained by the moving focus picture, while a refined version showed that a short pulse deforms into a horn shape during propagation, blending the two pictures.
+
+\subsubsection{Moving Focus Model}
+Here the pulse is treated as a stack of independent time slices, valid when effects coupling the slices together (such as GVD) remain weak, which is a reasonable approximation in air. Each time slice self-focuses at a distance set by its own power relative to $P_{cr}$; slices below $P_{cr}$ simply diffract. Applying the Marburger collapse-distance formula to each time slice as a function of retarded time predicts two branches for the moving focus location: an early, superluminal branch from the leading part of the pulse, and a branch that moves backward toward the laser before moving forward again as later, less intense time slices are considered. For a converging beam, this simple picture predicts all foci should lie before the geometric focus, which is contradicted by femtosecond experiments; once the intensity is high enough to ionize the medium, coupling between time slices (through the plasma left in the trail of the pulse) delays the collapse of later slices and lets energy propagate past the geometric focus, effectively merging this model with the self-guiding and dynamic replenishment pictures below.
+
+\subsubsection{Self-Guiding Model}
+"Self-guiding" here just means the absence of an external waveguide, though the term is used loosely for several related ideas (self-trapping, self-channeling). Braun et al. (1995) proposed self-channeling as a balance between Kerr self-focusing and the combined effect of diffraction and plasma-induced refraction, extending the (unstable) self-trapping equilibrium by adding plasma defocusing. A Javan-Kelley-type analysis balances the three index contributions,
+\begin{equation}
+n_2 I = \frac{\rho(I)}{2\rho_c} + \frac{(1.22\lambda_0)^2}{8n_0w_0^2},
+\end{equation}
+predicting orders of magnitude for filament size, peak intensity, and electron density that agree reasonably well with measurements, even though the balance can in reality only ever be local since both intensity and electron density vary in space and time.
+
+\authornote{The scaling-law equations that follow in the text (labeled (20)--(22) in the original, giving $I$, $\rho(I)$, and $w_0$ as functions of $K$, $\sigma_K$, $t_p$, and $\rho_{at}$, all raised to a power $1/(K-1)$) were too badly scrambled by the PDF extraction for me to reconstruct the exact algebraic form with confidence, in particular where the exponent $1/(K-1)$ applies inside each expression. The numerical results quoted for $t_p=100$~fs, $\lambda_0=800$~nm, oxygen ionization with $K=8$ are a peak intensity of $1.6\times10^{13}\,\text{W/cm}^2$, an electron density of $6.8\times10^{15}\,\text{cm}^{-3}$, and a filament size $w_0=110\,\mu\text{m}$. I also note the cross section quoted here, $\sigma_8=2.8\times10^{-96}\,\text{cm}^{16}\text{W}^{-8}\text{s}^{-1}$, differs from the $\sigma_8=3.7\times10^{-96}$ quoted in Section~1.2.11 above; this may be two different literature values cited in two different places in the original article, or an extraction error in one of the two. Please check both numbers against the original PDF.}
+
+This self-channeling picture was extended by Nibbering et al. (1996) into a leaky-waveguide model, with a weakly ionized core (lower index, due to the plasma) surrounded by a dynamic cladding that supplies energy to compensate for the core's losses, also used to explain the conical emission observed around filaments.
+
+\subsubsection{Dynamic Spatial Replenishment}
+This model, from numerical simulations by Mlejnek et al., refines the simple picture of Section~1.2.12 into a full dynamical cycle: self-focusing forms a leading peak that generates plasma in its wake, this plasma defocuses the trailing part of the pulse while multiphoton absorption weakens the leading peak, after which plasma generation switches off and the beam can shrink again under self-focusing. This cycle can repeat many times before the pulse power becomes insufficient to refocus, giving rise to long range propagation.
+
+\subsubsection{Spatial Solitons and Light Bullets}
+A temporal soliton balances self-phase modulation against dispersion; a spatial soliton, by analogy, balances self-focusing against diffraction, with the (unstable) Townes mode as the equilibrium solution. Above critical power, this balance is unstable, so the beam either diffracts or collapses/breaks up. Adding further defocusing mechanisms (plasma, higher-order saturation) raises the possibility of a genuinely stable spatial soliton, and extending this further to both space and time simultaneously gives the concept of "light bullets" or spatiotemporal solitons, which would compensate diffraction and dispersion together. No such spatiotemporal soliton has ever been observed, for several reasons given in the text: modulational instabilities compete with and tend to destroy such structures, unavoidable physical effects like absorption limit propagation to typical diffraction/dispersion lengths, and the strong, continuous reorganization of the pulse seen in real self-channeling is itself incompatible with the notion of a stationary soliton. A nearly-frozen spatial time-slice can appear transiently but is structurally unstable once realistic dispersion is included.
+
+\subsubsection{Conical X-Waves}
+X-waves are wavepackets that propagate largely without the ordinary spreading due to diffraction or dispersion, known previously in acoustics and general electromagnetic propagation as the polychromatic generalization of diffraction-free Bessel beams; they have an intense core surrounded by extended, cone-shaped feet carrying significant energy, both in the near field ($r$--$t$) and the far field ($k_\perp$--$\Omega$). Although long believed to require nonparaxial propagation, paraxial envelope X-waves were later found as stationary solutions of the paraxial equation in a dispersive medium,
+\begin{equation}
+\frac{\partial E}{\partial z} = \frac{i}{2k}\nabla_\perp^2E - i\frac{k''}{2}\frac{\partial^2E}{\partial t^2},
+\end{equation}
+\authornote{The explicit Bessel-X-wave solution given next in the text, of the form $E(r,t)\propto\int d\Omega\,f(\Omega)\,J_0(\cdot)\exp(-i\Omega t)$, had the argument of the Bessel function $J_0$ scrambled by the extraction (something like ``$\sqrt{kk''}\,\Omega r$''). I am confident in the general structure, an integral over a narrow spectral function $f(\Omega)$ of Bessel functions $J_0$ times a phase factor, but not in the exact argument. Please check the original page.}
+with a far-field spectrum satisfying the conical dispersion relation
+\begin{equation}
+k_\perp^2 = k\,k''\,\Omega^2,
+\end{equation}
+where $\Omega$ is the frequency detuning from the pulse's central frequency. A more general family of such X-wave envelope modes was later identified, with the two branches of the characteristic X shape in $(k_\perp,\Omega)$-space separated by either a frequency or a wavenumber gap. Nonlinear extensions of X-waves were subsequently observed experimentally (in quadratic and Kerr media) and are proposed as possible dynamical attractors within the more complex dynamics of femtosecond filamentation, since X-shaped features are measured both in the near and far field of filaments in liquids and solids.
+
+\subsubsection{Conical Unbalanced Bessel Beams}
+An alternative model (Dubietis et al., 2004a) describes a monochromatic pulse undergoing only self-focusing, diffraction, and multiphoton absorption, deliberately excluding plasma defocusing, dispersion, or index saturation. Despite this simplification, numerical simulations reproduce the robustness and long-range propagation of the hot filament core. In this picture, nonlinear losses create a nonlinear phase shift that precisely counteracts Kerr self-focusing, and energy flows inward from a Bessel-like conical tail (the energy reservoir) toward the core through a coherent interference effect analogous to the Arago spot, described as an unbalanced Bessel beam. Conical X-waves (highlighting the role of GVD) and unbalanced Bessel beams (highlighting the role of nonlinear losses) are presented as two facets of the same underlying attractor concept; a stationary wavepacket accounting for both effects together, plus plasma defocusing and index saturation, has not yet been identified but is conjectured to also belong to the family of conical wavepackets.
+
+\subsubsection{Interpretations of the Conical Emission}
+Four interpretations of the conical emission (CE) surrounding filaments are reviewed, presented as complementary rather than competing. The first is a four-wave-mixing picture: in a minimal Kerr-plus-normal-GVD model, energy is transferred from the central wave (k,\,$\Omega$) to sidebands (k$\pm k_\perp$, $\Omega\pm\Omega'$), closely related to ordinary modulational instability, with the phase-matching condition for maximum growth reducing exactly to the X-wave dispersion relation above; the resulting off-axis, frequency-shifted radiation appears as the colored ring. The second is a Cerenkov-type picture, where the nonlinear polarization moving at the pulse group velocity emits at an angle set by $\cos\theta=v_{ph}/v_{gr}$, closely related to the leaky-waveguide picture of Nibbering et al. (1996), with a plasma-channel core narrower than its cladding by a factor of about $\sqrt{8}\approx2.8$ because the plasma density scales as the eighth power of intensity. The third relies purely on self-phase modulation and plasma generation as polarization sources, using the radial phase gradient
+\begin{equation}
+\frac{\partial k_\perp(t)}{\partial r} \approx \frac{\omega_0 z}{c}\left[-n_2\frac{\partial I(r,t)}{\partial r} + \frac{1}{2n_0\rho_c}\frac{\partial\rho(r,t)}{\partial r}\right]
+\end{equation}
+to argue that the pulse front (negligible plasma) produces a redshift converging toward the axis, while the plasma-dominated trail produces a blueshift diverging from the axis, interpreted as the anti-Stokes side of the plasma-driven supercontinuum diverging outward as the observed conical emission; no conical emission is seen on the Stokes (red) side, consistent with this picture, and including dispersion later improved the quantitative agreement with measurements. The fourth interpretation reinterprets conical emission directly through the X-wave paradigm discussed above.
+
+\end{document}

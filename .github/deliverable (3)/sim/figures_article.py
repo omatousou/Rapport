@@ -221,21 +221,23 @@ def fig2_populations(res, prm: Params | None = None, z_um=None, dt_fs=0.25,
     ne_fl, ns  = integre_0d(tf, If, prm, avalanche=True,  piegeage=True,  ste=True)
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
-    ax.semilogy(tf, ne_mpi, "k-",  lw=1.4, label="MPI seul")
+    ax.semilogy(tf, ne_mpi, "k-",  lw=1.4, label="MPI only")
     ax.semilogy(tf, ne_av,  "k-",  lw=2.2, label="MPI + avalanche")
-    ax.semilogy(tf, ne_fl,  "k--", lw=2.2, label="MPI + avalanche + piégeage (STE)")
+    ax.semilogy(tf, ne_fl,  "k--", lw=2.2, label="MPI + avalanche + trapping (STE)")
     ax.semilogy(tf, ns,     color="tab:green", lw=1.4, label=r"$\rho_s$ (STE)")
     m = rho_sim > 0
-    ax.semilogy(t_sim_axis[m], rho_sim[m], "o", ms=3.5, mfc="none", mec="crimson",
-                label=r"$\rho_e$ noyau CUDA (npz)")
+    every = max(1, np.count_nonzero(m) // 50)
+    ax.semilogy(t_sim_axis[m], rho_sim[m], "-", color="crimson", lw=1.3, alpha=0.9,
+                marker="o", ms=5.0, mfc="none", mec="crimson", mew=1.2, markevery=every,
+                label=r"$\rho_e$ CUDA kernel (npz)")
     ax2 = ax.twinx()
     ax2.plot(tf, If / If.max(), "r:", lw=1.2)
     ax2.set_ylabel("I(t) / I$_{max}$", color="r"); ax2.set_ylim(0, 1.9)
     ax2.tick_params(axis="y", colors="r")
     top = max(ne_av.max(), ne_fl.max(), prm.rho_max)
     ax.set_ylim(1e14, 3 * top)
-    ax.set_xlabel("t (fs)"); ax.set_ylabel(r"densité électronique (cm$^{-3}$)")
-    ax.set_title(f"Populations à z = {z[iz]*1e6:+.0f} µm  "
+    ax.set_xlabel("t (fs)"); ax.set_ylabel(r"electron density (cm$^{-3}$)")
+    ax.set_title(f"Populations at z = {z[iz]*1e6:+.0f} µm  "
                  f"(I$_{{max}}$ = {I_t.max():.2e} W/cm²)")
     ax.axhline(prm.rho_max, color="gray", lw=0.8, ls=":")
     ax.legend(loc="lower right", fontsize=8, framealpha=0.9)
@@ -300,18 +302,20 @@ def fig13_electron_density_vs_z(res, prm: Params | None = None, dt_fs=0.5,
 
     z_um = z * 1e6 + z_shift_um
     fig, ax = plt.subplots(figsize=(7.5, 5))
-    ax.semilogy(z_um, np.clip(ne_pi,   1e14, None), "k-.", lw=1.6, label="PI seul")
-    ax.semilogy(z_um, np.clip(ne_rec,  1e14, None), "k:",  lw=1.8, label="PI + recombinaison")
-    ax.semilogy(z_um, np.clip(ne_full, 1e14, None), "k-",  lw=2.0, label="PI + avalanche + recombinaison")
+    ax.semilogy(z_um, np.clip(ne_pi,   1e14, None), "k-.", lw=1.6, label="PI only")
+    ax.semilogy(z_um, np.clip(ne_rec,  1e14, None), "k:",  lw=1.8, label="PI + recombination")
+    ax.semilogy(z_um, np.clip(ne_full, 1e14, None), "k-",  lw=2.0, label="PI + avalanche + recombination")
     if rho_sim_onaxis is not None:
         m = rho_sim_onaxis > 0
-        ax.semilogy(z_um[m], rho_sim_onaxis[m], "o", ms=3, mfc="none", mec="crimson",
-                    label=r"$\rho_e$ noyau CUDA (validation)")
+        every = max(1, np.count_nonzero(m) // 50)
+        ax.semilogy(z_um[m], rho_sim_onaxis[m], "-", color="crimson", lw=1.3, alpha=0.9,
+                    marker="o", ms=5.0, mfc="none", mec="crimson", mew=1.2, markevery=every,
+                    label=r"$\rho_e$ CUDA kernel (validation)")
     if xlim is not None: ax.set_xlim(*xlim)
     if ylim is not None: ax.set_ylim(*ylim)
     ax.set_xlabel("z (µm)")
-    ax.set_ylabel(r"densité électronique on-axis (cm$^{-3}$)")
-    ax.set_title("Fig. 13 style — Densité électronique vs distance de propagation")
+    ax.set_ylabel(r"on-axis electron density (cm$^{-3}$)")
+    ax.set_title("Fig. 13 style — Electron density vs propagation distance")
     ax.legend(fontsize=8)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
@@ -379,19 +383,19 @@ def fig10_dephasage(res, prm: Params | None = None, z_um=None, band_um=0.0,
 
     fig, ax = plt.subplots(figsize=(7.6, 4.6))
     ax.axhline(0, color="gray", lw=0.8)
-    ax.plot(t, ph_K, color="tab:orange", lw=1.2, label="Kerr croisé (2 n₂ I)")
-    ax.plot(t, ph_e, color="tab:blue",   lw=1.2, label="plasma (Drude)")
+    ax.plot(t, ph_K, color="tab:orange", lw=1.2, label="Cross Kerr (2 n₂ I)")
+    ax.plot(t, ph_e, color="tab:blue",   lw=1.2, label="Plasma (Drude)")
     ax.plot(t, ph_s, color="tab:green",  lw=1.2, label=f"STE (Lorentz, E$_{{tr}}$={prm.E_tr_eV:g} eV)")
-    ax.plot(t, tot,  "k-", lw=2.2, label="total")
+    ax.plot(t, tot,  "k-", lw=2.2, label="Total")
     if extend_fs > 0:
         ax.axvspan(t[-1] - extend_fs, t[-1], color="0.93", zorder=0)
-        ax.text(t[-1] - extend_fs, ax.get_ylim()[0], " prolong. analytique",
+        ax.text(t[-1] - extend_fs, ax.get_ylim()[0], " analytic extension",
                 fontsize=7, color="0.4", va="bottom")
-    lab = f"corde y=0" if band_um <= 0 else f"moyenne |y|<{band_um:g} µm"
-    ax.set_xlabel("retard τ (fs, repère comobile à z*)")
-    ax.set_ylabel(r"$\delta\varphi$ sonde 490 nm (rad)")
-    ax.set_title(f"ΔΦ(τ) à z = {z[iz]*1e6:+.0f} µm — {lab}, "
-                 f"sonde {prm.probe_fwhm_fs:.0f} fs FWHM")
+    lab = "chord y=0" if band_um <= 0 else f"average |y|<{band_um:g} µm"
+    ax.set_xlabel("delay τ (fs, co-moving frame at z*)")
+    ax.set_ylabel(r"$\delta\varphi$ probe 490 nm (rad)")
+    ax.set_title(f"ΔΦ(τ) at z = {z[iz]*1e6:+.0f} µm — {lab}, "
+                 f"probe {prm.probe_fwhm_fs:.0f} fs FWHM")
     ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
@@ -436,18 +440,18 @@ def fig2_ionization_rate(prm: Params | None = None, I_min=1e12, I_max=1.5e14,
 
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
     ax.loglog(I, np.clip(W_keldysh, 1e-30, None), "k-", lw=2.0,
-              label="Keldysh général (utilisé par le solveur)")
+              label="Keldysh, general formula (solver)")
     ax.loglog(I, np.clip(W_mpi, 1e-30, None), "k--", lw=1.4,
               label=r"$W_{MPI}=\sigma_6 I^6 \rho_{at}$")
     if I_marker is not None:
         ax.axvline(I_marker, color="crimson", ls=":", lw=1.2,
-                   label=f"I max numérique ≈ {I_marker:.0e}")
+                   label=f"I max reached numerically ≈ {I_marker:.0e}")
     if xlim is not None: ax.set_xlim(*xlim)
     else:                ax.set_xlim(I_min, I_max)
     if ylim is not None: ax.set_ylim(*ylim)
     ax.set_xlabel(r"Laser Intensity (W/cm$^2$)")
     ax.set_ylabel(r"$W_{PI}$ (s$^{-1}$ cm$^{-3}$)")
-    ax.set_title("Fig. 2 — Taux d'ionisation, silice fondue (Ui = 9 eV)")
+    ax.set_title("Fig. 2 — Ionization rate, fused silica (Ui = 9 eV)")
     ax.legend(fontsize=8, loc="lower right")
     ax.grid(True, which="both", alpha=0.15)
     fig.tight_layout()
@@ -492,8 +496,8 @@ def fig10_avalanche_vs_time(res, prm: Params | None = None, z_um=None, dt_fs=0.5
     ne_noav, _ = integre_0d(tf, If, prm, avalanche=False, piegeage=True, ste=False)
 
     fig, ax = plt.subplots(figsize=(7.5, 5.5))
-    ax.semilogy(tf, np.clip(ne_av,   1e-30, None), "k-",  lw=2.0, label=r"$\rho_e$ avec avalanche")
-    ax.semilogy(tf, np.clip(ne_noav, 1e-30, None), "k--", lw=1.6, label=r"$\rho_e$ sans avalanche")
+    ax.semilogy(tf, np.clip(ne_av,   1e-30, None), "k-",  lw=2.0, label=r"$\rho_e$ with avalanche")
+    ax.semilogy(tf, np.clip(ne_noav, 1e-30, None), "k--", lw=1.6, label=r"$\rho_e$ without avalanche")
     if xlim is not None: ax.set_xlim(*xlim)
     if ylim is not None: ax.set_ylim(*ylim)
     ax.set_xlabel("time (fs)")
@@ -502,7 +506,7 @@ def fig10_avalanche_vs_time(res, prm: Params | None = None, z_um=None, dt_fs=0.5
 
     ax2 = ax.twinx()
     ax2.semilogy(tf, np.clip(If, 1e-30, None), "-.", color="crimson", lw=1.3,
-                 label="intensité")
+                 label="intensity")
     if ylim_I is not None: ax2.set_ylim(*ylim_I)
     ax2.set_ylabel(r"I (W/cm$^2$)", color="crimson")
     ax2.tick_params(axis="y", colors="crimson")
@@ -526,9 +530,9 @@ def fig10_avalanche_vs_time(res, prm: Params | None = None, z_um=None, dt_fs=0.5
 # ================================================================================
 _BULG_LEVELS = {
     "fluence":  ([0.20, 0.80, 1.4, 1.9],        "fluence (J/cm²)"),
-    "absorbed": ([50.0, 600.0, 1200.0],          "énergie absorbée (J/cm³)"),
-    "Ipeak":    ([2e12, 7e12, 3e13],             "intensité crête (W/cm²)"),
-    "rho":      ([1e15, 1e17, 1e19, 3e20],       "densité électronique (cm⁻³)"),
+    "absorbed": ([50.0, 600.0, 1200.0],          "absorbed energy (J/cm³)"),
+    "Ipeak":    ([2e12, 7e12, 3e13],             "peak intensity (W/cm²)"),
+    "rho":      ([1e15, 1e17, 1e19, 3e20],       "electron density (cm⁻³)"),
 }
 
 def _bulg_panel(ax, z_um, r_um, field, levels, label, focus_um=None,
@@ -569,14 +573,14 @@ def fig11_bulgakova(res, z_shift_um=90.0, focus_um=90.0, save=None, show=True,
     for ax, (key, fld, tag) in zip(axes, panels):
         lv, name = _BULG_LEVELS[key]
         if fld is None:
-            ax.text(0.5, 0.5, f"{name} indisponible\n(relancer avec rho_snapshot_t_fs=50.0)",
+            ax.text(0.5, 0.5, f"{name} unavailable\n(rerun with rho_snapshot_t_fs=50.0)",
                     ha="center", va="center", fontsize=8, transform=ax.transAxes)
             ax.set_ylabel("r (µm)"); ax.set_xlim(*xlim); ax.set_ylim(*rlim)
             continue
         _bulg_panel(ax, z_um, r_um, fld, lv, f"{tag}   {name}",
                     focus_um=focus_um, xlim=xlim, rlim=rlim)
     axes[-1].set_xlabel("z (µm)")
-    fig.suptitle("Fig. 11 — Bulgakova/Stoian/Rosenfeld : 800 nm, 120 fs, 1 µJ, w = 0.9 µm, foyer 90 µm",
+    fig.suptitle("Fig. 11 — Bulgakova, Stoian & Rosenfeld: 800 nm, 120 fs, 1 µJ, w = 0.9 µm, focus at 90 µm",
                  fontsize=10)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
@@ -610,7 +614,7 @@ def fig12_bulgakova(res, z_shift_um=90.0, focus_um=None, save=None, show=True,
                     f"{edges[b]:+.0f} fs < t < {edges[b+1]:+.0f} fs",
                     focus_um=focus_um, xlim=xlim, rlim=rlim)
     axes[-1].set_xlabel("z (µm)")
-    fig.suptitle("Fig. 12 — Absorption séquentielle, énergie absorbée (J/cm³)", fontsize=10)
+    fig.suptitle("Fig. 12 — Sequential absorption, absorbed energy (J/cm³)", fontsize=10)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=180)
     if show: plt.show()
