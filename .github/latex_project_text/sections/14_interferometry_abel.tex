@@ -31,6 +31,7 @@ I(x,y) = I_1 + I_2 + \sqrt{I_1I_2} \cos\big((\vec{k}_1 - \vec{k}_2) \cdot \vec{r
 For equal amplitudes and after computing the phase difference $(\vec{k}_1-\vec{k}_2)\cdot\vec{r} = 2k\sin\theta(x\cos\phi+y\sin\phi)$, this becomes:
 \begin{equation}
 \boxed{I(x,y) = 2I_0(x,y)\left[1 + \cos\big(2\pi \nu_0(x\cos{\phi}+y\sin{\phi}\big)\right]}, \qquad \nu_0 = \frac{2\sin\theta}{\lambda}
+\label{eq:carrier_freq}
 \end{equation}
 where $\nu_0$ is the spatial-carrier frequency of the fringes, set purely by the crossing angle $2\theta$ of the two interfering beams, and independent of anything happening inside the medium.
 
@@ -80,6 +81,59 @@ z(x,y) \equiv \frac{I_{\text{meas,filt}}(x,y)}{I_{\text{ref,filt}}(x,y)} = \frac
 \subsection{Resolution Limits}
 
 Two independent limits set the finest feature that can be resolved. The Nyquist limit comes from the pixelated sensor. The shortest oscillation observable without aliasing must span at least two pixels, giving $\nu_N = 1/(2\Delta x)$ with $\Delta x$ the pixel size. The optical limit comes from diffraction at the sample itself. A feature of size $d$ diffracts light at an angle $\sin\theta = \lambda/d$, as illustrated in Figure~\ref{fig:diffraction_slit}, and this diffracted light is only collected by the imaging lens if $\sin\theta \le NA$.
+
+\subsubsection{Contrast at the Nyquist Limit}
+
+The Nyquist frequency $\nu_N=1/(2\Delta x)$ only says that a fringe period of exactly two pixels can be represented without aliasing. It says nothing about how much contrast survives once the continuous fringe pattern is integrated over the finite area of each pixel, which is what a real sensor does. For fringes tilted at $45^{\circ}$, the intensity recorded by the pixel at $(n_x,n_y)$ is the average of the continuous pattern $\cos^2(2\pi f_xx+2\pi f_yy+\phi)$ over that pixel:
+\begin{align}
+I(n_x,n_y) &= \int_{n_x-\frac12}^{n_x+\frac12}\int_{n_y-\frac12}^{n_y+\frac12} \cos^2(2\pi f_x x+2\pi f_y y+\phi)\,dx\,dy \nonumber\\[4pt]
+&= \frac12+\frac12\cos(2\pi f_xn_x+2\pi f_yn_y+\phi)\left[\frac{\sin(\pi f_x)}{\pi f_x}\right]\left[\frac{\sin(\pi f_y)}{\pi f_y}\right]
+\end{align}
+At the Nyquist limit itself, $f_x=f_y=\tfrac12$, this becomes:
+\begin{equation}
+I(n_x,n_y) = \frac12+\frac{2}{\pi^2}\cos\big(\pi(n_x+n_y)+\phi\big)
+\end{equation}
+so successive pixels alternate between $\tfrac12+\tfrac{2}{\pi^2}$ and $\tfrac12-\tfrac{2}{\pi^2}$, a modulation of only about $\pm0.20$ around the mean instead of the full $\pm1$ of the underlying fringe. Sampling exactly at $\nu_N$ is therefore technically alias free but already badly starved of contrast, which is why in practice the sensor should be operated with some margin below $\nu_N$ rather than pushed all the way to it.
+
+\subsubsection{Separation of Interference Orders in Fourier Space}
+
+Filtering a single sideband, as in the Takeda method above, only works if that sideband does not overlap the other two lobes present in the Fourier transform of a recorded interferogram, the zero order at the origin and the conjugate sideband on the other side. The object beam itself has a finite bandwidth set by the optical resolution: for a sensor image magnified by $M_{tot}$, the smallest resolvable feature is $R_s=M_{tot}\lambda/(2NA)$ by the Abbe criterion, so the object spectrum $\hat{c}(\nu_x,\nu_y)$ is confined to a disk of radius
+\begin{equation}
+r_f = \frac{1}{2R_s} = \frac{NA}{M_{tot}\lambda}.
+\end{equation}
+The zero order term is proportional to $|c|^2$, whose Fourier transform is the autocorrelation $\hat{c}\circledast\hat{c}^{\,*}$, so it occupies the larger disk of radius $2r_f$ centered at the origin. The two sidebands sit at $\pm\nu_0$, with $\nu_0$ the carrier frequency of Eq.~\eqref{eq:carrier_freq}, each carrying a copy of the object spectrum of radius $r_f$. Center-to-center, non-overlap of the sideband at $\nu_0$ with the central autocorrelation blob requires the separation to exceed the sum of the two radii, giving the same order of magnitude condition as the general one-dimensional argument for off-axis holography, $\nu_0 \gtrsim 3r_f$. Kimura's more detailed two-dimensional treatment of the $45^{\circ}$-tilted configuration used in this setup refines this into two explicit design conditions,
+\begin{equation}
+\sqrt{3}\,r_f < \nu_0, \qquad \nu_0+\sqrt{2}\,r_f < \sqrt{2}\,\nu_N,
+\end{equation}
+the first ensuring the sideband and the zero order stay separated, the second ensuring the sideband, once separated, still fits entirely inside the region the sensor can sample without aliasing. If the carrier frequency $\nu_0$ is set too low for a given optical resolution $r_f$, the sideband bleeds into the zero order and no filter can cleanly separate them again, which caps how much optical resolution a given fringe spacing can support, and conversely how tight the fringe spacing must be pushed to preserve a given resolution.
+
+\begin{figure}[h!]
+    \centering
+    \begin{tikzpicture}[scale=0.9]
+        \draw[teal!70!black, thick] (-3.4,-3.4) rectangle (3.4,3.4);
+        \node[teal!70!black, above right] at (-3.35,3.3) {\footnotesize Nyquist limit};
+        \draw[-latex, thick] (-3.6,0) -- (3.6,0) node[right] {$k_x$};
+        \draw[-latex, thick] (0,-3.6) -- (0,3.6) node[above] {$k_y$};
+        \node[below left] at (0,0) {$O$};
+
+        \fill[orange!15] (0,0) circle (1.7);
+        \draw[orange!80!black, thick, pattern=north east lines, pattern color=orange!60!black] (0,0) circle (1.7);
+        \node[orange!80!black] at (2.1,-2.0) {\footnotesize non-interference, radius $2r_f$};
+
+        \fill[violet!15] (1.9,1.9) circle (0.85);
+        \draw[violet!70!black, thick, pattern=north east lines, pattern color=violet!70!black] (1.9,1.9) circle (0.85);
+
+        \fill[violet!15] (-1.9,-1.9) circle (0.85);
+        \draw[violet!70!black, thick, pattern=north east lines, pattern color=violet!70!black] (-1.9,-1.9) circle (0.85);
+        \node[violet!70!black, below] at (-1.9,-2.8) {\footnotesize interference, radius $r_f$};
+
+        \draw[<->, thick] (0,0) -- (1.9,1.9) node[midway, above left] {\footnotesize $\nu_0$};
+    \end{tikzpicture}
+    \caption{Layout of the interference orders in the Fourier plane of a recorded interferogram. The non-interference (zero order) blob of radius $2r_f$ sits at the origin, while the two interference sidebands of radius $r_f$ sit at $\pm\nu_0$ along the carrier direction. Clean separation for filtering requires both sideband disks to stay outside the zero order disk and inside the square region the sensor can sample without aliasing, set by the Nyquist frequency $\nu_N$.}
+    \label{fig:fourier_orders}
+\end{figure}
+
+\authornote{The reference for this subsection is a chapter from what appears to be Kimura's thesis (file \texttt{partie\_theorique\_Kimura.pdf}), which I do not have full bibliographic details for beyond the filename. If you can give me the author's full name, the institution, and the year, I will complete the citation properly instead of leaving it as \texttt{kimura\_thesis}.}
 
 \begin{figure}[h!]
     \centering
@@ -150,7 +204,21 @@ Inverting the problem gives the smallest resolvable feature for a lens of numeri
     \label{fig:diffraction_NA}
 \end{figure}
 
-\authornote{The two remaining subsections of the source document, on off-axis digital holography bandwidth and the DFT based reconstruction method, were left unfinished (marked \emph{to be edited} in the original file). I have not included them here since I cannot complete the derivation without knowing what you intended for the carrier bandwidth argument. Send me the intended argument or your notes and I will finish this part.}
+\subsubsection{Sub-Pixel Correction of the Carrier Frequency}
+
+The Fourier transform method above assumes the carrier peak used to recenter the sideband, $(u_0,v_0)$, is known exactly. In practice it is only known to the frequency resolution of the discrete Fourier transform. For a hologram sampled on an $N\times N$ grid, that resolution is $\Delta f_x=\Delta f_y=1/N$, and nothing guarantees that the true carrier frequency falls exactly on a grid point~\cite{khare2023fourier}. If the true peak is offset from the nearest FFT bin by a fractional amount $(\Delta x,\Delta y)$, with $|\Delta x|,|\Delta y|<0.5$ pixel in frequency space, shifting the sideband to that nearest bin instead of the true peak leaves a residual linear phase ramp across the whole reconstructed phase map:
+\begin{equation}
+\Delta\varphi(x,y) = \frac{2\pi}{N}\big(\Delta x\, x + \Delta y\, y\big).
+\end{equation}
+This shows up as a uniform tilt superimposed on the recovered phase, easy to mistake for a real gradient in the plasma or the sample if left uncorrected.
+
+The fix is to refine the peak location to sub-pixel accuracy before using it, by evaluating a local, up-sampled discrete Fourier transform in a small neighborhood around the coarse FFT maximum rather than trusting the coarse grid point itself. Writing the hologram as $H(X,Y)$ on the spatial grid $X=Y=[-N/2,\dots,N/2-1]^T$, this local transform is the matrix product
+\begin{equation}
+F(U,V) = \exp\!\Big({-i\tfrac{2\pi}{N}UX^T}\Big)\,H(X,Y)\,\exp\!\Big({-i\tfrac{2\pi}{N}YV^T}\Big),
+\end{equation}
+evaluated only on a small set of frequencies $U,V$ centered on the coarse peak $(u_0,v_0)$ and spaced by $1/\alpha$ instead of $1$, where $\alpha\sim10$ is an up-sampling factor~\cite{khare2023fourier}. Because $U$ and $V$ only span a window of a couple of pixels around $(u_0,v_0)$, this costs little compared with the full $N\times N$ transform even though it resolves the peak far more finely. The maximum of $|F(U,V)|$ in this window gives the refined peak $(u_0+\Delta x, v_0+\Delta y)$, from which $\Delta\varphi(x,y)$ above is computed and subtracted from the phase map obtained by the ordinary four step Fourier transform method, removing the spurious tilt without needing a higher resolution FFT of the entire hologram.
+
+\authornote{I have not seen this sub-pixel correction implemented anywhere in \texttt{unified\_filament\_slider\_v3.py} or \texttt{abel\_phase\_explorer.py}. Both currently locate the carrier peak with a single coarse FFT maximum (\texttt{find\_1storder\_peak}) and rely on \texttt{fit\_plane\_from\_mask} to remove any resulting tilt from a background region after the fact, which corrects the same symptom but only where a flat background region is actually available in the image. If sub-pixel peak refinement is not already planned, it may be worth adding directly at the peak-finding step rather than only patching the tilt afterward.}
 
 \subsection{The Abel Transform}
 
@@ -173,7 +241,11 @@ The Abel transform is also a special case of the more general Radon transform, w
 
 \subsection{Numerical Inversion by the Trapezoidal Rule}
 
-To invert the Abel transform numerically, the integral is approximated by summing trapezoidal areas $A_k \approx \tfrac12(x_{k+1}-x_k)[g(x_{k+1})+g(x_k)]$ over the integrand $g(x_k,r_i) = \big[dF(x)/dx\big]_{x=x_k}/\sqrt{x_k^2-r_i^2}$. The derivative is itself approximated by a forward difference, $dF/dx|_{x_k} \approx [F(x_{k+1})-F(x_k)]/\Delta x$, and the integration starts one pixel away from $x=r_i$ to avoid the mathematical singularity there. Substituting the forward difference into the trapezoidal sum, the step size $\Delta x$ cancels exactly, leaving:
+To invert the Abel transform numerically, the integral is approximated by summing trapezoidal areas over the integrand $g$,
+\begin{equation}
+A_k \approx \tfrac12(x_{k+1}-x_k)\big[g(x_{k+1})+g(x_k)\big], \qquad g(x_k,r_i) = \frac{\big[dF(x)/dx\big]_{x=x_k}}{\sqrt{x_k^2-r_i^2}}.
+\end{equation}
+The derivative is itself approximated by a forward difference, $dF/dx|_{x_k} \approx [F(x_{k+1})-F(x_k)]/\Delta x$, and the integration starts one pixel away from $x=r_i$ to avoid the mathematical singularity there. Substituting the forward difference into the trapezoidal sum, the step size $\Delta x$ cancels exactly, leaving:
 \begin{equation}
 \boxed{f(r_i) = -\frac{1}{2\pi}\sum_{k=i+1}^{N-2} \left[ \frac{F(x_{k+2}) - F(x_{k+1})}{\sqrt{x_{k+1}^2 - r_i^2}} + \frac{F(x_{k+1}) - F(x_k)}{\sqrt{x_k^2 - r_i^2}} \right]}
 \end{equation}
@@ -208,7 +280,7 @@ directly implementable without ever storing $\Delta x$ as a separate factor.
     \label{fig:trapezoidal}
 \end{figure}
 
-\subsection{Connecting the Simulation to the Diagnostic: \texttt{unified\_filament\_slider\_v3.py}}
+\subsection{Connecting the Simulation to the Diagnostic}
 
 The script \texttt{unified\_filament\_slider\_v3.py} implements both directions of the link between the simulation and a real interferometric measurement, so that the two can be compared directly.
 

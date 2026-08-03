@@ -18,11 +18,12 @@
 \usepackage{tikz}
 \usepackage{adjustbox}
 \usepackage{algorithm2e}
+\usepackage{placeins}
 \usetikzlibrary{arrows.meta}
 
 \definecolor{photon}{RGB}{240,200,0}    % jaune / photon
 \definecolor{electron}{RGB}{0,160,60}   % vert  / électron
-\usetikzlibrary{arrows.meta,angles,quotes,calc,positioning,decorations.pathmorphing,decorations.pathreplacing,shapes.geometric}
+\usetikzlibrary{arrows.meta,angles,quotes,calc,positioning,decorations.pathmorphing,decorations.pathreplacing,shapes.geometric,patterns}
 
 \definecolor{kicol}{RGB}{24,95,165}    % blue  -- electron before
 \definecolor{kfcol}{RGB}{15,110,86}    % green -- electron after
@@ -89,19 +90,33 @@
 \newpage
 
 \input{sections/01_introduction}
+\FloatBarrier
 \input{sections/02_free_carriers_excitation}
+\FloatBarrier
 \input{sections/03_photoionization}
+\FloatBarrier
 \input{sections/04_free_carrier_absorption}
+\FloatBarrier
 \input{sections/05_avalanche_ionization}
+\FloatBarrier
 \input{sections/06_kerr_self_steepening}
+\FloatBarrier
 \input{sections/07_plasma_defocusing}
+\FloatBarrier
 \input{sections/08_filamentation}
+\FloatBarrier
 \input{sections/09_excitons_formation}
+\FloatBarrier
 \input{sections/10_self_trapped_excitons}
+\FloatBarrier
 \input{sections/11_propagation_equation}
+\FloatBarrier
 \input{sections/12_numerical_method}
+\FloatBarrier
 \input{sections/13_cuda_acceleration}
+\FloatBarrier
 \input{sections/14_interferometry_abel}
+\FloatBarrier
 
 \input{sections/bibliography}
 
