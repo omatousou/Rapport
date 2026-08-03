@@ -62,3 +62,43 @@ d'ablation et confirme :
 Le pipeline complet (boucle d'ablation notebook + kernel CUDA réel + page
 web) reste à valider sur une machine avec GPU avant une étude de production
 sur grille fine.
+
+## Architecture du solveur (`sim/`)
+
+Le solveur était un fichier unique de ~1000 lignes ; il est découpé en modules
+à responsabilité unique, avec `filament_sim.py` comme **point d'entrée** (le
+« main ») qui les assemble et expose `run()`.
+
+```
+keldysh.py      taux de photoionisation de Keldysh + ses limites analytiques,
+                dispersion de Sellmeier. Aucune dépendance interne, pas de
+                cupy -> exécutable seul : `python sim/keldysh.py` lance la
+                suite de validation.
+config.py       dataclass Config (tous les paramètres) + code_fingerprint()
+kernels.py      noyau CUDA des équations de taux des porteurs (éq. 6-7)
+grids.py        grilles Hankel/temps/fréquence, dispersion, LUT, enveloppes
+operators.py    demi-pas linéaire + terme non linéaire (éq. 3)
+integrator.py   buffers d'enregistrement, marche en z, écriture result.npz
+filament_sim.py POINT D'ENTREE : run(), FIELD_TOGGLES, et ré-export de tout
+```
+
+Dépendances (acycliques, vérifiées) :
+
+```
+keldysh, kernels   (feuilles)
+config      -> keldysh
+grids       -> keldysh, config
+operators   -> config, kernels
+integrator  -> config, grids, operators
+filament_sim -> tous
+```
+
+`filament_sim.py` ré-exporte l'ensemble de la surface publique, donc
+`from filament_sim import run, Config, ...` continue de fonctionner à
+l'identique : **le notebook n'a pas eu à changer**. Le découpage a été vérifié
+numériquement neutre (22 tableaux comparés avant/après, écart relatif max
+0.000e+00, bit à bit identique).
+
+`code_fingerprint()` hache désormais **tous** les fichiers sources, pas
+seulement deux : éditer n'importe quel module invalide les `result.npz` en
+cache.
