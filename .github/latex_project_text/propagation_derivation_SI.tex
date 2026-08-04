@@ -1,0 +1,803 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{empheq}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!60!black,
+    pdftitle={Ultrashort Pulse Propagation Equation -- SI derivation},
+}
+
+\definecolor{notecolor}{RGB}{180,120,0}
+% Flag for a point that needs checking against the original document.
+\newcommand{\checknote}[1]{%
+    \par\noindent
+    \fcolorbox{notecolor}{notecolor!8}{%
+        \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+            \textbf{\textcolor{notecolor}{Check.}} #1%
+        }%
+    }%
+    \par\vspace{0.3em}%
+}
+
+\title{Ultrashort Pulse Propagation Equation\\[0.3em]
+       \large Full derivation in SI units}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+This document rederives the generalized nonlinear envelope equation entirely in
+SI units. It follows the same logical path as the Gaussian-unit derivation, but
+every prefactor is recomputed rather than translated, so the two can be compared
+independently. Section~\ref{sec:steepening} on self-steepening is written to be
+self-contained: it can be edited or lifted out without touching the rest.
+
+\tableofcontents
+
+% =====================================================================
+\section{Conventions}
+% =====================================================================
+
+\paragraph{Envelope.} The real electric field is written as a carrier at
+$\omega_0$ modulated by a slowly varying complex envelope $\mathcal{E}$:
+\begin{equation}
+\label{eq:envelope-def}
+\mathbf{E}(\mathbf{r},t)
+ = \tfrac{1}{2}\big[\mathcal{E}(\mathbf{r},t)\,e^{i\psi} + \mathrm{c.c.}\big],
+\qquad \psi \equiv k_0 z - \omega_0 t .
+\end{equation}
+With this convention the peak of the real field is $|\mathcal{E}|$, the cycle
+average of its square is $\langle \mathbf{E}^2\rangle = \tfrac12|\mathcal{E}|^2$,
+and the intensity is
+\begin{equation}
+\label{eq:intensity}
+\boxed{\;I = \tfrac{1}{2}\,\varepsilon_0 n_0 c\,|\mathcal{E}|^2\;}
+\end{equation}
+This is the convention used in the solver, where the field array plays the role
+of $\mathcal{E}$ and the intensity is formed as \texttt{0.5*eps0*n0*c*abs(E)**2}.
+Fixing it once here removes the factor-of-two ambiguities that plague envelope
+derivations.
+
+\paragraph{Fourier transform.} We use
+\begin{equation}
+\mathbf{E}(\mathbf{r},t)=\frac{1}{2\pi}\int \mathbf{E}(\mathbf{r},\omega)\,
+   e^{-i\omega t}\,d\omega ,
+\end{equation}
+so that $\partial_t \to -i\omega$ and, for the detuning $\Omega=\omega-\omega_0$,
+\begin{equation}
+\label{eq:detuning-rule}
+\Omega \;\longleftrightarrow\; i\,\frac{\partial}{\partial t}.
+\end{equation}
+Every operator below follows from this single rule; getting its sign wrong flips
+the sign of both dispersion and self-steepening.
+
+\paragraph{Maxwell (SI).} For a non-magnetic medium ($\mathbf{B}=\mu_0\mathbf{H}$),
+\begin{align}
+\nabla\cdot\mathbf{D} &= \rho_f, &
+\nabla\cdot\mathbf{B} &= 0, \\
+\nabla\times\mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t}, &
+\nabla\times\mathbf{H} &= \frac{\partial \mathbf{D}}{\partial t}
+   + \mathbf{J}_{\text{ion}} + \mathbf{J}_{\text{pl}} + \mathbf{J}_{\text{STE}},
+\end{align}
+with $\mathbf{D}=\varepsilon_0\mathbf{E}+\mathbf{P}$ and
+$\mu_0\varepsilon_0 = 1/c^2$.
+
+\checknote{In the Gaussian document, Amp\`ere's law is written
+$\nabla\times\tilde{\mathbf H} = \nabla\times\tilde{\mathbf B}$. That equality
+holds only because $\mu=1$ in Gaussian units; it is worth stating explicitly,
+since it is the step that assumes a non-magnetic medium. Also, $\mathbf{J}_{\text{STE}}$
+appears in the wave equation there but is absent from Amp\`ere's law -- it should
+be introduced in both places.}
+
+% =====================================================================
+\section{From Maxwell to the wave equation}
+% =====================================================================
+
+Taking the curl of Faraday's law and using
+$\nabla\times(\nabla\times\mathbf{A})=\nabla(\nabla\cdot\mathbf{A})-\nabla^2\mathbf{A}$
+with $\nabla\cdot\mathbf{E}\simeq 0$ (homogeneous medium):
+\begin{equation*}
+-\nabla^2\mathbf{E}
+ = -\mu_0\frac{\partial}{\partial t}
+   \Big[\frac{\partial\mathbf{D}}{\partial t}+\mathbf{J}\Big],
+\qquad \mathbf{J}\equiv\mathbf{J}_{\text{ion}}+\mathbf{J}_{\text{pl}}+\mathbf{J}_{\text{STE}} .
+\end{equation*}
+Splitting the polarization into linear and nonlinear parts,
+$\mathbf{D}=\mathbf{D}^{(1)}+\mathbf{P}_{\text{NL}}$ with
+$\mathbf{D}^{(1)}=\varepsilon_0\mathbf{E}+\mathbf{P}^{(1)}$:
+\begin{equation}
+\label{eq:wave-time}
+\nabla^2\mathbf{E}-\mu_0\frac{\partial^2\mathbf{D}^{(1)}}{\partial t^2}
+ = \mu_0\frac{\partial^2\mathbf{P}_{\text{NL}}}{\partial t^2}
+ + \mu_0\frac{\partial\mathbf{J}}{\partial t}.
+\end{equation}
+Comparing with the Gaussian form, the entire unit conversion is the single
+substitution
+\begin{equation}
+\label{eq:conversion}
+\frac{4\pi}{c^2}\;\longrightarrow\;\mu_0=\frac{1}{\varepsilon_0 c^2}
+\qquad\text{i.e.}\qquad 4\pi \longrightarrow \frac{1}{\varepsilon_0}.
+\end{equation}
+
+In the frequency domain, with
+$\mathbf{D}^{(1)}(\omega)=\varepsilon_0\varepsilon_r(\omega)\mathbf{E}(\omega)$,
+\begin{equation}
+\nabla^2\mathbf{E}+\frac{\omega^2}{c^2}\varepsilon_r(\omega)\mathbf{E}
+ = -\mu_0\omega^2\underbrace{\Big[\mathbf{P}_{\text{NL}}
+    + \frac{i\mathbf{J}}{\omega}\Big]}_{\displaystyle \equiv\;\mathcal{S}(\mathbf{r},\omega)} .
+\end{equation}
+The grouping $\mathcal{S}$ plays the role of the symbol $\text{\it ka}$ in the
+Gaussian document.
+
+% =====================================================================
+\section{Envelope and dispersion}
+% =====================================================================
+
+Inserting $\mathbf{E}(\mathbf{r},\omega)\simeq
+\mathcal{E}(\mathbf{r},\Omega)e^{ik_0z}$ and expanding the Laplacian,
+\begin{equation*}
+\Big[\nabla_\perp^2+\partial_z^2+2ik_0\partial_z-k_0^2\Big]\mathcal{E}
+ + k^2(\omega)\,\mathcal{E} = -\mu_0\omega^2\,\mathcal{S}\,e^{-ik_0z},
+\end{equation*}
+with $k^2(\omega)=\varepsilon_r(\omega)\omega^2/c^2$. Expanding $k(\omega)$
+around $\omega_0$,
+\begin{equation}
+k(\omega)=k_0+k_1\Omega+\underbrace{\sum_{n\ge 2}\frac{k_n}{n!}\Omega^n}_{\displaystyle \equiv\, L},
+\qquad k_1=\frac{1}{v_g}=\frac{n_g}{c},
+\end{equation}
+so that $k^2-k_0^2 = 2k_0k_1\Omega + k_1^2\Omega^2 + 2k_0L + 2k_1 L\Omega + L^2$.
+Applying rule~\eqref{eq:detuning-rule} and moving to the retarded frame
+$\tau=t-k_1z$, $z'=z$ (which removes the $2k_0k_1\Omega$ term), and dropping
+$\partial_{z'}^2$ (SVEA):
+\begin{equation}
+\label{eq:pre-U}
+\Big[\nabla_\perp^2
+ + 2ik_0\partial_{z'}\big(1+\tfrac{ik_1}{k_0}\partial_\tau\big)
+ + 2k_0\hat{L}\big(1+\tfrac{ik_1}{k_0}\partial_\tau\big)
+ + \hat{L}^2\Big]\mathcal{E}
+ = -\mu_0\omega_0^2\,\hat{T}^2\mathcal{P}_{\text{NL}} + \dots
+\end{equation}
+where $\hat L=\sum_{n\ge2}\frac{k_n}{n!}(i\partial_\tau)^n$.
+
+% =====================================================================
+\section{The two operators \texorpdfstring{$\hat U$}{U} and \texorpdfstring{$\hat T$}{T}}
+\label{sec:operators}
+% =====================================================================
+
+Two distinct first-order temporal operators appear, and they are easy to
+conflate because they look alike.
+
+\paragraph{Space--time focusing, $\hat U$.} The bracket generated by the
+retarded-frame change of variables in~\eqref{eq:pre-U} is
+\begin{equation}
+\label{eq:U-def}
+\hat U \;=\; 1+\frac{k_1}{k_0}\,\Omega
+ \;=\; 1+\frac{n_g}{n_0}\frac{\Omega}{\omega_0}
+ \;=\; 1+i\,\frac{n_g}{n_0\omega_0}\frac{\partial}{\partial\tau},
+\end{equation}
+using $k_1/k_0=(n_g/c)(c/n_0\omega_0)=n_g/(n_0\omega_0)$. It multiplies
+$\partial_{z'}$ and the dispersion operator; physically it says that different
+frequency components diffract differently, which couples the transverse and
+temporal dynamics.
+
+\paragraph{Self-steepening, $\hat T$.} This one has a completely different
+origin: it is what the \emph{second time derivative} of the nonlinear
+polarization produces. With
+$\mathbf{P}_{\text{NL}}=\tfrac12\mathcal{P}_{\text{NL}}e^{i\psi}+\mathrm{c.c.}$,
+\begin{align}
+\frac{\partial^2}{\partial t^2}\Big[\mathcal{P}_{\text{NL}}e^{-i\omega_0 t}\Big]
+&= \Big[\ddot{\mathcal{P}}-2i\omega_0\dot{\mathcal{P}}-\omega_0^2\mathcal{P}\Big]e^{-i\omega_0t}
+\nonumber\\
+&= -\omega_0^2\Big[1+\frac{2i}{\omega_0}\partial_t-\frac{1}{\omega_0^2}\partial_t^2\Big]
+   \mathcal{P}\,e^{-i\omega_0t}
+ = -\omega_0^2\,\hat T^2\,\mathcal{P}\,e^{-i\omega_0 t},
+\end{align}
+so the square is exact, not an approximation:
+\begin{equation}
+\label{eq:T-def}
+\hat T = 1+\frac{i}{\omega_0}\frac{\partial}{\partial\tau}.
+\end{equation}
+
+\paragraph{Why the literature writes a single $\hat T$.} Couairon and
+Mysyrowicz write the Kerr term with one power of $\hat T$, not two. The two
+statements are consistent. Dividing the propagation equation through by $\hat U$
+leaves the Kerr term proportional to $\hat T^2/\hat U$, and comparing
+\eqref{eq:U-def} with \eqref{eq:T-def},
+\begin{equation}
+\hat U = 1+i\frac{n_g}{n_0}\frac{1}{\omega_0}\partial_\tau,
+\qquad
+\hat T = 1+i\frac{1}{\omega_0}\partial_\tau
+\qquad\Longrightarrow\qquad
+\hat U \simeq \hat T \;\;\text{when}\;\; n_g\simeq n_0 .
+\end{equation}
+For fused silica at $800$~nm, $n_0=1.4533$ and $n_g\simeq 1.4671$, so
+$n_g/n_0=1.0095$: the two operators agree to within $1\%$. Hence
+\begin{equation}
+\label{eq:T2overU}
+\frac{\hat T^2}{\hat U}\;\simeq\;\hat T ,
+\end{equation}
+and the single-$\hat T$ form of the literature is recovered. This is the
+cleanest way to reconcile the two conventions, and it matters for
+Section~\ref{sec:steepening}: the physically meaningful shock coefficient is the
+one obtained \emph{after} dividing by $\hat U$.
+
+% =====================================================================
+\section{Nonlinear polarization and \texorpdfstring{$n_2$}{n2}}
+% =====================================================================
+
+In SI, $\mathbf{P}=\varepsilon_0\chi^{(1)}\mathbf{E}+\varepsilon_0\chi^{(3)}\mathbf{E}^3$.
+Cubing~\eqref{eq:envelope-def},
+\begin{equation}
+\mathbf{E}^3=\tfrac18\mathcal{E}^3e^{3i\psi}
+ +\tfrac38|\mathcal{E}|^2\mathcal{E}\,e^{i\psi}+\mathrm{c.c.}
+\end{equation}
+The $3\omega_0$ term drives third-harmonic generation and is dropped. Writing
+$\mathbf{P}_{\text{NL}}=\tfrac12\mathcal{P}_{\text{NL}}e^{i\psi}+\mathrm{c.c.}$,
+\begin{equation}
+\label{eq:PNL}
+\mathcal{P}_{\text{NL}}=\tfrac34\,\varepsilon_0\chi^{(3)}|\mathcal{E}|^2\mathcal{E}.
+\end{equation}
+The refractive index follows from
+$\varepsilon_r=n_0^2+\tfrac34\chi^{(3)}|\mathcal{E}|^2$:
+\begin{equation}
+n=\sqrt{\varepsilon_r}\simeq n_0+\frac{3\chi^{(3)}}{8n_0}|\mathcal{E}|^2
+ \equiv n_0+n_2 I ,
+\end{equation}
+and inserting $I$ from~\eqref{eq:intensity},
+\begin{equation}
+\label{eq:n2}
+\boxed{\;n_2=\frac{3\chi^{(3)}}{4\,\varepsilon_0 n_0^2 c}
+\qquad\Longleftrightarrow\qquad
+\chi^{(3)}=\tfrac43\,\varepsilon_0 c\, n_0^2\, n_2 \;}
+\end{equation}
+which is the relation already used in the main report. Note that
+$\chi^{(3)}$ is \emph{not} numerically the same quantity as in Gaussian units:
+the two differ both by $\varepsilon_0$ (from $\mathbf{P}=\varepsilon_0\chi^{(3)}\mathbf{E}^3$
+versus $\tilde{\mathbf{P}}=\chi^{(3)}\tilde{\mathbf{E}}^3$) and by the $4\pi$ in
+$\mathbf{D}$. Only $n_2$, being defined through the measurable
+$\Delta n = n_2 I$, is convention-independent.
+
+\paragraph{Kerr source term.} Substituting~\eqref{eq:PNL} and~\eqref{eq:n2} into
+the right-hand side of~\eqref{eq:pre-U}, then dividing by $2ik_0$:
+\begin{align}
+i\frac{\mu_0\omega_0^2}{2k_0}\hat T^2\mathcal{P}_{\text{NL}}
+&= i\frac{\mu_0\omega_0^2}{2k_0}\,\varepsilon_0^2 n_0^2 c\, n_2\,
+   \hat T^2\big[|\mathcal{E}|^2\mathcal{E}\big]
+\nonumber\\
+&= i\frac{\omega_0^2\varepsilon_0 n_0^2 n_2}{2k_0 c}\,
+   \hat T^2\big[|\mathcal{E}|^2\mathcal{E}\big]
+   \qquad (\mu_0\varepsilon_0^2=\varepsilon_0/c^2)
+\nonumber\\
+&= i\,\frac{\omega_0}{c}\,n_2\,\hat T^2\big[I\,\mathcal{E}\big]
+   \qquad (k_0=n_0\omega_0/c,\;\; \varepsilon_0 n_0|\mathcal{E}|^2=2I/c),
+\end{align}
+that is,
+\begin{empheq}[box=\fbox]{equation}
+\label{eq:kerr-term}
+\text{Kerr}\;=\;i\,K_0\,n_2\,\hat T^2\big[I\,\mathcal{E}\big],
+\qquad K_0\equiv\frac{\omega_0}{c}\;\;(\text{vacuum wavenumber}).
+\end{empheq}
+This is \emph{identical} to the Gaussian result. The agreement is a genuine
+cross-check: the $4\pi$'s and the $\varepsilon_0$'s cancel because $n_2$ is
+defined through the intensity in both systems.
+
+% =====================================================================
+\section{Self-steepening}
+\label{sec:steepening}
+% =====================================================================
+
+\noindent
+\emph{This section is self-contained. It replaces the qualitative paragraph
+``the more intense peak travels more slowly than the wings'' by an explicit
+derivation, and identifies exactly which part of that statement is right and
+which part is hand-waving.}
+
+\subsection{Extracting the shock term}
+
+Start from the Kerr term~\eqref{eq:kerr-term} after division by $\hat U$, which
+by~\eqref{eq:T2overU} leaves a single $\hat T$. Keep only the Kerr nonlinearity
+(no diffraction, no dispersion, no plasma) so that the effect is isolated:
+\begin{equation}
+\label{eq:shock-model}
+\frac{\partial\mathcal{E}}{\partial z}
+ = i\,K_0 n_2\,\hat T\big[I\mathcal{E}\big]
+ = \underbrace{i\,K_0 n_2\, I\,\mathcal{E}}_{\text{SPM}}
+   \;\underbrace{-\;\frac{n_2}{c}\,\frac{\partial}{\partial\tau}\big(I\mathcal{E}\big)}_{\text{shock}},
+\end{equation}
+where the second term used $\hat T = 1+\tfrac{i}{\omega_0}\partial_\tau$ and
+$K_0/\omega_0=1/c$. Define the shock coefficient
+\begin{equation}
+s \equiv \frac{n_2}{c} .
+\end{equation}
+(If one keeps $\hat T^2$ without dividing by $\hat U$, the coefficient is $2s$;
+this is the origin of the $2n_2/c$ quoted in the report. The physically
+meaningful value, after $\hat U$ has been divided out, is $s$.)
+
+\subsection{The intensity obeys a Burgers equation}
+
+Write the envelope in amplitude--phase form, $\mathcal{E}=\sqrt{I}\,e^{i\varphi}$
+(absorbing the constant of~\eqref{eq:intensity}, which does not affect the
+structure). Then
+\begin{equation*}
+\frac{\partial\mathcal{E}}{\partial z}
+ = \Big[\partial_z\sqrt{I}+i\sqrt{I}\,\partial_z\varphi\Big]e^{i\varphi},
+\qquad
+\frac{\partial}{\partial\tau}\big(I\mathcal{E}\big)
+ = \Big[\partial_\tau\big(I^{3/2}\big)+iI^{3/2}\partial_\tau\varphi\Big]e^{i\varphi}.
+\end{equation*}
+Separating real and imaginary parts of~\eqref{eq:shock-model}:
+\begin{align}
+\text{(real)}\quad
+ &\partial_z\sqrt{I} = -s\,\partial_\tau\big(I^{3/2}\big)
+   = -\tfrac32 s\sqrt{I}\,\partial_\tau I , \\
+\text{(imag)}\quad
+ &\partial_z\varphi = K_0n_2 I - s\,I\,\partial_\tau\varphi .
+\end{align}
+Multiplying the real equation by $2\sqrt{I}$ gives the central result:
+\begin{empheq}[box=\fbox]{equation}
+\label{eq:burgers}
+\frac{\partial I}{\partial z} + 3s\,I\,\frac{\partial I}{\partial\tau} = 0,
+\qquad s=\frac{n_2}{c}.
+\end{empheq}
+
+This is the \textbf{inviscid Burgers equation}, the archetype of shock
+formation. It is what justifies the word ``steepening'', and everything
+qualitative about self-steepening follows from it without further argument:
+
+\begin{enumerate}[leftmargin=1.6em]
+\item[(i)] \textbf{Each intensity level travels at its own speed.} Along the
+characteristics $d\tau/dz = 3sI$, the intensity is constant. High-intensity
+points drift toward \emph{larger} $\tau$. Since $\tau=t-z/v_g$, larger $\tau$
+means arriving later: the peak is retarded relative to the wings. The
+statement ``the peak travels more slowly'' is therefore correct.
+
+\item[(ii)] \textbf{The distortion is intrinsically asymmetric.} The advection
+velocity depends on $I$, not on $\partial_\tau I$. The peak overtakes the
+trailing edge (which lies at larger $\tau$) and runs away from the leading edge.
+The trailing edge compresses and steepens; the leading edge flattens. A
+perfectly symmetric Gaussian input therefore becomes asymmetric immediately,
+which is the point the qualitative paragraph was trying to make.
+
+\item[(iii)] \textbf{A shock forms at finite distance} (next subsection).
+\end{enumerate}
+
+\subsection{Shock distance}
+
+For $\partial_z I + c(I)\partial_\tau I = 0$ with $c(I)=3sI$, characteristics
+cross, and $\partial_\tau I$ becomes infinite, at
+\begin{equation}
+z_{\text{sh}}
+ = \frac{-1}{\displaystyle\min_\tau \frac{\partial c(I_0)}{\partial\tau}}
+ = \frac{-1}{3s\,\displaystyle\min_\tau \partial_\tau I_0}.
+\end{equation}
+For a Gaussian input $I_0(\tau)=I_p\exp(-\tau^2/t_p^2)$, the steepest negative
+slope sits at $\tau=t_p/\sqrt2$ and equals
+$\min_\tau\partial_\tau I_0=-\sqrt{2}\,e^{-1/2}\,I_p/t_p\simeq-0.858\,I_p/t_p$.
+Hence
+\begin{empheq}[box=\fbox]{equation}
+\label{eq:zshock}
+z_{\text{sh}} \;=\; \frac{1}{3\sqrt2 e^{-1/2}}\,\frac{c\,t_p}{n_2 I_p}
+ \;\simeq\; 0.39\,\frac{c\,t_p}{n_2 I_p}.
+\end{empheq}
+The numerical coefficient $0.39$ reproduces the classical result of Anderson and
+Lisak, quoted by Agrawal as $z_{\text{sh}}=0.39\,L_{\text{NL}}/s'$ with
+$L_{\text{NL}}=1/(K_0n_2I_p)$ and $s'=1/(\omega_0 t_p)$. Recovering it from the
+Burgers picture is a useful check that the factor $3$
+in~\eqref{eq:burgers} is right.
+
+\paragraph{How far is that, in practice?} Comparing to the self-focusing length
+$L_{\text{SF}}=1/(n_2k_0I_p)$ of the same beam,
+\begin{equation}
+\frac{z_{\text{sh}}}{L_{\text{SF}}} = 0.39\,n_0\,\omega_0 t_p .
+\end{equation}
+For fused silica at $800$~nm with $t_p=136$~fs, $\omega_0t_p\simeq320$ and
+$n_0=1.4533$, giving $z_{\text{sh}}\simeq 180\,L_{\text{SF}}$. Self-steepening
+is thus a very slow effect compared with self-focusing: on its own it would
+never matter. It becomes visible in filamentation only because the collapse
+first compresses the pulse in time (small $t_p$) and raises the intensity (large
+$I_p$), both of which shorten $z_{\text{sh}}$ dramatically. This is why the
+shock term is negligible on the leading edge of the propagation and abruptly
+important near the nonlinear focus.
+
+\subsection{Spectral signature: why the blue side runs away}
+
+From the imaginary part, to leading order the phase is the ordinary SPM phase
+$\varphi \simeq K_0 n_2 I z$, so the instantaneous frequency shift is
+\begin{equation}
+\label{eq:freqshift}
+\delta\omega(\tau) = -\frac{\partial\varphi}{\partial\tau}
+ = -K_0 n_2 z\,\frac{\partial I}{\partial\tau}.
+\end{equation}
+On the leading edge $\partial_\tau I>0$, so $\delta\omega<0$: red shift. On the
+trailing edge $\partial_\tau I<0$, so $\delta\omega>0$: blue shift. Without the
+shock term the two edges are mirror images and the spectrum is symmetric.
+
+With the shock term, \eqref{eq:burgers} makes $|\partial_\tau I|$ on the
+trailing edge grow without bound as $z\to z_{\text{sh}}$, while the leading edge
+flattens. Through~\eqref{eq:freqshift} the blue edge of the spectrum therefore
+extends much further than the red edge, and diverges at the shock. This is the
+mechanism behind the blue-shifted asymmetry of supercontinuum
+spectra~\cite{rothenberg1992,gaeta2000}, and it is a \emph{prediction} of
+\eqref{eq:burgers} rather than an assertion.
+
+\subsection{What the ``intensity-dependent group velocity'' argument gets wrong}
+
+The usual one-line justification is: the nonlinear index adds $n_2I$ to the
+group index, so $1/v_g \to (n_g+n_2I)/c$, and in the retarded frame a point of
+intensity $I$ drifts at
+\begin{equation}
+\left.\frac{d\tau}{dz}\right|_{\text{naive}} = \frac{n_2 I}{c} = s\,I .
+\end{equation}
+Compare with the exact characteristic velocity of~\eqref{eq:burgers},
+$d\tau/dz = 3sI$. The naive argument gets the \emph{sign} right (peak retarded)
+and the \emph{scaling} right (linear in $I$), but underestimates the drift by a
+factor $3$. The missing factor comes from the shock operator acting on the
+product $I\mathcal{E}$, not on the phase alone: differentiating $I^{3/2}$
+produces $\tfrac32 I^{1/2}\partial_\tau I$, and converting back from
+$\sqrt I$ to $I$ contributes the remaining factor $2$.
+
+So the qualitative picture in the report is not wrong, but it should not be
+presented as a derivation. The honest formulation is: \emph{the shock term makes
+the intensity obey a Burgers equation whose characteristic velocity is
+$3n_2I/c$; an intensity-dependent group velocity is a useful mental image for
+the sign of the effect, but it does not give the correct coefficient.}
+
+\checknote{The report currently writes the shock term as
+$(2n_2/c)\,\partial(|\mathcal{E}|^2\mathcal{E})/\partial t$. The factor $2$ is
+consistent with keeping $\hat T^2$ and using $K_0$ rather than $k_0$, but the
+quantity being differentiated should be the \emph{intensity} times the envelope,
+$I\mathcal{E}$, not $|\mathcal{E}|^2\mathcal{E}$ -- the two differ by
+$\tfrac12\varepsilon_0n_0c$. Worth fixing when the paragraph is rewritten.}
+
+\subsection{Numerical verification}
+
+Everything above is checkable without the full solver, since
+\eqref{eq:shock-model} is a one-dimensional equation. The module
+\texttt{sim/self\_steepening.py} integrates it with RK4 and a spectral
+$\partial_\tau$, and produces two figures.
+
+\paragraph{The Burgers law, tested rather than asserted.} Differentiating
+\eqref{eq:burgers} along a characteristic gives $dJ/dz=-3sJ^2$ for
+$J=\partial_\tau I$, hence
+\begin{equation}
+\label{eq:slopelaw}
+\frac{|J|(z)}{|J|(0)} = \frac{1}{1-z/z_{\text{sh}}} .
+\end{equation}
+A threshold at $G$ times the initial slope must therefore be crossed at exactly
+$z=(1-1/G)\,z_{\text{sh}}$, independently of $t_p$, $I_p$ and $n_2$. Measuring
+that crossing for $G=3$ over input durations $t_p=15$ to $80$~fs gives
+$z_{\text{meas}}/z_{\text{sh}}=0.6667$ with a maximum deviation of
+$1\times10^{-4}$ from the predicted $2/3$, and the slope-growth curves for all
+six durations collapse onto \eqref{eq:slopelaw}. This validates the factor $3$
+in \eqref{eq:burgers} and the coefficient $0.39$ in \eqref{eq:zshock}
+simultaneously.
+
+\paragraph{The spectral asymmetry.} Propagating a $30$~fs, $5\times10^{13}$
+W/cm$^2$ pulse to $0.85\,z_{\text{sh}}$:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+ & shock OFF & shock ON \\
+\midrule
+trailing-edge slope $\partial_\tau I$ (norm.) & $-0.0286$ & $-0.1901$ \\
+leading-edge slope $\partial_\tau I$ (norm.)  & $+0.0286$ & $+0.0155$ \\
+instantaneous frequency range (rad/fs) & $[-0.67,+0.67]$ & $[-0.43,+1.62]$ \\
+spectral extent, blue/red at $10^{-3}$ & $1.00$ & $3.68$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Without the shock term the pulse shape is rigorously unchanged (SPM is a pure
+phase) and every quantity is symmetric to machine precision. With it, the
+trailing edge steepens by $6.6\times$ while the leading edge flattens, exactly
+as \eqref{eq:burgers} requires, and the blue edge of the spectrum runs
+$3.7\times$ further than the red one.
+
+\paragraph{A caution on the metric.} The natural-looking measure -- the ratio of
+spectral \emph{energy} above and below $\omega_0$ -- is the wrong observable
+here: it comes out slightly \emph{red}-heavy ($0.75$) even in the case where the
+blue edge extends four times further. The reason is that the blue tail is
+generated by a single narrow region of $\tau$ (the steepened edge), so it is
+spread thinly over a wide bandwidth, whereas the bulk of the energy stays in the
+central SPM peaks. The asymmetry claimed here is one of spectral \emph{extent},
+not of energy, and the figure reports the extent.
+
+% =====================================================================
+\section{Delayed Raman response}
+% =====================================================================
+
+The Raman derivation is unit-independent once the driving term is normalized, so
+it carries over unchanged. A Raman-active vibrational mode of coordinate $q$,
+frequency $\Omega_R$ and damping time $\tau_d$ is driven by the cycle-averaged
+field through the Placzek polarizability expansion
+$\alpha(q)\simeq\alpha_0+\alpha' q$:
+\begin{equation}
+\mu\Big[\frac{d^2}{dt^2}+\frac{2}{\tau_d}\frac{d}{dt}+\Omega_R^2\Big]q
+ = \tfrac12\alpha'\langle \mathbf{E}^2\rangle
+ = \tfrac14\alpha'|\mathcal{E}|^2 .
+\end{equation}
+Normalizing to $Q\equiv q\,\Omega_R^2/\kappa$ with $\kappa=\alpha'/(4\mu)$, and
+expressing the drive as an intensity,
+\begin{equation}
+\Big[\frac{d^2}{dt^2}+\frac{2}{\tau_d}\frac{d}{dt}+\Omega_R^2\Big]Q
+ = \Omega_R^2\, I .
+\end{equation}
+The Green function of this operator, causal and normalized by the jump
+condition $G'(0^+)-G'(0^-)=1$, is
+\begin{equation}
+G(t)=\tau_s\,e^{-t/\tau_d}\sin\!\big(t/\tau_s\big)\,\mathcal{H}(t),
+\qquad
+\frac{1}{\tau_s}=\sqrt{\Omega_R^2-\frac{1}{\tau_d^2}} ,
+\end{equation}
+so the response function is
+\begin{equation}
+\label{eq:raman-R}
+R(t)=\Omega_R^2\,\tau_s\,e^{-t/\tau_d}\sin\!\big(t/\tau_s\big)
+ = \frac{\tau_s^2+\tau_d^2}{\tau_s\tau_d^2}\,e^{-t/\tau_d}\sin\!\big(t/\tau_s\big),
+\end{equation}
+using $\Omega_R^2=\tau_s^{-2}+\tau_d^{-2}$. The second form is the one usually
+quoted in the filamentation literature. It is correctly normalized:
+\begin{equation}
+\int_0^\infty R(t)\,dt
+ = \Omega_R^2\tau_s\cdot\frac{1/\tau_s}{\tau_d^{-2}+\tau_s^{-2}} = 1 .
+\end{equation}
+The Kerr response is then split between an instantaneous and a delayed part with
+weight $f_R$:
+\begin{equation}
+\label{eq:kerr-full}
+I \;\longrightarrow\;
+ (1-f_R)\,I(\mathbf{r},t) + f_R\!\int_{-\infty}^{t}\! R(t-\tau)\,I(\mathbf{r},\tau)\,d\tau .
+\end{equation}
+The solver uses $f_R=0.18$, $\tau_d=32$~fs, $\tau_s=12$~fs.
+
+\checknote{In the Gaussian document the normalized equation is written once with
+$\Omega^2|\mathcal{E}|^2$ on the right and once with $\Omega^2 I$; these differ
+by $n_0c/8\pi$. Only the second is consistent with $R$ being normalized to unit
+area and with $I$ entering~\eqref{eq:kerr-full}. The $Q$ substitution is also
+performed twice in a row.}
+
+% =====================================================================
+\section{Plasma response: the Drude model}
+% =====================================================================
+
+A conduction electron of effective mass $m_{\text{eff}}$, driven by the field and
+damped by collisions at rate $1/\tau_c$:
+\begin{equation}
+m_{\text{eff}}\frac{d\mathbf{v}}{dt}
+ = -e\mathbf{E}-\frac{m_{\text{eff}}}{\tau_c}\mathbf{v}.
+\end{equation}
+Seeking $\mathbf{v}=\tfrac12\tilde{\mathbf{v}}e^{i\psi}+\mathrm{c.c.}$ and using
+the SVEA ($|\partial_t\tilde{\mathbf v}|\ll\omega_0|\tilde{\mathbf v}|$, so
+$d\mathbf{v}/dt\simeq-i\omega_0\tilde{\mathbf v}$):
+\begin{equation}
+\tilde{\mathbf v}
+ = -\frac{e\tau_c}{m_{\text{eff}}(1-i\omega_0\tau_c)}\,\mathcal{E}
+\quad\Longrightarrow\quad
+\mathcal{J}_{\text{pl}} = -e\rho\,\tilde{\mathbf v}
+ = \frac{e^2\rho\,\tau_c\,(1+i\omega_0\tau_c)}{m_{\text{eff}}(1+\omega_0^2\tau_c^2)}\,\mathcal{E}.
+\end{equation}
+The corresponding source term in the propagation equation is
+\begin{align}
+\frac{\mu_0}{2ik_0}\frac{\partial \mathcal{J}_{\text{pl}}}{\partial t}
+&\simeq \frac{\mu_0}{2ik_0}(-i\omega_0)\mathcal{J}_{\text{pl}}
+ = -\frac{\mu_0\omega_0}{2k_0}\frac{e^2\tau_c}{m_{\text{eff}}(1+\omega_0^2\tau_c^2)}
+   \,\rho\,(1+i\omega_0\tau_c)\,\mathcal{E}
+\nonumber\\
+&= -\frac{e^2\omega_0\tau_c}
+        {2k_0\varepsilon_0c^2 m_{\text{eff}}(1+\omega_0^2\tau_c^2)}
+   \,\rho\,(1+i\omega_0\tau_c)\,\mathcal{E}.
+\end{align}
+Defining the inverse-bremsstrahlung cross section in SI,
+\begin{empheq}[box=\fbox]{equation}
+\label{eq:sigma}
+\sigma = \frac{k_0\,e^2}{n_0^2\,\omega_0^2\,\varepsilon_0\,m_{\text{eff}}}
+         \cdot\frac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2},
+\end{empheq}
+and using $n_0^2\omega_0^2=k_0^2c^2$, the prefactor above is exactly $\sigma/2$:
+\begin{equation}
+\frac{\sigma}{2}
+ = \frac{e^2\,\omega_0\tau_c}{2k_0c^2\varepsilon_0 m_{\text{eff}}(1+\omega_0^2\tau_c^2)} .
+\end{equation}
+Hence
+\begin{equation}
+\label{eq:plasma-term}
+\text{plasma}\;=\;-\frac{\sigma}{2}\,(1+i\omega_0\tau_c)\,\rho\,\mathcal{E},
+\end{equation}
+the real part being absorption (inverse bremsstrahlung) and the imaginary part
+the defocusing phase. Expression~\eqref{eq:sigma} is exactly what the solver
+computes:
+\begin{center}
+\texttt{sigmaomega = k0*q\_e**2*tau\_c / (n0**2 * m * eps0 * omega0 * (1+(omega0*tau\_c)**2))}
+\end{center}
+so this equation is the direct justification of that line of code. No Gaussian
+detour is needed.
+
+% =====================================================================
+\section{Photoionization losses}
+% =====================================================================
+
+Energy conservation (Poynting) requires that the power transferred to the newly
+freed electrons equals the gap energy times the ionization rate:
+\begin{equation}
+\frac{\partial u}{\partial t}+\nabla\!\cdot\!\mathbf{S}
+ = -\mathbf{J}_{\text{ion}}\!\cdot\!\mathbf{E},
+\qquad
+\big\langle \mathbf{J}_{\text{ion}}\!\cdot\!\mathbf{E}\big\rangle_T
+ = U_i\,W_{\text{PI}} .
+\end{equation}
+Taking the current in phase with the field, $\mathbf{J}_{\text{ion}}=\gamma_{\text{ion}}\mathbf{E}$,
+and using $\langle\mathbf{E}^2\rangle=\tfrac12|\mathcal{E}|^2$:
+\begin{equation}
+\gamma_{\text{ion}}\,\tfrac12|\mathcal{E}|^2 = U_iW_{\text{PI}}
+\quad\Longrightarrow\quad
+\gamma_{\text{ion}} = \frac{2U_iW_{\text{PI}}}{|\mathcal{E}|^2}.
+\end{equation}
+The source term follows the same route as the plasma one, keeping a single
+$\hat T$ because only one time derivative acts on $\mathbf{J}$:
+\begin{align}
+-\frac{\mu_0\omega_0}{2k_0}\hat T\big[\gamma_{\text{ion}}\mathcal{E}\big]
+&= -\frac{\mu_0\omega_0}{2k_0}\,\hat T\!\left[\frac{2U_iW_{\text{PI}}}{|\mathcal{E}|^2}\mathcal{E}\right]
+\nonumber\\
+&= -\frac{\mu_0\omega_0}{2k_0}\,\varepsilon_0 n_0 c\;
+    \hat T\!\left[\frac{U_iW_{\text{PI}}}{I}\mathcal{E}\right]
+&&\big(|\mathcal{E}|^2 = 2I/\varepsilon_0n_0c\big)
+\nonumber\\
+&= -\frac{1}{2}\,\hat T\!\left[\frac{U_iW_{\text{PI}}}{I}\mathcal{E}\right]
+&&\big(\mu_0\varepsilon_0 n_0 c\,\omega_0/k_0 = 1\big).
+\end{align}
+The factor $\tfrac12$ therefore comes out identical to the Gaussian derivation,
+confirming that it is not a units artifact. Dimensionally
+$[U_iW_{\text{PI}}/I]=\text{m}^{-1}$, as an absorption coefficient must be: the
+denominator is an \emph{intensity}, not a squared field amplitude.
+
+The rate $W_{\text{PI}}$ is the Keldysh photoionization rate,
+\begin{equation}
+W_{\text{PI}}
+ = \frac{2\omega_0}{9\pi}\left(\frac{\omega_0 m}{\hbar\sqrt{\Gamma_1}}\right)^{3/2}
+   \left[\sqrt{\frac{\pi}{2K(\Gamma_2)}}\sum_{n=0}^{\infty}e^{-n\alpha}\,
+   \Phi\!\left(\sqrt{\beta(n+2\nu)}\right)\right] e^{-\alpha\langle x+1\rangle},
+\end{equation}
+with $\gamma=\omega_0\sqrt{mU_i}/(e|\mathcal{E}|)$,
+$\Gamma_1=\gamma^2/(1+\gamma^2)$, $\Gamma_2=1/(1+\gamma^2)$,
+$\alpha=\pi[K(\Gamma_1)-E(\Gamma_1)]/E(\Gamma_2)$,
+$\beta=\pi^2/[4K(\Gamma_2)E(\Gamma_2)]$,
+$x=(2U_i/\pi\hbar\omega_0)\,E(\Gamma_2)/\sqrt{\Gamma_1}$ and
+$\nu=\langle x+1\rangle-x$; $K$ and $E$ are the complete elliptic integrals
+(argument $m=k^2$) and $\Phi$ the Dawson function. The limits $\gamma\gg1$ and
+$\gamma\ll1$ give multiphoton and tunnel ionization respectively.
+
+% =====================================================================
+\section{The complete equation}
+% =====================================================================
+
+Collecting~\eqref{eq:kerr-term}, \eqref{eq:kerr-full}, \eqref{eq:plasma-term}
+and the ionization term:
+\begin{empheq}[box=\fbox]{equation}
+\label{eq:master}
+\begin{split}
+\hat U\,\frac{\partial \mathcal{E}}{\partial z'}
+ =\;& i\left[\frac{\nabla_\perp^2}{2k_0}
+     +\hat L\Big(\hat U+\frac{\hat L}{2k_0}\Big)\right]\mathcal{E} \\[0.3em]
+ &+ i\,K_0 n_2\,\hat T^2\!\left[(1-f_R)I
+    + f_R\!\int_{-\infty}^{t}\!R(t-\tau)I(\tau)\,d\tau\right]\mathcal{E} \\[0.3em]
+ &- \frac{1}{2}\,\hat T\!\left[\frac{U_i W_{\text{PI}}}{I}\right]\mathcal{E}
+   \;-\;\frac{\sigma}{2}\big(1+i\omega_0\tau_c\big)\rho\,\mathcal{E}.
+\end{split}
+\end{empheq}
+
+\paragraph{Structure.} Terms carrying an explicit $i$ are conservative and act as
+phases: diffraction, dispersion, Kerr, and plasma defocusing (the $i\omega_0\tau_c$
+part). Terms without $i$ are dissipative: photoionization loss and inverse
+bremsstrahlung. This is worth stating because the compact notation
+$\partial_z\mathcal{E}=i\hat N\mathcal{E}$ found in the literature is not
+literally consistent term by term: with a global $i$ pulled out, the Kerr
+contribution inside $\hat N$ is real while the loss terms must themselves carry
+an $i$, so that $i\hat N$ reproduces real losses. The boxed
+form~\eqref{eq:master} avoids that trap by keeping every factor explicit.
+
+\paragraph{Agreement with the Gaussian derivation.} Every physical prefactor came
+out the same: the Kerr coefficient $K_0n_2$, the ionization factor $-\tfrac12$,
+and the plasma factor $-\sigma/2$. That is expected --- the two unit systems
+must agree --- but it is a real check, because the intermediate expressions look
+nothing alike. The place where they genuinely differ is $\chi^{(3)}$, which is a
+different number in the two systems, and which is why $n_2$ (not $\chi^{(3)}$)
+should always be the quantity carried through the code.
+
+% =====================================================================
+\appendix
+\section{Gaussian \texorpdfstring{$\leftrightarrow$}{<->} SI dictionary}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Quantity & Gaussian & SI \\
+\midrule
+Displacement field & $\mathbf{D}=\mathbf{E}+4\pi\mathbf{P}$
+                   & $\mathbf{D}=\varepsilon_0\mathbf{E}+\mathbf{P}$ \\
+Source prefactor   & $4\pi/c^2$ & $\mu_0 = 1/\varepsilon_0c^2$ \\
+Intensity          & $I=\dfrac{n_0c}{8\pi}|\mathcal{E}|^2$
+                   & $I=\dfrac{\varepsilon_0 n_0 c}{2}|\mathcal{E}|^2$ \\[0.6em]
+Nonlinear index    & $n_2=\dfrac{12\pi^2\chi^{(3)}}{n_0^2c}$
+                   & $n_2=\dfrac{3\chi^{(3)}}{4\varepsilon_0n_0^2c}$ \\[0.6em]
+Cross section      & $\sigma=\dfrac{4\pi e^2}{k_0c^2m_{\text{eff}}}
+                              \dfrac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}$
+                   & $\sigma=\dfrac{k_0e^2}{n_0^2\omega_0^2\varepsilon_0m_{\text{eff}}}
+                              \dfrac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}$ \\[0.6em]
+Kerr term          & $iK_0n_2\hat T^2[I\mathcal{E}]$
+                   & $iK_0n_2\hat T^2[I\mathcal{E}]$ \quad(identical) \\
+Ionization term    & $-\tfrac12\hat T[U_iW_{\text{PI}}/I]\mathcal{E}$
+                   & identical \\
+Plasma term        & $-\tfrac{\sigma}{2}(1+i\omega_0\tau_c)\rho\mathcal{E}$
+                   & identical \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Points to check in the Gaussian document}
+
+Collected here for convenience; each is also flagged in place above.
+
+\begin{enumerate}[leftmargin=1.6em]
+\item \textbf{The section ``The Lorentz model for STE'' is a verbatim copy of the
+Drude section.} Everything after the hydrogenic-exciton introduction repeats the
+free-electron derivation word for word, including the sentence ``The density of
+current created by a plasma of density $\rho$'' and the final boxed equation.
+The Lorentz-oscillator derivation itself (bound resonance at $\omega_{tr}$,
+giving $\Delta n \propto +\rho_s/(\omega_{tr}^2-\omega^2)$ with a
+\emph{positive} sign, opposite to Drude) is missing. This is the one substantive
+gap rather than a typo.
+
+\item \textbf{$\mathbf{J}_{\text{STE}}$ appears in the wave equation but not in
+Amp\`ere's law}, where only $\mathbf{J}_{\text{ions}}$ and
+$\mathbf{J}_{\text{plasma}}$ are listed.
+
+\item \textbf{$\nabla\times\tilde{\mathbf H}=\nabla\times\tilde{\mathbf B}$}
+should be flagged as assuming $\mu=1$.
+
+\item \textbf{Raman drive written twice}, once as $\Omega^2|\mathcal{E}|^2$ and
+once as $\Omega^2 I$; the $Q$ substitution is also duplicated.
+
+\item \textbf{Poynting theorem} written $\partial_t u+\nabla S$; should be
+$\nabla\!\cdot\!\mathbf{S}$.
+
+\item \textbf{Section heading ``Comparison with''} is incomplete.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{rothenberg1992}
+J.E. Rothenberg,
+\textit{Space--time focusing: breakdown of the slowly varying envelope
+approximation in the self-focusing of femtosecond pulses},
+Opt. Lett. 17, 1340--1342 (1992).
+
+\bibitem{gaeta2000}
+A.L. Gaeta,
+\textit{Catastrophic collapse of ultrashort pulses},
+Phys. Rev. Lett. 84, 3582 (2000).
+
+\bibitem{couairon2007}
+A. Couairon, A. Mysyrowicz,
+\textit{Femtosecond filamentation in transparent media},
+Phys. Rep. 441, 47--189 (2007).
+
+\bibitem{marburger1975}
+J.H. Marburger,
+\textit{Self-focusing: Theory},
+Prog. Quantum Electron. 4, 35--110 (1975).
+\end{thebibliography}
+
+\end{document}

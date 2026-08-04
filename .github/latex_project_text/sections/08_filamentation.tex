@@ -54,11 +54,18 @@ The propagation of femtosecond laser pulses in transparent dielectrics such as $
 \end{figure}
 
 
-The critical power $P_{cr}$ follows from the balance between the nonlinear self-focusing effect and diffraction. For a Gaussian beam, it is given by:
+The critical power $P_{cr}$ follows from the balance between the nonlinear self-focusing effect and diffraction. For a Gaussian beam, it is given by~\cite{marburger1975}:
 \begin{equation}
     P_{cr} = \frac{3.77 \lambda_0^2}{8 \pi n_0 n_2},
 \end{equation}
-where $\lambda_0$ is the laser wavelength, $n_0$ the linear refractive index, and $n_2$ the nonlinear index coefficient.
+where $\lambda_0$ is the laser wavelength, $n_0$ the linear refractive index, and $n_2$ the nonlinear index coefficient. The numerical factor is $3.77$ for a Gaussian beam and $3.72$ for the Townes profile, for which diffraction and self-focusing balance exactly.
+
+Above threshold, the distance at which an unopposed beam would collapse is given by the semi-empirical formula fitted to numerical solutions of the nonlinear Schr\"odinger equation by Dawes and Marburger~\cite{dawes1969,marburger1975}:
+\begin{equation}
+    \label{eq:marburger}
+    L_c = \frac{0.367\, L_{DF}}{\sqrt{\big[(P_{in}/P_{cr})^{1/2} - 0.852\big]^2 - 0.0219}},
+\end{equation}
+where $L_{DF} = k_0 w_0^2 / 2$ is the Rayleigh length. For an externally focused beam of focal length $f$, the collapse distance shortens according to $L_{c,f}^{-1} = L_c^{-1} + f^{-1}$. Equation~\eqref{eq:marburger} is what sets the position of the nonlinear focus in the simulations, before plasma defocusing arrests the collapse.
 
 For fused silica, typical values at $\lambda_0 = 800 \text{ nm}$ are $n_0 \approx 1.45$ and $n_2 \approx 2.4 \times 10^{-20} \text{ m}^2/\text{W}$, a value measured by Taylor et al. and reported in the reference compilation of Milam~\cite{milam1998}. Using these values, we calculate $P_{cr} \approx 2.8 \text{ MW}$, consistent with the $1.98$ to $2.5\text{ MW}$ reported respectively in~\cite{PhysRevB.71.125435} and~\cite{kandidov2009} for fused silica at this wavelength. At $\lambda_0 = 1030 \text{ nm}$, since no measurement exists exactly at this wavelength, we use the closest value available in the literature, $n_2 \approx 2.74 \times 10^{-20} \text{ m}^2/\text{W}$ at $1053\text{ nm}$~\cite{milam1998}, which gives $P_{cr} \approx 4.0 \text{ MW}$.
 
