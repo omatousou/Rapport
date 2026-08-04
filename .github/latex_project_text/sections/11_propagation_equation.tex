@@ -7,10 +7,10 @@ Before describing how the simulation code is built, we assemble the full envelop
 Following the same derivation as in Section~6, the electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the resulting propagation equation used in the code reads:
 \begin{align}
 \label{eq:master_propagation}
-\frac{\partial u}{\partial z} =\;
-&\underbrace{\frac{i}{2k_0}\,\hat{U}^{-1}\nabla_\perp^2 u}_{\text{diffraction + space-time focusing}}
+\hat{U}\,\frac{\partial u}{\partial z} =\;
+&\underbrace{\frac{i}{2k_0}\nabla_\perp^2 u}_{\text{diffraction}}
 \;+\;
-\underbrace{i\,\hat{D}\,u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
+\underbrace{i\,\hat{D}\,\hat{U}\,u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
 \text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 u}} \nonumber\\[4pt]
 &+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)\,|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
 &+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}\,f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
@@ -32,11 +32,19 @@ where $k(\omega)$ is evaluated from the Sellmeier relation rather than truncated
 
 Three points in this equation deserve to be stated explicitly, because each of them is a place where a plausible-looking alternative would be wrong.
 
-First, the diffraction term carries $\hat{U}^{-1}$, not a bare $1/2k_0$. The effective diffraction wavenumber is $k_0\hat{U}(\Omega)$ rather than a fixed $k_0$, which is what couples the transverse and temporal dynamics and is known as space-time focusing. Keeping $\hat{T}^2$ on the Kerr term while dropping $\hat{U}^{-1}$ here would overestimate self-steepening by roughly a factor of two, since the physically meaningful combination is $\hat{T}^2/\hat{U}\simeq\hat{T}$: for fused silica at $800\ \text{nm}$, $n_g/n_0=1.0095$, so the two operators agree to within one percent and the literature form with a single $\hat{T}$ is recovered exactly when both are kept.
+First, $\hat{U}$ sits in front of $\partial/\partial z$, and the transverse Laplacian is bare. This is the form used by Couairon et al.~\cite{PhysRevB.71.125435}, whose Eq.~(2) is introduced with exactly that wording: the equation accounts for space-time focusing \emph{due to the presence of the operator $\hat{U}$ in front of $\partial/\partial z$}. The reason to prefer it over the algebraically equivalent form obtained by dividing through by $\hat{U}$ is that it contains no inverse operator, so there is no ambiguity about which terms $\hat{U}$ acts on. If one does divide by $\hat{U}$, it must be applied to \emph{every} term on the right-hand side, giving
+\begin{equation}
+\label{eq:master_divided}
+\frac{\partial u}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 u + i\hat{D}u
+ + \hat{U}^{-1}\Big\{\text{Kerr} + \text{Raman} + \text{ionization} + \text{plasma} + \text{STE}\Big\},
+\end{equation}
+where $\hat{U}$ cancels on the dispersion term alone. Since $\hat{U}\simeq\hat{T}$ to within one percent for fused silica at $800\ \text{nm}$ ($n_g/n_0=1.0095$), the Kerr operator in that form becomes $\hat{U}^{-1}\hat{T}^2\simeq\hat{T}$ and the ionization operator becomes $\hat{U}^{-1}\hat{T}\simeq1$, which is how the single-$\hat{T}$ expressions of the review literature arise. Applying $\hat{U}^{-1}$ to the Laplacian only, while leaving $\hat{T}^2$ on the Kerr term, is \emph{not} one of these two forms and leaves every nonlinear term with one power of $\hat{T}$ too many.
 
 Second, the depletion factor is the dimensionless $1-N/N_{at}$, not $N_{at}-N$. The Keldysh rate $W_{PI}$ returned by the lookup table is already a volumetric rate in $\text{cm}^{-3}\text{s}^{-1}$, so multiplying it by a density would leave the term with an extra $\text{cm}^{-3}$. The alternative convention, in which $W_{PI}$ is a per-atom rate in $\text{s}^{-1}$ multiplied by $N_{at}-N$, is equally valid but is not the quantity the code computes.
 
 Third, the group delay $k'_\omega\Omega$ does not appear as a separate term: it has been absorbed into $\hat{D}$, because the code works in the retarded frame and subtracts it inside \texttt{delta\_k}. Writing it again outside would count it twice.
+
+\authornote{The solver currently sits between the two forms above. Its linear half step implements Eq.~\eqref{eq:master_divided} correctly, applying \texttt{inv\_U\_op} to the Laplacian and leaving \texttt{delta\_k} bare, but its nonlinear step applies $\hat{T}^2$ and $\hat{T}$ without the accompanying $\hat{U}^{-1}$, i.e. the numerators of form~\eqref{eq:master_propagation} with the denominator of neither. Every nonlinear term therefore carries a spurious factor $\hat{U}=1+\Omega/\omega_0$. This is $0.3\%$ for the unbroadened input pulse, but reaches a factor of two on the far blue wing of a strongly self-phase-modulated spectrum, which is exactly where self-steepening is measured. The figures produced before this is fixed remain valid for the pulse core and for every effect that does not depend on the far spectral wings.}
 
 \subsection{Where the Self-Steepening Operator Comes From, and Why It Is Squared on Some Terms}
 
