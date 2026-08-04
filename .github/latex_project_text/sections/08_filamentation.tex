@@ -1,0 +1,80 @@
+\subsection{Filamentation}
+
+The propagation of femtosecond laser pulses in transparent dielectrics such as $\mathrm{SiO}_2$ can lead to the formation of filaments. This self guided mecanism originate from a dynamic balance between Kerr self-focusing and plasma defocusing. This phenomenon occurs when the input power exceeds a critical value, denoted $P_{cr}$, is illustrated in Figure~\ref{fig:filamentation_schematic}.
+
+\begin{figure}[h!]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[>=stealth]
+        \def\xend{15}
+        \def\ymax{4}
+
+        \draw[dash dot, thin] (0,0) -- (\xend,0) [->];
+
+        \draw[very thick, dashed] (0, \ymax) .. controls (5, 3.5) and (10, 3.5) .. (\xend, \ymax);
+        \draw[very thick, dashed] (0, -\ymax) .. controls (5, -3.5) and (10, -3.5) .. (\xend, -\ymax);
+
+        \draw[very thick] (0, \ymax)
+            to[out=-22, in=170] (4.2, 0.6)
+            to[out=-10, in=180] (6.5, 1.3)
+            to[out=0, in=170]   (9.0, 0.45)
+            to[out=-10, in=180] (11.5, 1.1)
+            to[out=0, in=170]   (14.0, 0.5)
+            to[out=-10, in=180] (\xend, 0.9);
+
+        \draw[very thick] (0, -\ymax)
+            to[out=22, in=-170] (4.2, -0.6)
+            to[out=10, in=-180] (6.5, -1.3)
+            to[out=0, in=-170]  (9.0, -0.45)
+            to[out=10, in=-180] (11.5, -1.1)
+            to[out=0, in=-170]  (14.0, -0.5)
+            to[out=10, in=-180] (\xend, -0.9);
+        \draw[fill=white] (9.3, -3.7 ) ellipse (2 and 0.50);
+        \draw[fill=yellow, thick] (4.2, 0) ellipse (1.0 and 0.75);
+        \draw[fill=yellow, thick] (9.0, 0) ellipse (0.9 and 0.6);
+        \draw[fill=yellow, thick] (14.2, 0) ellipse (0.85 and 0.55);
+
+        \node[above] (sf) at (5.3, 2.5) {\Large Self-focusing};
+        \draw[->, thick] (sf.south) -- (5.6, 1.25);
+
+        \node[above] (df) at (10.2, 2.3) {\Large Defocusing};
+        \draw[->, thick] (df.south) -- (8.0, 1.1);
+
+        \node[below] (plasma_text) at (9.0, -1.8) {\huge plasma};
+        \draw[->, thick] (plasma_text.north west) -- (4.8, -0.4);
+        \draw[->, thick] (plasma_text.north) -- (9.0, -0.45);
+        \draw[->, thick] (plasma_text.north east) -- (13.5, -0.4);
+
+        \draw[decorate, decoration={brace, amplitude=9pt, mirror}, thick]
+            (3.2, -2.7) -- (15.5, -2.7) node[midway, below=15pt] {\huge Filament};
+    \end{tikzpicture}%
+    }
+    \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing. Each collapse is arrested before catastrophic self-focusing by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take over again, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament.}
+    \label{fig:filamentation_schematic}
+\end{figure}
+
+
+The critical power $P_{cr}$ follows from the balance between the nonlinear self-focusing effect and diffraction. For a Gaussian beam, it is given by~\cite{marburger1975}:
+\begin{equation}
+    P_{cr} = \frac{3.77 \lambda_0^2}{8 \pi n_0 n_2},
+\end{equation}
+where $\lambda_0$ is the laser wavelength, $n_0$ the linear refractive index, and $n_2$ the nonlinear index coefficient. The numerical factor is $3.77$ for a Gaussian beam and $3.72$ for the Townes profile, for which diffraction and self-focusing balance exactly.
+
+Above threshold, the distance at which an unopposed beam would collapse is given by the semi-empirical formula fitted to numerical solutions of the nonlinear Schr\"odinger equation by Dawes and Marburger~\cite{dawes1969,marburger1975}:
+\begin{equation}
+    \label{eq:marburger}
+    L_c = \frac{0.367\, L_{DF}}{\sqrt{\big[(P_{in}/P_{cr})^{1/2} - 0.852\big]^2 - 0.0219}},
+\end{equation}
+where $L_{DF} = k_0 w_0^2 / 2$ is the Rayleigh length. For an externally focused beam of focal length $f$, the collapse distance shortens according to $L_{c,f}^{-1} = L_c^{-1} + f^{-1}$. Equation~\eqref{eq:marburger} is what sets the position of the nonlinear focus in the simulations, before plasma defocusing arrests the collapse.
+
+For fused silica, typical values at $\lambda_0 = 800 \text{ nm}$ are $n_0 \approx 1.45$ and $n_2 \approx 2.4 \times 10^{-20} \text{ m}^2/\text{W}$, a value measured by Taylor et al. and reported in the reference compilation of Milam~\cite{milam1998}. Using these values, we calculate $P_{cr} \approx 2.8 \text{ MW}$, consistent with the $1.98$ to $2.5\text{ MW}$ reported respectively in~\cite{PhysRevB.71.125435} and~\cite{kandidov2009} for fused silica at this wavelength. At $\lambda_0 = 1030 \text{ nm}$, since no measurement exists exactly at this wavelength, we use the closest value available in the literature, $n_2 \approx 2.74 \times 10^{-20} \text{ m}^2/\text{W}$ at $1053\text{ nm}$~\cite{milam1998}, which gives $P_{cr} \approx 4.0 \text{ MW}$.
+
+The critical power is related to the laser intensity $I$ through the beam cross section. For a Gaussian beam of radius $w_0$, the peak intensity is:
+\begin{equation}
+    I_0 = \frac{2 P}{\pi w_0^2}.
+\end{equation}
+
+In the tight focusing experiments of~\cite{PhysRevB.71.125435}, the measured beam radius at focus ranges from $0.7$ to $4.8\ \mu$m depending on the objective used, with $w_0 = 1.1\ \mu$m for the $20\times$, NA $=0.5$ objective retained in that reference. Taking this radius with $P = P_{cr} \approx 2.8\text{ MW}$, we obtain an intensity of order $1.5 \times 10^{14} \text{ W/cm}^2$, higher than the clamping intensity of about $5 \times 10^{13} \text{ W/cm}^2$ actually measured in~\cite{PhysRevB.71.125435}. This gap is expected. $I_0 = 2P/(\pi w_0^2)$ assumes linear focusing all the way down to the radius $w_0$, whereas in reality the defocusing produced by the plasma generated during propagation limits the peak intensity well before the beam reaches this radius, which is why the observed clamping intensity remains lower than this simple geometric estimate.
+
+
+\authornote{Once \texttt{notebooks/term\_ablation\_study.ipynb} from \texttt{deliverable~(3)} has actually been run, this is where the resulting figures belong. Specifically: peak intensity versus $z$ (reproducing Fig.~8 of~\cite{PhysRevB.71.125435}) and the fluence contour maps with the FWHM/2 curve versus $z$ (reproducing Fig.~7) both belong right here, at the end of this subsection, since they directly test the $P_{cr}$ and clamping intensity claims just discussed. The on-axis electron density versus $z$ (Fig.~9) fits better at the end of Section~11.2 (Carrier Density Rate Equations), since it is a direct check of the rate equations rather than of the beam envelope. The comparison of free versus trapped carriers and the pulse intensity at fixed $z$ (Fig.~13) fits best in Section~10, next to the self-trapped exciton discussion. Send me the generated PNGs or the notebook output once you have them and I will place them at these exact spots with proper captions.}
