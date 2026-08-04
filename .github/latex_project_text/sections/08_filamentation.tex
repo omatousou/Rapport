@@ -140,18 +140,38 @@ Figures~\ref{fig:fig7_fluence_contours} and~\ref{fig:fig8_peak_intensity} establ
     \label{fig:comparison_fig7_cycles}
 \end{figure}
 
-Two things stand in the way of a clean picture of several full cycles: the box needs to extend far enough past the first collapse for a second, third, ... cycle to actually develop and be resolved, and $z$ needs to be sampled finely enough near each collapse that the rapid, closely spaced pinches visible above are not aliased together into the kind of wiggle seen in Figure~\ref{fig:comparison_fig7_cycles}. Neither is a change of physics, only of box size and grid resolution.
+Two things stand in the way of a clean picture of several full cycles: the box needs to extend far enough past the first collapse for a second, third, ... cycle to actually develop and be resolved, and $z$ needs to be sampled finely enough near each collapse that the rapid, closely spaced pinches visible above are not aliased together into the kind of wiggle seen in Figure~\ref{fig:comparison_fig7_cycles}. Neither is a change of physics, only of box size and grid resolution -- but the two grid axes do not scale the same way, which is the reason the proposal below is more than just ``make the box bigger''.
 
-\authornote{This is a concrete, ready-to-run proposal rather than a finished figure, since I do not have GPU access in this environment to run it myself. Starting from the same physical parameters as \texttt{BASE\_PARAMS} (which is what produces Figures~\ref{fig:fig8_peak_intensity} and~\ref{fig:comparison_fig7_cycles} above), extend the box well past the first collapse and rescale \texttt{Nz} to keep the same grid spacing $\Delta z$ rather than spreading the existing $6000$ points over a much longer distance, which would blur the very cycles this run is meant to resolve (code below). The diagnostic to look for is straightforward: additional local maxima of the peak-intensity curve above $I_{clamp}$ beyond the first one, each one a further refocusing event, at increasing spacing if the reservoir is being progressively depleted. If $1.1\ \mu\text{J}$ turns out not to leave enough energy in the reservoir for a clearly resolved second cycle within a reasonable box, the next thing to try is more energy (e.g.\ the $1.25\ \mu\text{J}$ curve of Figure~\ref{fig:fig8_peak_intensity}, already the most clearly above threshold of the six), not a different mechanism -- multiple cycles from a single, radially symmetric input beam are a question of how far above $P_{cr}$ and how long a box, not of adding new physics to the model. Send me the resulting \texttt{result.npz} once you have it and I will replace this note with the actual figure and its reading.}
+\authornote{This is a concrete, ready-to-run proposal rather than a finished figure, since I do not have GPU access in this environment to run it myself. It replaces the earlier, more timid version of this note (a $600\ \mu\text{m}$ box) with the $3\ \text{mm}$, higher-power run actually requested, and works out the grid sizing that makes it tractable rather than just multiplying \texttt{Nz} by a large number.
 
-\begin{lstlisting}[language=Python, caption={Proposed extended-box run, dropped into the notebook right after \texttt{BASE\_PARAMS} is defined.}]
-CYCLES_PARAMS = dict(BASE_PARAMS)
-CYCLES_PARAMS.update(
-    end=600e-6,                 # was 175e-6 -- several L_c,f past the first collapse
-    Nz=int(6000 * (600e-6 - (-75e-6)) / (175e-6 - (-75e-6))),  # same dz as BASE_PARAMS
+\textit{Longitudinal grid.} Starting from \texttt{BASE\_PARAMS} ($\Delta z = (175-(-75))\ \mu\text{m}/6000 = 41.7\ \text{nm}$), covering $z\in[0,3000]\ \mu\text{m}$ at the same $\Delta z$ needs $\texttt{Nz} = 3000\ \mu\text{m}/41.7\ \text{nm} \approx 72000$ steps, not $6000$ spread thin over $17\times$ the distance, which would blur the very cycles this run is meant to resolve.
+
+\textit{Radial grid -- the part that does not scale for free.} A literal application of the margin logic already used for \texttt{BASE\_PARAMS} (Section~12: $R_{max}$ set to a few times the \emph{linearly diffracted} beam width at the far edge of the box) would ask for $R_{max}\sim 4\times w_0\sqrt{1+(3000\ \mu\text{m}/z_f)^2}\approx 2\ \text{mm}$ at $z_f\approx6.9\ \mu\text{m}$, and, to keep the same radial spacing $\Delta r=36.7\ \text{nm}$ as \texttt{BASE\_PARAMS}, \texttt{Nr}$\,\approx 55000$. That is not just slow, it is not implementable with this solver's radial propagator: \texttt{grids.py} builds a dense \texttt{Nr}$\,\times\,$\texttt{Nr} quasi-discrete Hankel transform matrix (\texttt{Y} in \texttt{build\_grids}), applied by matrix multiplication at every $z$-step, so its memory footprint grows as $\texttt{Nr}^2$ ($55000^2\times8\ \text{bytes}\approx24\ \text{GB}$ for that matrix alone) and its cost per step likewise -- an FFT-based transform would not have this problem, a Hankel one does. The way out is physical, not numerical: that $2\ \text{mm}$ estimate is the spread of a beam that free-diffracts the whole way, which is exactly what a beam well above $P_{cr}$ does \emph{not} do -- intensity clamping keeps pulling the core back to within a few $w_0$ at every cycle, and only a modest halo of shed reservoir needs headroom beyond that between collapses, not the fully diffracted width $3\ \text{mm}$ downstream. Below, $R_{factor}$ is raised from $100$ to $150$ ($R_{max}=165\ \mu\text{m}$, up from $110\ \mu\text{m}$) with \texttt{Nr} raised in proportion to $4500$ to keep $\Delta r$ fixed -- extra headroom for the halo without an intractable transform matrix. If the run turns out to still be losing energy at the absorbing edge (check \texttt{absorbed\_rz} at $r=R_{max}$), that is the signal to raise $R_{factor}$ further, in modest steps, not to jump straight back to the linear estimate.
+
+\textit{Power.} With \texttt{BASE\_PARAMS}' own material ($n_2=3.54\times10^{-20}\ \text{m}^2/\text{W}$), Eq.~\eqref{eq:marburger}'s $P_{cr}\approx1.87\ \text{MW}$, and the $1.1\ \mu\text{J}$, $160\ \text{fs}$ pulse used throughout this section already sits at $P_{in}/P_{cr}\approx3.5$ -- above threshold, but not by a wide margin once the reservoir starts being spent on each cycle. \texttt{energy\_uJ} is raised to $3.3\ \mu\text{J}$ below ($3\times$ \texttt{BASE\_PARAMS}), $P_{in}/P_{cr}\approx10.4$, to leave enough reservoir for several cycles to develop before it is depleted; if that still is not enough, the next step is more energy still, not a different mechanism, exactly as noted for the earlier, shorter proposal.
+
+\textit{Output size.} At $\texttt{Nz}=72000$, keeping the full $(z,r,t)$ diagnostic cube (as \texttt{BASE\_PARAMS} does, for Figure~\ref{fig:fig13_free_vs_trapped}) would produce a multi-gigabyte \texttt{result.npz} for no figure in this section that needs it; \texttt{rho\_t\_stride=0} below disables it, the same choice already made for \texttt{PAPER\_PARAMS} and \texttt{BULGAKOVA\_PARAMS} above.
+
+The diagnostic to look for is unchanged: additional local maxima of the peak-intensity curve above $I_{clamp}$ beyond the first one, each one a further refocusing event, at increasing spacing if the reservoir is being progressively depleted. Send me the resulting \texttt{result.npz} once you have it and I will replace this note with the actual figure and its reading.}
+
+\begin{lstlisting}[language=Python, caption={Proposed $3\ \text{mm}$, higher-power, extended-box run, dropped into the notebook right after \texttt{BASE\_PARAMS} is defined.}]
+LONGBOX_PARAMS = dict(BASE_PARAMS)
+LONGBOX_PARAMS.update(
+    begin=0.0,                  # entrance face, was -75e-6 (linear focus)
+    end=3000e-6,                # was 175e-6 -- 3 mm to fit several refocusing cycles
+    Nz=72000,                   # (3000e-6 - 0.0) / 41.7e-9  -- same dz as BASE_PARAMS
+    R_factor=150.0,             # was 100.0 -- more halo headroom per cycle
+    Nr=4500,                    # 150*w0 / 36.7e-9 -- same dr as BASE_PARAMS, NOT the
+                                 # ~55000 a literal linear-diffraction margin would need
+                                 # (Nr x Nr dense Hankel matrix -- see note above)
+    energy_uJ=3.3,               # 3x BASE_PARAMS -- P_in/P_cr ~ 10.4 instead of ~3.5
+    ckpt_every=1000,             # fewer checkpoints over 72000 steps
+    rho_t_stride=0,              # disable the (z,r,t) cube -- not needed here, and
+                                 # would otherwise dominate the output file size
 )
-cycles_result = run(out_dir=str(OUT_ROOT / "cycles"), **CYCLES_PARAMS)
-plot_fig8_peak_intensity({"cycles": cycles_result}, xlim=(-75, 600))
+longbox_result = run(out_dir=str(OUT_ROOT / "longbox_3mm"), **LONGBOX_PARAMS)
+plot_fig8_peak_intensity({"longbox_3mm": longbox_result}, xlim=(0, 3000))
+plot_fig7_fluence_contours(longbox_result, label="longbox_3mm", levels=(1.0, 2.0, 3.0))
 \end{lstlisting}
 
 \FloatBarrier
