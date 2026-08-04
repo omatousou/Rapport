@@ -6,16 +6,37 @@ Before describing how the simulation code is built, we assemble the full envelop
 
 Following the same derivation as in Section~6, the electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the resulting propagation equation used in the code reads:
 \begin{align}
+\label{eq:master_propagation}
 \frac{\partial u}{\partial z} =\;
-&\underbrace{\frac{i}{2k_0}\nabla_\perp^2 u}_{\text{diffraction}}
-\;-\;
-\underbrace{\Big[k'_\omega\frac{\partial}{\partial t}+\frac{i k''_\omega}{2}\frac{\partial^2}{\partial t^2}+\dots\Big]u}_{\text{dispersion, all orders in the code}} \nonumber\\[4pt]
-&+\;\underbrace{i\!\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)^{\!2}\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
-&+\;\underbrace{i\!\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)^{\!2}\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
-&-\;\underbrace{\left(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\right)\frac{U_i\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2}(N_{at}-N)\,u}_{\text{photoionization energy loss}}
+&\underbrace{\frac{i}{2k_0}\,\hat{U}^{-1}\nabla_\perp^2 u}_{\text{diffraction + space-time focusing}}
+\;+\;
+\underbrace{i\,\hat{D}\,u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
+\text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 u}} \nonumber\\[4pt]
+&+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)\,|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
+&+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}\,f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
+&-\;\underbrace{\hat{T}\,\frac{U_i\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2}\left(1-\frac{N}{N_{at}}\right)u}_{\text{photoionization energy loss}}
 \;-\;\underbrace{\frac{\sigma_\omega}{2}\big(1+i\omega_0\tau_c\big)N\,u}_{\text{plasma absorption and defocusing}} \nonumber\\[4pt]
 &+\;\underbrace{i\,\frac{\omega_0}{2n_0c\,\rho_c}\frac{\omega_0^2}{\omega_{tr}^2-\omega_0^2}\,N_{STE}\,u}_{\text{bound STE polarizability, new in Section~11.4}}
 \end{align}
+
+with, in the retarded frame $t\to t-z/v_g$ and writing $\Omega=\omega-\omega_0$,
+\begin{equation}
+\hat{T} = 1+\frac{i}{\omega_0}\frac{\partial}{\partial t} \;\longleftrightarrow\; 1+\frac{\Omega}{\omega_0},
+\qquad
+\hat{U} = 1+\frac{i k'_\omega}{k_0}\frac{\partial}{\partial t} \;\longleftrightarrow\; 1+\frac{k'_\omega\Omega}{k_0},
+\end{equation}
+\begin{equation}
+\hat{D} \;\longleftrightarrow\; k(\omega)-k_0-k'_\omega\Omega ,
+\end{equation}
+where $k(\omega)$ is evaluated from the Sellmeier relation rather than truncated at any order.
+
+Three points in this equation deserve to be stated explicitly, because each of them is a place where a plausible-looking alternative would be wrong.
+
+First, the diffraction term carries $\hat{U}^{-1}$, not a bare $1/2k_0$. The effective diffraction wavenumber is $k_0\hat{U}(\Omega)$ rather than a fixed $k_0$, which is what couples the transverse and temporal dynamics and is known as space-time focusing. Keeping $\hat{T}^2$ on the Kerr term while dropping $\hat{U}^{-1}$ here would overestimate self-steepening by roughly a factor of two, since the physically meaningful combination is $\hat{T}^2/\hat{U}\simeq\hat{T}$: for fused silica at $800\ \text{nm}$, $n_g/n_0=1.0095$, so the two operators agree to within one percent and the literature form with a single $\hat{T}$ is recovered exactly when both are kept.
+
+Second, the depletion factor is the dimensionless $1-N/N_{at}$, not $N_{at}-N$. The Keldysh rate $W_{PI}$ returned by the lookup table is already a volumetric rate in $\text{cm}^{-3}\text{s}^{-1}$, so multiplying it by a density would leave the term with an extra $\text{cm}^{-3}$. The alternative convention, in which $W_{PI}$ is a per-atom rate in $\text{s}^{-1}$ multiplied by $N_{at}-N$, is equally valid but is not the quantity the code computes.
+
+Third, the group delay $k'_\omega\Omega$ does not appear as a separate term: it has been absorbed into $\hat{D}$, because the code works in the retarded frame and subtracts it inside \texttt{delta\_k}. Writing it again outside would count it twice.
 
 \subsection{Where the Self-Steepening Operator Comes From, and Why It Is Squared on Some Terms}
 
@@ -27,11 +48,11 @@ The plasma current $J_{plasma}$ also comes from a single time derivative, so by 
 
 Physically, $T$ being larger than one on the blue side of the spectrum ($\Omega>0$) and smaller than one on the red side is exactly the same statement as the shock term of Section~6 pulling energy toward the trailing edge of the pulse: whichever nonlinear term this operator multiplies, it systematically favors the blue shifted, trailing part of the spectrum over the red shifted, leading part, which is the frequency domain signature of the group velocity depending on intensity. Squaring the operator on the Kerr term simply means this asymmetry is applied twice, once for each power of $\omega$ that the second time derivative of $P_{NL}$ contributes, and is why the Kerr induced spectral asymmetry is normally the dominant contribution to self-steepening compared to the single power of $T$ on photoionization loss.
 
-Each underbraced term maps onto a specific piece of the code. The diffraction term is applied by \texttt{LinearOperator.half\_diffraction}, in the quasi discrete Hankel basis described in Section~12. The dispersion term is applied by \texttt{LinearOperator.half\_dispersion}. Rather than truncating the Taylor expansion of $k(\omega)$ at second order as we did analytically in the derivation of Section~6, the code evaluates $k(\omega)$ directly from the Sellmeier relation for every frequency component and subtracts the linear term $k_0+k'_\omega\Omega$, so the operator \texttt{delta\_k} used in the code already contains dispersion to all orders, not just group velocity dispersion.
+Each underbraced term maps onto a specific piece of the code. Diffraction and dispersion are applied together by \texttt{LinearOperator.half\_linear}, in the quasi discrete Hankel basis described in Section~12. They are combined into a single step rather than split into two because both are diagonal once expressed in (Hankel radial mode, temporal frequency $\Omega$) space, so they commute and applying them together is exact, at the cost of one FFT/IFFT pair per call instead of two. The space-time focusing factor enters this same step as \texttt{inv\_U\_op} $=1/\hat{U}(\Omega)$ multiplying the transverse Laplacian, and reduces to the identity when \texttt{enable\_space\_time\_focusing} is off. Rather than truncating the Taylor expansion of $k(\omega)$ at second order as we did analytically in the derivation of Section~6, the code evaluates $k(\omega)$ directly from the Sellmeier relation for every frequency component and subtracts the linear term $k_0+k'_\omega\Omega$, so the operator \texttt{delta\_k} used in the code already contains dispersion to all orders, not just group velocity dispersion.
 
 The Kerr, self-steepening, and Raman terms are computed together in \texttt{NonlinearOperator.split}. The instantaneous part $(1-f_R)|u|^2$ and the delayed Raman part $f_R\,(R * |u|^2)$, obtained by convolving the intensity with the retarded Raman response function $R(t)$, are summed before multiplying by $u$, which is why they are written here as two separate lines rather than as two independent physical effects. The self-steepening operator $\big(1+\tfrac{i}{\omega_0}\partial_t\big)$ is applied in the frequency domain as \texttt{T\_op} $= 1+\Omega/\omega_0$, following the same operator introduced by Mao et al.~\cite{mao2004} for free carrier absorption and used identically here for the Kerr response.
 
-The photoionization loss term removes energy from the field at exactly the rate needed to promote $N_{at}-N$ remaining neutral centers to the conduction band at the Keldysh rate $W_{PI}$, consistent with the ionization loss derivation of Section~11.3 below. $N_{at}$ is the total density of ionizable sites (\texttt{rho\_max} in the code) and $N$ is the current free electron density. The plasma absorption and plasma induced defocusing are grouped into a single term above since the code computes them together as the real and imaginary parts of the same Drude response derived in Section~7, with $\sigma_\omega$ the inverse Bremsstrahlung cross section already introduced in Section~5.
+The photoionization loss term removes energy from the field at exactly the rate needed to promote electrons to the conduction band at the Keldysh rate $W_{PI}$, throttled by the fraction $1-N/N_{at}$ of ionizable sites still neutral, consistent with the ionization loss derivation of Section~11.3 below. $N_{at}$ is the total density of ionizable sites (\texttt{rho\_max} in the code) and $N$ is the current free electron density; in the code this factor is \texttt{depl\_field = clip(1 - rho/rho\_max, 0, 1)}. The plasma absorption and plasma induced defocusing are grouped into a single term above since the code computes them together as the real and imaginary parts of the same Drude response derived in Section~7, with $\sigma_\omega$ the inverse Bremsstrahlung cross section already introduced in Section~5.
 
 \authornote{The Raman response function $R(t)$ used in the code, with time constants \texttt{tau\_s} and \texttt{tau\_d}, is the standard damped oscillator form used for silica nonlinear optics. If you want the explicit derivation of $R(t)$ from a driven harmonic oscillator model included here, let me know and I will add it with the matching reference.}
 
