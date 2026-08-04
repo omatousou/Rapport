@@ -59,6 +59,7 @@ class NonlinearOperator:
     def __init__(self, cfg: Config, g: dict):
         self.n0, self.Ui, self.f_R = cfg.n0, cfg.Ui, cfg.f_R
         self.T_op, self.R_f, self.invE2 = g["T_op"], g["R_f"], g["invE2"]
+        self.inv_U_nl = g["inv_U_nl"]      # U^-1 for the nonlinear step; see split()
         # kerr_pref is the shared Kerr-phase prefactor; the two flags below
         # gate the instantaneous / Raman *contributions* to kerr_I, not this
         # prefactor, so partial disabling keeps the correct (1-f_R)/f_R weights.
@@ -113,20 +114,34 @@ class NonlinearOperator:
 
         # Couairon 2005 Eq. (4): T-hat^2 multiplies the Kerr bracket but only
         # T-hat^1 multiplies the photoionization-loss term, so the two cannot
-        # share a single transform. The +photo*u added back after the IFFT
-        # cancels the zeroth order of -T*photo*u (that part is already applied
-        # through exp(-alpha*dz/2) in Integrator.step), leaving only the
-        # self-steepening correction -(T-1)*photo*u here -- no double counting.
-        NL_freq = (cp.fft.fft(1j * self.kerr_pref * kerr_I * u, axis=1) * self.T_op**2
-                   - cp.fft.fft(photo * u, axis=1) * self.T_op)
-        rhs = cp.fft.ifft(NL_freq, axis=1) + photo * u
-        if self.en_plasma_defoc:
-            rhs = rhs - self.plasma_pref * (self.plasma_phase - 1.0) * rho * u
+        # share a single transform.
+        #
+        # Eq. (2) of the same paper carries U-hat in front of d/dz, so solving
+        # for du/dz divides the ENTIRE right-hand side by U -- Kerr, ionization,
+        # plasma and the STE polarizability alike, not just the Laplacian that
+        # half_linear already handles. Everything is therefore assembled in
+        # frequency space and multiplied by inv_U_nl in one go. Omitting that
+        # factor while keeping T^2 leaves the self-steepening roughly twice too
+        # strong, since U^-1 T^2 = 1 + 0.99*Omega/w0 whereas T^2 = 1 + 2*Omega/w0.
+        #
+        # The exp(-alpha*dz/2) channel in Integrator.step already applies the
+        # zeroth order of the two dissipative terms, so alpha*u is added back
+        # here and the net contribution to du/dz is exactly ifft(NL_freq*inv_U).
+        # With space-time focusing off inv_U_nl is 1 and this reduces
+        # algebraically to the previous expression.
+        plasma_coeff = ((1.0 if self.en_plasma_absorb else 0.0)
+                        + ((self.plasma_phase - 1.0) if self.en_plasma_defoc else 0.0))
+        # Bound (non-Drude) STE polarizability -- pure phase, no loss: the pump
+        # at 1.55 eV is far below the 4.2 eV STE resonance, so there is no
+        # single-photon STE absorption to account for here.
+        extra = -self.plasma_pref * plasma_coeff * rho * u
         if self.ste_pref and rho_s is not None:
-            # Bound (non-Drude) STE polarizability -- pure phase, no loss:
-            # the pump at 1.55 eV is far below the 4.2 eV STE resonance, so
-            # there is no single-photon STE absorption to account for here.
-            rhs = rhs + 1j * self.ste_pref * rho_s * u
+            extra = extra + 1j * self.ste_pref * rho_s * u
+
+        NL_freq = (cp.fft.fft(1j * self.kerr_pref * kerr_I * u, axis=1) * self.T_op**2
+                   - cp.fft.fft(photo * u, axis=1) * self.T_op
+                   + cp.fft.fft(extra, axis=1))
+        rhs = cp.fft.ifft(NL_freq * self.inv_U_nl, axis=1) + alpha * u
         rhs = cp.nan_to_num(cp.where(absu2 < 1e-30, 0.0 + 0.0j, rhs), nan=0.0, posinf=0.0, neginf=0.0)
         return rhs, alpha
 
