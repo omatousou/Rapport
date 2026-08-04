@@ -1,6 +1,12 @@
 \subsection{Filamentation}
 
-The propagation of femtosecond laser pulses in transparent dielectrics such as $\mathrm{SiO}_2$ can lead to the formation of filaments. This self guided mecanism originate from a dynamic balance between Kerr self-focusing and plasma defocusing. This phenomenon occurs when the input power exceeds a critical value, denoted $P_{cr}$, is illustrated in Figure~\ref{fig:filamentation_schematic}.
+A filament is what happens when a beam that should, by ordinary optics, simply spread out or come to a single focus and diverge again, instead survives as a narrow, high-intensity channel over a distance far longer than that focus would normally allow. It is not a special beam shape prepared in advance: it is a dynamical equilibrium that the beam settles into by itself, between two effects already introduced in this report, self-focusing (Section~6) and plasma defocusing (Section~7), that pull the beam radius in opposite directions. Whether that equilibrium can exist at all is decided by a single number, the input power $P_{in}$ compared to a critical power $P_{cr}$.
+
+\paragraph{Below $P_{cr}$.} Every beam diffracts: even without any nonlinearity, a beam of waist $w_0$ spreads out over a characteristic distance $L_{DF}=k_0w_0^2/2$, the Rayleigh length. The Kerr effect (Section~6) adds a competing, focusing effect: the peak of the beam, where the intensity is highest, sees a slightly higher refractive index than its edges, so the medium acts as a lens that curves back toward the axis. If $P_{in}<P_{cr}$, diffraction always wins in the end, no matter how tightly the beam is focused: self-focusing can make the beam converge somewhat faster than it otherwise would, but it cannot stop the eventual spread. An externally focused beam below $P_{cr}$ still reaches a single geometric focus and diverges past it, exactly as it would with $n_2=0$.
+
+\paragraph{Above $P_{cr}$.} Self-focusing now wins the competition outright. Unopposed, it would pull the beam to a mathematical point of infinite intensity at a finite distance, the collapse singularity of the lossless nonlinear Sch\"odinger equation. That singularity is never physically reached, because long before the beam gets there, the intensity becomes high enough to ionize the medium (photoionization, Section~3, then avalanche, Section~5). The resulting free-electron plasma lowers the refractive index (Section~7) and defocuses the beam, arresting the collapse. This is why the two mechanisms named at the top of this section are always mentioned together: Kerr self-focusing is what drives the beam toward collapse, plasma defocusing is what stops it.
+
+\paragraph{Why this repeats.} Arresting the collapse once would just produce a single very intense flash. What makes a filament is that the arrested beam does not simply diverge for good afterward. Two things happen at once past the point where the plasma pushes the core back outward: the freed core, now below the local threshold for self-focusing, starts to diffract again like an ordinary beam; but it is embedded in the trailing part of a spatially much wider pulse whose power, away from the collapsing core, was never fully consumed. Energy from that surrounding \emph{reservoir} keeps flowing inward, so once the core has diffracted and diluted enough for its power to locally exceed $P_{cr}$ again, self-focusing takes back over and the beam collapses a second time, a little further along $z$. This repeated collapse-arrest-refill cycle, sketched in Figure~\ref{fig:filamentation_schematic}, is the filament: not a single focus, but a sequence of them, each one a full instance of the same Kerr/plasma balance, strung out along the propagation axis and fed by the same reservoir.
 
 \begin{figure}[h!]
     \centering
@@ -45,27 +51,30 @@ The propagation of femtosecond laser pulses in transparent dielectrics such as $
         \draw[->, thick] (plasma_text.north) -- (9.0, -0.45);
         \draw[->, thick] (plasma_text.north east) -- (13.5, -0.4);
 
+        \draw[dotted, thick] (0,-\ymax-0.3) -- (0, \ymax+0.3);
+        \node[below] at (0,-\ymax-0.3) {\footnotesize $z=0$};
+        \draw[dotted, thick] (4.2,-\ymax-0.3) -- (4.2, -0.9);
+        \draw[<->, thick] (0,-\ymax-0.6) -- node[below] {\footnotesize $L_{c}$: first collapse (Eq.~\ref{eq:marburger})} (4.2,-\ymax-0.6);
+        \draw[<->, thick] (4.2,\ymax+0.5) -- node[above] {\footnotesize refocusing cycle} (9.0,\ymax+0.5);
+
         \draw[decorate, decoration={brace, amplitude=9pt, mirror}, thick]
-            (3.2, -2.7) -- (15.5, -2.7) node[midway, below=15pt] {\huge Filament};
+            (3.2, -2.9) -- (15.5, -2.9) node[midway, below=25pt] {\huge Filament};
     \end{tikzpicture}%
     }
-    \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing. Each collapse is arrested before catastrophic self-focusing by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take over again, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament.}
+    \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing, starting from an input beam launched at $z=0$. The first collapse occurs at $z=L_c$, given by Eq.~\eqref{eq:marburger}. Each collapse is arrested before the beam reaches a singular focus by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take back over, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament. Figure~\ref{fig:comparison_fig7_cycles} shows this same sequence of collapses in an actual simulation, rather than as a schematic.}
     \label{fig:filamentation_schematic}
 \end{figure}
 
+\paragraph{Why we compute $P_{cr}$ and $L_c$.} These two numbers are not bookkeeping, they are what makes it possible to plan a simulation, or interpret one, before looking at any output field. $P_{cr}$ answers the qualitative question, will this input beam filament at all, and by how large a margin ($P_{in}/P_{cr}$). $L_c$ answers the quantitative follow-up, where along $z$ will the first collapse happen, which is exactly the information needed to choose how far the simulation box has to extend past the linear focus (the \texttt{end} parameter of \texttt{Config}, see Section~12) for the collapse, and the refocusing cycles that follow it, to actually be inside the simulated domain instead of past its edge.
 
-The critical power $P_{cr}$ follows from the balance between the nonlinear self-focusing effect and diffraction. For a Gaussian beam, it is given by~\cite{marburger1975}:
+
+\subsubsection{Critical Power}
+
+The critical power $P_{cr}$ is the value of $P_{in}$ at which self-focusing and diffraction exactly balance, so that a beam launched with $P_{in}=P_{cr}$ would propagate at fixed radius forever (in the lossless, unopposed model, ignoring plasma). $P_{in}<P_{cr}$: diffraction wins, ordinary propagation. $P_{in}>P_{cr}$: self-focusing wins, collapse, arrested by the plasma as described above. For a Gaussian beam, $P_{cr}$ is given by~\cite{marburger1975}:
 \begin{equation}
     P_{cr} = \frac{3.77 \lambda_0^2}{8 \pi n_0 n_2},
 \end{equation}
-where $\lambda_0$ is the laser wavelength, $n_0$ the linear refractive index, and $n_2$ the nonlinear index coefficient. The numerical factor is $3.77$ for a Gaussian beam and $3.72$ for the Townes profile, for which diffraction and self-focusing balance exactly.
-
-Above threshold, the distance at which an unopposed beam would collapse is given by the semi-empirical formula fitted to numerical solutions of the nonlinear Schr\"odinger equation by Dawes and Marburger~\cite{dawes1969,marburger1975}:
-\begin{equation}
-    \label{eq:marburger}
-    L_c = \frac{0.367\, L_{DF}}{\sqrt{\big[(P_{in}/P_{cr})^{1/2} - 0.852\big]^2 - 0.0219}},
-\end{equation}
-where $L_{DF} = k_0 w_0^2 / 2$ is the Rayleigh length. For an externally focused beam of focal length $f$, the collapse distance shortens according to $L_{c,f}^{-1} = L_c^{-1} + f^{-1}$. Equation~\eqref{eq:marburger} is what sets the position of the nonlinear focus in the simulations, before plasma defocusing arrests the collapse.
+where $\lambda_0$ is the laser wavelength, $n_0$ the linear refractive index, and $n_2$ the nonlinear index coefficient. The numerical factor is $3.77$ for a Gaussian beam and $3.72$ for the Townes profile, the particular (non-Gaussian) radial shape for which diffraction and self-focusing balance exactly at every radius, not just on average.
 
 For fused silica, typical values at $\lambda_0 = 800 \text{ nm}$ are $n_0 \approx 1.45$ and $n_2 \approx 2.4 \times 10^{-20} \text{ m}^2/\text{W}$, a value measured by Taylor et al. and reported in the reference compilation of Milam~\cite{milam1998}. Using these values, we calculate $P_{cr} \approx 2.8 \text{ MW}$, consistent with the $1.98$ to $2.5\text{ MW}$ reported respectively in~\cite{PhysRevB.71.125435} and~\cite{kandidov2009} for fused silica at this wavelength. At $\lambda_0 = 1030 \text{ nm}$, since no measurement exists exactly at this wavelength, we use the closest value available in the literature, $n_2 \approx 2.74 \times 10^{-20} \text{ m}^2/\text{W}$ at $1053\text{ nm}$~\cite{milam1998}, which gives $P_{cr} \approx 4.0 \text{ MW}$.
 
@@ -74,7 +83,25 @@ The critical power is related to the laser intensity $I$ through the beam cross 
     I_0 = \frac{2 P}{\pi w_0^2}.
 \end{equation}
 
-In the tight focusing experiments of~\cite{PhysRevB.71.125435}, the measured beam radius at focus ranges from $0.7$ to $4.8\ \mu$m depending on the objective used, with $w_0 = 1.1\ \mu$m for the $20\times$, NA $=0.5$ objective retained in that reference. Taking this radius with $P = P_{cr} \approx 2.8\text{ MW}$, we obtain an intensity of order $1.5 \times 10^{14} \text{ W/cm}^2$, higher than the clamping intensity of about $5 \times 10^{13} \text{ W/cm}^2$ actually measured in~\cite{PhysRevB.71.125435}. This gap is expected. $I_0 = 2P/(\pi w_0^2)$ assumes linear focusing all the way down to the radius $w_0$, whereas in reality the defocusing produced by the plasma generated during propagation limits the peak intensity well before the beam reaches this radius, which is why the observed clamping intensity remains lower than this simple geometric estimate.
+In the tight focusing experiments of~\cite{PhysRevB.71.125435}, the measured beam radius at focus ranges from $0.7$ to $4.8\ \mu$m depending on the objective used, with $w_0 = 1.1\ \mu$m for the $20\times$, NA $=0.5$ objective retained in that reference. Taking this radius with $P = P_{cr} \approx 2.8\text{ MW}$, we obtain an intensity of order $1.5 \times 10^{14} \text{ W/cm}^2$, higher than the clamping intensity of about $5 \times 10^{13} \text{ W/cm}^2$ actually measured in~\cite{PhysRevB.71.125435}. This gap is not a contradiction, it exposes the limit of the estimate itself: $I_0 = 2P/(\pi w_0^2)$ assumes the beam keeps focusing linearly all the way down to radius $w_0$, whereas in reality the plasma generated during that final approach defocuses the beam and stops the radius from ever shrinking that far, capping the intensity below this geometric estimate. This is intensity clamping, and it is the same mechanism as the collapse arrest described above, just expressed as a statement about the peak intensity reached rather than about the beam radius.
+
+\subsubsection{Collapse Length}
+
+$P_{cr}$ only says whether collapse happens, not where. The propagation distance at which an unopposed beam above threshold would reach its collapse point is given by the semi-empirical formula fitted to numerical solutions of the nonlinear Schr\"odinger equation by Dawes and Marburger~\cite{dawes1969,marburger1975}:
+\begin{equation}
+    \label{eq:marburger}
+    L_c = \frac{0.367\, L_{DF}}{\sqrt{\big[(P_{in}/P_{cr})^{1/2} - 0.852\big]^2 - 0.0219}},
+\end{equation}
+where $L_{DF} = k_0 w_0^2 / 2$ is the Rayleigh length of the input beam. Equation~\eqref{eq:marburger} is marked directly on Figure~\ref{fig:filamentation_schematic}: it is the distance from the entrance of the medium to the first, tightest point of the first collapse cycle. It only strictly applies to a beam launched collimated, with waist $w_0$, and diverges as $P_{in}\to P_{cr}$ from above (an infinitely weak excess above threshold takes an infinite distance to collapse) and shrinks toward zero as $P_{in}/P_{cr}$ grows.
+
+The simulations in this report use an externally focused beam, which already converges toward a linear (geometric) focus at some distance $f$ even without any nonlinearity. Self-focusing then adds to that convergence rather than starting from scratch, and the two combine as
+\begin{equation}
+    \label{eq:marburger_focused}
+    \frac{1}{L_{c,f}} = \frac{1}{L_c} + \frac{1}{f},
+\end{equation}
+with $L_c$ evaluated at the tight focused waist $w_0$ reached at distance $f$. In every simulation in this report the beam is launched $f=75\ \mu\text{m}$ before its geometric focus (\texttt{begin=-75e-6} in \texttt{Config}, with $z=0$ at the geometric focus), so $L_{c,f}$ is what actually sets the position of the nonlinear focus, i.e. the first peak of Figure~\ref{fig:fig8_peak_intensity} below, measured from the entrance of the box.
+
+\paragraph{Reading $L_c$ off Figure~\ref{fig:fig8_peak_intensity}.} $L_{c,f}$ falls as $P_{in}/P_{cr}$ grows, so among curves that all share the same $f$ and $w_0$, the more energetic pulses should reach their nonlinear focus \emph{sooner}, i.e. at smaller $z$, than the less energetic ones. That is exactly the ordering visible in Figure~\ref{fig:fig8_peak_intensity}: the six peaks are stacked from the lowest-energy curve ($0.25\ \mu$J, peaking furthest downstream, closest to the geometric focus at $z=75\ \mu\text{m}$ in that plot's entrance-referenced axis) to the highest-energy one ($1.25\ \mu$J, peaking furthest upstream of it). $L_c$ is therefore not just a number to compute in the abstract, it is a prediction about how the peak of that figure should move as energy changes, and the figure confirms it.
 
 
 \begin{figure}[htbp]
@@ -97,9 +124,35 @@ In the tight focusing experiments of~\cite{PhysRevB.71.125435}, the measured bea
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\linewidth]{couairon2005_fig8_energy_sweep.png}
-    \caption{Peak on-axis intensity along $z$ for six input pulse energies from $0.25$ to $1.25\ \mu$J, reproducing Fig.~8 of~\cite{PhysRevB.71.125435}. Below threshold the peak intensity simply follows linear focusing (lower curves never reach $I_{clamp}$). Above it, every curve saturates at essentially the same value close to the clamping intensity $I_{clamp}\approx5\times10^{13}\ \text{W/cm}^2$ (dashed line) predicted from the intensity-clamping balance of Section~1.3.4 of the Couairon notes, before decaying on the trailing side of the nonlinear focus. This saturation, common to all above-threshold energies despite their different $P_{in}/P_{cr}$ ratios, is the numerical signature of intensity clamping referred to throughout Section~8.2.}
+    \caption{Peak on-axis intensity along $z$ for six input pulse energies from $0.25$ to $1.25\ \mu$J, reproducing Fig.~8 of~\cite{PhysRevB.71.125435}. Every curve rises together while the beam is still only linearly focusing, then the above-threshold curves ($P_{in}>P_{cr}$, all but the lowest, $0.25\ \mu$J) bend away from that common rise and saturate near the clamping intensity $I_{clamp}\approx5\times10^{13}\ \text{W/cm}^2$ (dashed line), each at its own $z$ position given by $L_{c,f}$ of Eq.~\eqref{eq:marburger_focused} as discussed above. Past that peak, at larger $z$ (deeper into the medium, beyond the nonlinear focus), every curve decreases again as the beam, now defocused by the plasma it just generated, diffracts away from the axis faster than the reservoir can refill it within the length of this box.}
     \label{fig:fig8_peak_intensity}
 \end{figure}
+
+\subsubsection{Observing the Refocusing Cycle}
+\label{sec:refocusing_cycle}
+
+Figures~\ref{fig:fig7_fluence_contours} and~\ref{fig:fig8_peak_intensity} establish that the beam reaches a single, well-defined nonlinear focus and defocuses past it. They do not, on their own, show the repeated collapse-arrest-refill picture of Figure~\ref{fig:filamentation_schematic}: within the $250\ \mu\text{m}$ simulation box used for those two figures, defocusing past the first collapse is the last thing that happens before the box ends.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\linewidth]{comparison_fig7_fluence_contours.png}
+    \caption{Fluence contours for the same $800\ \text{nm}$, $1.1\ \mu$J beam as Figure~\ref{fig:fig7_fluence_contours}b, plotted over the full simulation box rather than zoomed on the nonlinear focus. Two things are visible that a single collapse would not produce. First, the $1.0\ \text{J/cm}^2$ contour is not a single smooth pinch between $z\approx-30$ and $+10\ \mu\text{m}$: it wiggles, closing and reopening several times over that short stretch, each wiggle a candidate refocusing event happening too close to the previous one to be resolved as a separate, clean cycle at this scale. Second, the beam radius (dashed blue) starts narrowing again near the far edge of the box, past $z\approx130\ \mu\text{m}$, an incipient second cycle that the box is simply too short to complete. Both are evidence that the refocusing cycle described above is present in this run, not that it is well resolved by it.}
+    \label{fig:comparison_fig7_cycles}
+\end{figure}
+
+Two things stand in the way of a clean picture of several full cycles: the box needs to extend far enough past the first collapse for a second, third, ... cycle to actually develop and be resolved, and $z$ needs to be sampled finely enough near each collapse that the rapid, closely spaced pinches visible above are not aliased together into the kind of wiggle seen in Figure~\ref{fig:comparison_fig7_cycles}. Neither is a change of physics, only of box size and grid resolution.
+
+\authornote{This is a concrete, ready-to-run proposal rather than a finished figure, since I do not have GPU access in this environment to run it myself. Starting from the same physical parameters as \texttt{BASE\_PARAMS} (which is what produces Figures~\ref{fig:fig8_peak_intensity} and~\ref{fig:comparison_fig7_cycles} above), extend the box well past the first collapse and rescale \texttt{Nz} to keep the same grid spacing $\Delta z$ rather than spreading the existing $6000$ points over a much longer distance, which would blur the very cycles this run is meant to resolve (code below). The diagnostic to look for is straightforward: additional local maxima of the peak-intensity curve above $I_{clamp}$ beyond the first one, each one a further refocusing event, at increasing spacing if the reservoir is being progressively depleted. If $1.1\ \mu\text{J}$ turns out not to leave enough energy in the reservoir for a clearly resolved second cycle within a reasonable box, the next thing to try is more energy (e.g.\ the $1.25\ \mu\text{J}$ curve of Figure~\ref{fig:fig8_peak_intensity}, already the most clearly above threshold of the six), not a different mechanism -- multiple cycles from a single, radially symmetric input beam are a question of how far above $P_{cr}$ and how long a box, not of adding new physics to the model. Send me the resulting \texttt{result.npz} once you have it and I will replace this note with the actual figure and its reading.}
+
+\begin{lstlisting}[language=Python, caption={Proposed extended-box run, dropped into the notebook right after \texttt{BASE\_PARAMS} is defined.}]
+CYCLES_PARAMS = dict(BASE_PARAMS)
+CYCLES_PARAMS.update(
+    end=600e-6,                 # was 175e-6 -- several L_c,f past the first collapse
+    Nz=int(6000 * (600e-6 - (-75e-6)) / (175e-6 - (-75e-6))),  # same dz as BASE_PARAMS
+)
+cycles_result = run(out_dir=str(OUT_ROOT / "cycles"), **CYCLES_PARAMS)
+plot_fig8_peak_intensity({"cycles": cycles_result}, xlim=(-75, 600))
+\end{lstlisting}
 
 \FloatBarrier
 \subsection{Cross-Validation Against Independent Simulations}
@@ -109,7 +162,7 @@ The figures above reproduce the specific published results of~\cite{PhysRevB.71.
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.95\linewidth]{fig11.png}
-    \caption{Fluence, absorbed energy density, peak intensity and electron density maps for the conditions of Bulgakova, Stoian \& Rosenfeld ($800\ \text{nm}$, $120\ \text{fs}$, $1\ \mu$J, $w_0=0.9\ \mu$m, geometric focus at $90\ \mu$m below the surface, dashed white line), a parametrization independent of~\cite{PhysRevB.71.125435} (different $n_2$, effective mass, collision time and lattice density). White contours mark the levels published in that reference; the solver's own fields (colour maps) fall within them across all four panels, including the secondary lobe past the geometric focus visible in panels (a)-(c), itself a signature of the refocusing cycle of Fig.~\ref{fig:filamentation_schematic}.}
+    \caption{Fluence, absorbed energy density, peak intensity and electron density maps for the conditions of Bulgakova, Stoian \& Rosenfeld ($800\ \text{nm}$, $120\ \text{fs}$, $1\ \mu$J, $w_0=0.9\ \mu$m, geometric focus at $90\ \mu$m below the surface, dashed white line), a parametrization independent of~\cite{PhysRevB.71.125435} (different $n_2$, effective mass, collision time and lattice density). This is a second, independent instance of the same single collapse already seen in Figures~\ref{fig:fig7_fluence_contours} and~\ref{fig:fig8_peak_intensity}, at different laser and material parameters, not a demonstration of multiple refocusing cycles (see Section~\ref{sec:refocusing_cycle} above for that). White contours mark the levels published in that reference; the solver's own fields (colour maps) fall within them across all four panels, including the secondary lobe past the geometric focus visible in panels (a)-(c), the start of a second cycle in the same sense as Figure~\ref{fig:comparison_fig7_cycles}.}
     \label{fig:bulgakova_fig11}
 \end{figure}
 
@@ -130,7 +183,7 @@ The figures above reproduce the specific published results of~\cite{PhysRevB.71.
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\linewidth]{comparison_fig8_peak_intensity.png}
-    \caption{Peak on-axis intensity along $z$ for the experiment actually used throughout this report ($1030\ \text{nm}$, $263\ \text{fs}$, $15\ \mu$J, self-trapped exciton channel active), with each physical term of Eq.~\eqref{eq:master_propagation} disabled in turn. \texttt{linear\_only} (pure diffraction and dispersion, no Kerr, no plasma) overshoots the clamping intensity by nearly an order of magnitude, confirming that the balance discussed in Section~8.1 is what limits the intensity in every other curve. \texttt{no\_plasma\_defocusing} keeps the ionization losses but removes the defocusing phase, and reaches roughly twice the clamping intensity before the accumulated photoionization and avalanche losses alone eventually arrest it, showing that defocusing, not absorption, does most of the clamping work. \texttt{no\_kerr\_instantaneous} and \texttt{no\_kerr\_raman} both peak lower than \texttt{full} and decay markedly faster past the nonlinear focus, roughly an order of magnitude below \texttt{full} by $z=150\ \mu$m, consistent with the weaker Kerr response lengthening $L_c$ of Eq.~\eqref{eq:marburger}. The remaining curves (no self-steepening, no photoionization loss, no plasma absorption) are visually indistinguishable from \texttt{full} at this scale, since none of them changes the dominant balance between Kerr self-focusing and plasma defocusing that sets the clamping intensity itself.}
+    \caption{Peak on-axis intensity along $z$ for the same conditions as Figs.~\ref{fig:fig7_fluence_contours}b and~\ref{fig:fig8_peak_intensity} ($800\ \text{nm}$, $160\ \text{fs}$, $1.1\ \mu$J), this time with the self-trapped exciton channel active, and with each physical term of Eq.~\eqref{eq:master_propagation} disabled in turn. \texttt{linear\_only} (pure diffraction and dispersion, no Kerr, no plasma) overshoots the clamping intensity by nearly an order of magnitude, confirming that the balance discussed in Section~8.1 is what limits the intensity in every other curve. \texttt{no\_plasma\_defocusing} keeps the ionization losses but removes the defocusing phase, and reaches roughly twice the clamping intensity before the accumulated photoionization and avalanche losses alone eventually arrest it, showing that defocusing, not absorption, does most of the clamping work. \texttt{no\_kerr\_instantaneous} and \texttt{no\_kerr\_raman} both peak lower than \texttt{full} and decay markedly faster past the nonlinear focus, roughly an order of magnitude below \texttt{full} by $z=150\ \mu$m, consistent with the weaker Kerr response lengthening $L_c$ of Eq.~\eqref{eq:marburger}. The remaining curves (no self-steepening, no photoionization loss, no plasma absorption) are visually indistinguishable from \texttt{full} at this scale, since none of them changes the dominant balance between Kerr self-focusing and plasma defocusing that sets the clamping intensity itself.}
     \label{fig:comparison_fig8}
 \end{figure}
 \FloatBarrier

@@ -90,7 +90,7 @@ where $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field ev
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\linewidth]{fig2_populations.png}
-    \caption{On-axis electron populations at the nonlinear focus for the $1030\ \text{nm}$ experiment, reintegrating the 0D rate equations above from the saved intensity trace $I(t)$ under three models (MPI only, $+$avalanche, $+$avalanche$+$trapping) and superposing the actual $N(t)$ the CUDA kernel computed on-axis (open circles). The full model coincides with the CUDA output by construction, which is what this overlay is meant to check, and the agreement confirms the exponential-integrator time stepping of Section~12 reproduces the same rate equations solved here analytically term by term. Trapping into $N_{STE}$ (green) becomes the dominant channel within a few hundred femtoseconds of the pulse peak, draining $N$ (dashed black) down from its avalanche-augmented maximum, consistent with the trapping time $\tau_r$ used throughout this report.}
+    \caption{On-axis electron populations at the nonlinear focus for the $800\ \text{nm}$, $1.1\ \mu$J experiment of Fig.~\ref{fig:fig8_peak_intensity}, reintegrating the 0D rate equations above from the saved intensity trace $I(t)$ under three models (MPI only, $+$avalanche, $+$avalanche$+$trapping) and superposing the actual $N(t)$ the CUDA kernel computed on-axis (open circles). The full model coincides with the CUDA output by construction, which is what this overlay is meant to check, and the agreement confirms the exponential-integrator time stepping of Section~12 reproduces the same rate equations solved here analytically term by term. Trapping into $N_{STE}$ (green) becomes the dominant channel within a few hundred femtoseconds of the pulse peak, draining $N$ (dashed black) down from its avalanche-augmented maximum, consistent with the trapping time $\tau_r$ used throughout this report.}
     \label{fig:fig2_populations}
 \end{figure}
 
@@ -104,7 +104,7 @@ where $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field ev
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\linewidth]{fig13_electron_density_vs_z.png}
-    \caption{On-axis electron density along $z$ at fixed input energy ($1.1\ \mu$J), comparing PI only, PI$+$recombination and PI$+$avalanche$+$recombination against the CUDA kernel output (open circles), reproducing Fig.~13 of~\cite{PhysRevB.71.125435}. The full model (thick solid) tracks the CUDA output essentially exactly across the four decades shown, while PI-only and PI$+$recombination without avalanche fall visibly below it on the leading edge of the density profile, isolating the specific contribution of the avalanche term of Eq.~\eqref{eq:master_propagation}, $\sigma_\omega I N/U_i$, to the total carrier yield.}
+    \caption{On-axis electron density along $z$ at fixed input energy ($1.1\ \mu$J), comparing PI only, PI$+$recombination and PI$+$avalanche$+$recombination against the CUDA kernel output (open circles), reproducing Fig.~13 of~\cite{PhysRevB.71.125435}. The full model (thick solid) tracks the CUDA output essentially exactly across the four decades shown, while PI-only and PI$+$recombination without avalanche fall visibly below it on the upstream side of the profile (smaller $z$, before the nonlinear focus), isolating the specific contribution of the avalanche term of Eq.~\eqref{eq:master_propagation}, $\sigma_\omega I N/U_i$, to the total carrier yield.}
     \label{fig:fig13_electron_density}
 \end{figure}
 
