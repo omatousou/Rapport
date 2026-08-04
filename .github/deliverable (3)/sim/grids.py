@@ -91,6 +91,25 @@ def build_grids(cfg: Config) -> dict:
         U_op = cp.ones_like(ff)
     inv_U_op = 1.0 / U_op
 
+    # Second copy of U^-1 for the NONLINEAR step. Couairon PRB 71, 125435
+    # Eq. (2) carries U-hat in front of d/dz, so solving for du/dz divides the
+    # WHOLE right-hand side by U, not just the Laplacian. inv_U_op above is
+    # safe unguarded because half_linear only ever uses it inside exp(i.),
+    # whose modulus is 1 whatever the exponent; here U^-1 multiplies the source
+    # terms directly and can genuinely amplify.
+    #   U = 1 + (k1/k0) Omega vanishes at Omega = -k0/k1 ~ -0.99 w0, i.e. at
+    # essentially zero absolute frequency, so it is floored at 0.1 and folded
+    # with spec_mask. The floor only bites for lambda > 7.4 um, well outside
+    # the Sellmeier window where spec_mask has already killed the field, so it
+    # does not distort the physical band (there U^-1 stays within [0.22, 6.6]).
+    #   With space-time focusing disabled this is exactly 1, which reproduces
+    # the no-U model bit for bit: dropping U from the left-hand side and
+    # keeping T^2 on the Kerr term is itself self-consistent.
+    if cfg.enable_space_time_focusing:
+        inv_U_nl = spec_mask / cp.maximum(U_op, 0.1)
+    else:
+        inv_U_nl = cp.ones_like(ff)
+
     R_f  = cp.fft.fft(cp.fft.ifftshift(cp.where(
                 tlist > 0,
                 cfg.Omega_r2 * cfg.tau_s * cp.exp(-tlist / cfg.tau_d) * cp.sin(tlist / cfg.tau_s),
@@ -144,7 +163,7 @@ def build_grids(cfg: Config) -> dict:
     return dict(
         komega=float(komega), tmax=tmax, dt=dt, tlist=tlist, ff=ff,
         Y=Y, R=R, j1last=j1l[N - 1], rlist=rlist, rholist=rholist,
-        delta_k=delta_k, k1=k1, T_op=T_op, inv_U_op=inv_U_op, R_f=R_f,
+        delta_k=delta_k, k1=k1, T_op=T_op, inv_U_op=inv_U_op, inv_U_nl=inv_U_nl, R_f=R_f,
         spec_mask=spec_mask,
         rr=rr, tt=tt, rhorho=rhorho,
         sigmaomega=sigmaomega, avalanche_coef=avalanche_coef,
