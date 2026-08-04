@@ -87,6 +87,27 @@ where $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field ev
 
 \authornote{I have not been able to check this rate equation against the original Chimier, PRB 84, 075092 (2011) paper, since it is not among the sources currently in the repository. If you upload it, I will verify the coefficients $\beta_s$ and $U_s$ against it directly and correct this section if needed.}
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\linewidth]{fig2_populations.png}
+    \caption{On-axis electron populations at the nonlinear focus for the $1030\ \text{nm}$ experiment, reintegrating the 0D rate equations above from the saved intensity trace $I(t)$ under three models (MPI only, $+$avalanche, $+$avalanche$+$trapping) and superposing the actual $N(t)$ the CUDA kernel computed on-axis (open circles). The full model coincides with the CUDA output by construction, which is what this overlay is meant to check, and the agreement confirms the exponential-integrator time stepping of Section~12 reproduces the same rate equations solved here analytically term by term. Trapping into $N_{STE}$ (green) becomes the dominant channel within a few hundred femtoseconds of the pulse peak, draining $N$ (dashed black) down from its avalanche-augmented maximum, consistent with the trapping time $\tau_r$ used throughout this report.}
+    \label{fig:fig2_populations}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\linewidth]{couairon2005_fig9_energy_sweep.png}
+    \caption{On-axis electron density along $z$ for the same six input energies as Fig.~\ref{fig:fig8_peak_intensity}, reproducing Fig.~9 of~\cite{PhysRevB.71.125435}. The dashed lines mark $1$ and $2\times10^{20}\ \text{cm}^{-3}$ as reference levels. As with the peak intensity, every above-threshold curve saturates near a common density once the local intensity reaches $I_{clamp}$, the electron-density signature of the same clamping balance seen in Fig.~\ref{fig:fig8_peak_intensity}.}
+    \label{fig:fig9_energy_sweep}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\linewidth]{fig13_electron_density_vs_z.png}
+    \caption{On-axis electron density along $z$ at fixed input energy ($1.1\ \mu$J), comparing PI only, PI$+$recombination and PI$+$avalanche$+$recombination against the CUDA kernel output (open circles), reproducing Fig.~13 of~\cite{PhysRevB.71.125435}. The full model (thick solid) tracks the CUDA output essentially exactly across the four decades shown, while PI-only and PI$+$recombination without avalanche fall visibly below it on the leading edge of the density profile, isolating the specific contribution of the avalanche term of Eq.~\eqref{eq:master_propagation}, $\sigma_\omega I N/U_i$, to the total carrier yield.}
+    \label{fig:fig13_electron_density}
+\end{figure}
+
 Note the correspondence with Section~5. There, we wrote the same pair of equations with $\sigma/E_g$ in place of $\sigma_\omega/U_i$ and $\tau_x$ in place of $\tau_r$. These are the same quantities, only the notation has been aligned here with the variable names used in the code (\texttt{tau\_r} for the trapping time, \texttt{avalanche\_coef} for $\sigma_\omega/U_i$).
 
 \paragraph{Update relative to the July solver.} The July code only let the self-trapped exciton population decay by re-ionization back into the conduction band, the $\big[W_{PI}(|u_x|)+\beta_sIN\big]N_{STE}/N_{at}$ term above. The parametrization referenced in the code (Sakurai et al.) tabulates for fused silica both a trapping time of $150\ \text{fs}$, already present as $\tau_r$, and a separate relaxation time of the trapped state itself of about $1\ \text{ps}$, which was missing. \texttt{deliverable~(3)} adds an optional term $-N_{STE}/\tau_{STE}$ to the $dN_{STE}/dt$ equation, controlled by \texttt{Config.tau\_ste}, defaulting to \texttt{None} which reproduces the July behavior exactly. This mainly matters for the probe phase at picosecond delays, since it changes how long the STE population, and therefore the index change it produces (Section~11.4), survives after the pump pulse has left.
