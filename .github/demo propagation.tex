@@ -1,0 +1,850 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{empheq}
+
+% --- IMPORTATION LOCALE COMPATIBLE TOUS COMPILATEURS ---
+\usepackage{CJKutf8} 
+% Définition sécurisée de la macro avec un mini-environnement japonais local
+\newcommand{\kii}{\text{\begin{CJK*}{UTF8}{min}力\end{CJK*}}} 
+% Définition pour le kanji de courant (流) associé à la commande \nagare
+\newcommand{\nagare}{\text{\begin{CJK*}{UTF8}{min}流\end{CJK*}}}
+% Définition pour le kanji "gawa/kawa" (川) associé à la commande \gawa
+\newcommand{\gawa}{\text{\begin{CJK*}{UTF8}{min}川\end{CJK*}}}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!60!black,
+}
+
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{codepurple}{rgb}{0.4,0,0.6}
+\definecolor{codeblue}{rgb}{0,0.2,0.7}
+\definecolor{codebg}{rgb}{0.97,0.97,0.97}
+
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codeblue}\bfseries,
+    stringstyle=\color{codegreen},
+    commentstyle=\color{codepurple}\itshape,
+    breaklines=true,
+    breakatwhitespace=true,
+    captionpos=b,
+    frame=single,
+    framesep=4pt,
+    rulecolor=\color{gray!40},
+    showstringspaces=false,
+    language=Python,
+    numbers=none,
+    xleftmargin=10pt,
+    xrightmargin=10pt,
+}
+
+\title{Ultrashort Pulse propagation Equation}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+
+\section{Few Notations}
+Maxwell equations in Gaussian units:
+
+\begin{equation}
+\nabla \cdot \tilde{\mathbf{D}} = 4\pi \tilde{\rho}
+\end{equation}
+
+\begin{equation}
+\nabla \cdot \tilde{\mathbf{B}} = 0
+\end{equation}
+
+\begin{equation}
+\nabla \times \tilde{\mathbf{E}} = -\frac{1}{c} \frac{\partial \tilde{\mathbf{B}}}{\partial t}
+\end{equation}
+
+\begin{equation}
+\nabla \times \tilde{\mathbf{H}}= \nabla \times \tilde{\mathbf{B}} = \frac{1}{c} \frac{\partial \tilde{\mathbf{D}}}{\partial t} + \frac{4\pi}{c} \big(\tilde{\mathbf{J}}_{ions}+\tilde{\mathbf{J}}_{plasma}\big)
+\end{equation}
+
+Time-Frequency Fourier transformations:
+
+\begin{equation}
+\tilde{\mathbf{E}}(\mathbf{r},t)=\tfrac{1}{2\pi}\int {\mathbf{E}}(\mathbf{r},\omega)e^{-i\omega t}d\omega
+\end{equation}
+
+\begin{equation}
+\tilde{\mathbf{D}}^{(1)}=\tfrac{1}{2\pi}\int {\mathbf{D}}^{(1)}(\mathbf{r},\omega)e^{-i\omega t}d\omega
+\end{equation}
+
+\begin{equation}
+\tilde{\mathbf{P}}(\mathbf{r},t)=\tfrac{1}{2\pi}\int {\mathbf{P}}(\mathbf{r},\omega)e^{-i\omega t}d\omega
+\end{equation}
+
+\section{Derivation}
+\noindent We start by deriving the wave equation from Maxwell's equations. Assuming a homogeneous and non-magnetic medium ($\nabla \cdot \tilde{\mathbf{E}} \simeq 0$), we apply the curl operator to the Maxwell-Faraday equation (3). Recalling the vector identity $\nabla \times (\nabla \times \mathbf{A}) = \nabla(\nabla \cdot \mathbf{A}) - \nabla^2 \mathbf{A}$, we obtain:
+
+\begin{equation*}
+\nabla \times (\nabla \times \tilde{\mathbf{E}}) = \nabla \times \left( -\frac{1}{c} \frac{\partial \tilde{\mathbf{B}}}{\partial t} \right)
+\end{equation*}
+
+Substituting the Ampère-Maxwell law (4) into the right-hand side leads to: 
+
+\begin{equation*}
+-\nabla^2 \tilde{\mathbf{E}} + \frac{1}{c^2} \frac{\partial^2 \tilde{\mathbf{D}}}{\partial t^2} = -\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{ions}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{STE}}{\partial t}
+\end{equation*}
+
+We explicitly separate the displacement field into its linear and nonlinear polarization contributions:
+\begin{equation*}
+-\nabla^2 \tilde{\mathbf{E}} + \frac{1}{c^2} \frac{\partial^2}{\partial t^2}\big(\tilde{\mathbf{E}}+4\pi\tilde{\mathbf{P}}\big) = -\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{ions}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{STE}}{\partial t}
+\end{equation*}
+
+\begin{equation*}
+\begin{split}
+-\nabla^2 \tilde{\mathbf{E}} + \frac{1}{c^2} \frac{\partial^2}{\partial t^2} \bigg(\tilde{\mathbf{E}} &+ 4\pi\tilde{\mathbf{P}}^{(1)}+4\pi\tilde{\mathbf{P}}_{NL}\bigg) = -\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{ions}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{STE}}{\partial t}
+\end{split}
+\end{equation*}
+
+Using the definition of the linear displacement field, $\tilde{\mathbf{D}}^{(1)} = \tilde{\mathbf{E}} + 4\pi \tilde{\mathbf{P}}^{(1)}$: 
+
+\begin{equation*}
+\begin{split}
+-\nabla^2 \tilde{\mathbf{E}} + \frac{1}{c^2} \frac{\partial^2}{\partial t^2} \bigg(\tilde{\mathbf{D}}^{(1)} + 4\pi\tilde{\mathbf{P}}_{NL}\bigg)
+= -\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{ions}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t}-\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{STE}}{\partial t}
+\end{split}
+\end{equation*}
+
+Rearranging the terms yields the wave equation in the time domain:
+\begin{equation*}
+\nabla^2 \tilde{\mathbf{E}} - \frac{1}{c^2} \frac{\partial^2 \tilde{\mathbf{D}}^{(1)}}{\partial t^2}= \frac{4\pi}{c^2}\frac{\partial^2\tilde{\mathbf{P}}_{NL}}{\partial t^2} +\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{ions}}{\partial t}+\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t}+\frac{4\pi}{c^2} \frac{\partial \tilde{\mathbf{J}}_{STE}}{\partial t}
+\end{equation*}
+
+To easily handle chromatic dispersion, we switch to the frequency domain where the linear response is simply $\mathbf{D}^{(1)}(\mathbf{r},\omega)=\epsilon^{(1)}(\omega)\mathbf{E}(\mathbf{r},\omega)$: 
+
+\begin{equation*}
+\begin{split}
+\nabla^2 \mathbf{E} + \frac{\omega^2}{c^2}\epsilon^{(1)}(\omega)\mathbf{E}(\mathbf{r},\omega) = -\frac{4\pi\omega^2}{c^2}\Bigg[\mathbf{P}_{NL}(\mathbf{r},\omega) +i\frac{\mathbf{J}_{ions}(\mathbf{r},\omega)}{\omega}+i\frac{\mathbf{J}_{plasma}(\mathbf{r},\omega)}{\omega}+i\frac{\mathbf{J}_{STE}(\mathbf{r},\omega)}{\omega}\Bigg]
+\end{split}
+\end{equation*}
+
+For convenience, we group all nonlinear polarization and current source terms into a single generalized source vector $\kii$:
+\begin{equation*}
+\mathbf{P}_{NL}(\mathbf{r},\omega) +i\frac{\mathbf{J}_{ions}(\mathbf{r},\omega)}{\omega}+i\frac{\mathbf{J}_{plasma}(\mathbf{r},\omega)}{\omega}+i\frac{\mathbf{J}_{STE}(\mathbf{r},\omega)}{\omega}\equiv \kii(\mathbf{r},\omega)
+\end{equation*}
+
+This reduces the wave equation to a more compact form:
+\begin{equation*}
+\nabla^2 \mathbf{E} + \frac{\omega^2}{c^2}\epsilon^{(1)}(\omega)\mathbf{E}(\mathbf{r},\omega)= -\frac{4\pi\omega^2}{c^2}\kii(\mathbf{r},\omega)
+\end{equation*}
+
+The objective is to derive a wave equation for the slowly varying field amplitude $\tilde{\mathbf{A}}(\mathbf{r},t)$. We decouple the rapid carrier oscillations from the envelope dynamics:
+\begin{equation*}
+\tilde{\mathbf{E}}({\mathbf{r,t}}) = \tilde{\mathbf{A}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c}
+\end{equation*}
+
+In the frequency domain, shifted by the central frequency $\omega_0$, this envelope approximation can be written as:
+\begin{equation*}
+\textbf{E}(\textbf{r},\omega) \approx\textbf{A}(\textbf{r},\omega-\omega_0) e^{ik_0z} 
+\end{equation*}
+
+Applying the spatial Laplacian to this ansatz separates the transverse diffraction from the longitudinal propagation:
+\begin{equation*}
+\begin{split}
+\nabla^2 \mathbf{E} &= \bigg[\nabla_\perp^2 + \frac{\partial^2}{\partial z^2}\bigg]\mathbf{A}(\mathbf{r},\omega-\omega_0)e^{ik_0z} \\
+&= \bigg[\nabla_\perp^2 + \frac{\partial^2}{\partial z^2}+ 2ik_0\frac{\partial}{\partial z}-k_0^2\bigg] \mathbf{A}(\mathbf{r},\omega-\omega_0)e^{ik_0z}
+\end{split}
+\end{equation*}
+
+Replacing this back into our propagation equation gives: 
+
+\begin{equation*}
+\nabla_\perp^2\mathbf{A}+ \frac{\partial^2 \mathbf{A}}{\partial z^2} + 2ik_0 \frac{\partial\mathbf{A}}{\partial z} + [k^2(\omega) - k_0^2]\mathbf{A}= -\frac{4\pi \omega^2}{c^2} \kii(\mathbf{r},\omega) e^{-ik_0z}
+\end{equation*}
+
+Where the wavenumber is defined by the dispersion relation: $k^2(\omega) = \epsilon(\omega)\frac{\omega^2}{c^2}$.
+\\
+To account for linear dispersion (group velocity, GVD, etc.), we approximate $k(\omega)$ as a Taylor power series expanded around the central frequency $\omega_0$: 
+
+\begin{equation*}
+k(\omega) = k_0 + k_1(\omega-\omega_0) + \sum_{n=2}^{\infty}\tfrac{1}{n!}k_n(\omega-\omega_0)^n = k_0 + k_1(\omega-\omega_0) + L
+\end{equation*}
+
+Squaring this expansion provides the terms needed for the wave equation:
+\begin{equation*}
+\begin{split}
+k^2(\omega) &= k_0^2 + k_1^2(\omega - \omega_0)^2 + L^2 + 2k_0k_1(\omega-\omega_0) + 2k_0L + 2k_1L(\omega-\omega_0)
+\end{split}
+\end{equation*}
+
+Substituting $k^2(\omega)$ and canceling the $k_0^2$ terms:
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2+ \frac{\partial^2 }{\partial z^2} + 2ik_0 \frac{\partial}{\partial z} +  k_1^2(\omega - \omega_0)^2 + 2k_0k_1(\omega-\omega_0)
++ 2k_0L + L^2 + 2k_1L(\omega-\omega_0)\Bigg] \mathbf{A}(\mathbf{r},\omega-\omega_0)\\ = -\frac{4\pi \omega^2}{c^2} \kii(\mathbf{r},\omega) e^{-ik_0z}
+\end{split}
+\end{equation*}
+
+We now transform back to the time domain by multiplying by $\int d(\omega-\omega_0)e^{-i(\omega-\omega_0)t}$. In this transformation, the frequency detuning $(\omega-\omega_0)$ becomes the time derivative operator $i\frac{\partial}{\partial t}$:
+
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 &+ \frac{\partial^2 }{\partial z^2} + 2ik_0 \bigg(\frac{\partial}{\partial z}+k_1\frac{\partial}{\partial t}\bigg) -  k_1^2\frac{\partial^2}{\partial t^2}  + 2k_0\tilde{L} + \tilde{L}^2 +2ik_1\tilde{L}\frac{\partial}{\partial t}\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t) \\
+&= \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\Bigg[\frac{\partial^2\tilde{\mathbf{P}}_{NL}(\mathbf{r},t)}{\partial t ^2} +\frac{\partial }{\partial t}\big(\tilde{\mathbf{J}}_{ions}+\tilde{\mathbf{J}}_{plasma}+\tilde{\mathbf{J}}_{STE}\big)\Bigg]
+\end{split}
+\end{equation*}
+
+where the dispersion operator in the time domain is $\tilde{L} = \sum^{\infty}_{n=2}\frac{1}{n!}k_n\big(i\frac{\partial}{\partial t}\big)^n$.
+\newline
+Let us now consider the slowly varying amplitude $\tilde{\mathbf{p}}(\mathbf{r},t)$ of the nonlinear polarization vector $\tilde{\mathbf{P}}_{NL}(\mathbf{r},t)$: 
+
+\begin{equation*}
+\tilde{\mathbf{P}}_{NL}(\mathbf{r},t) =\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)e^{i(k_0z-\omega_0t)} +\text{c.c}
+\end{equation*}
+
+This term accounts for both instantaneous Kerr and delayed Raman non-linear responses:
+\begin{equation*}
+\begin{split}
+\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) = 3 \chi^{(3)}\Bigg[(1-f_R)|\tilde{\mathbf{A}}(\mathbf{r},t)|^2 \quad + f_R\int_{-\infty}^tR(t-\tau) |\tilde{\mathbf{A}}(\mathbf{r},\tau)|^2 d\tau \Bigg]\tilde{\mathbf{A}}(\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+Evaluating the second time derivative of the polarization generates a self-steepening operator: 
+
+\begin{equation*}
+\begin{split}
+\frac{\partial^2\tilde{\mathbf{P}}_{NL}(\mathbf{r},t)}{\partial t^2} &= -\omega_0^2\Bigg[\big(1+\frac{2i}{\omega_0}\frac{\partial}{\partial t} -\frac{1}{\omega_0^2}\frac{\partial^2}{\partial t^2}\big)\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) \Bigg]e^{i(k_0z-\omega_0t)} \\
+&= -\omega_0^2\Bigg[\bigg(1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\bigg)^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)\Bigg]e^{i(k_0z-\omega_0t)}
+\end{split}
+\end{equation*}
+
+For brevity, we introduce the operator $\hat{T}$ to encapsulate optical shock dynamics, and a generalized envelope current $\gawa$ for the plasma and ionic contributions: 
+\begin{equation*}
+\gawa(\mathbf{r},t) = \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\big(\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)+\tilde{\mathbf{J}}_{plasma}(\mathbf{r},t)+\tilde{\mathbf{J}}_{STE}(\mathbf{r},t)\big)
+\end{equation*}
+and
+\begin{equation*}
+\hat{T}=1+\frac{i}{\omega_0}\frac{\partial}{\partial t} 
+\end{equation*}
+
+Inserting these explicitly into our time-domain wave equation gives:
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 + \frac{\partial^2 }{\partial z^2} + 2ik_0 \bigg(\frac{\partial}{\partial z}+k_1\frac{\partial}{\partial t}\bigg) -  k_1^2\frac{\partial^2}{\partial t^2}  &+ 2k_0\tilde{L}+\tilde{L}^2 + 2ik_1\tilde{L}\frac{\partial}{\partial t}\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t) \\
+&= \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial^2}{\partial t ^2}\tilde{\mathbf{P}}_{NL}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 + \frac{\partial^2 }{\partial z^2} + 2ik_0 \bigg(\frac{\partial}{\partial z}+k_1\frac{\partial}{\partial t}\bigg) -  k_1^2\frac{\partial^2}{\partial t^2}  + 2k_0\tilde{L}+\tilde{L}^2 + 2ik_1\tilde{L}\frac{\partial}{\partial t}\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t) \\
+= -\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa(\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+To simplify the description of the pulse, we change coordinates to a retarded time frame moving at the group velocity $v_g = 1/k_1$. The new coordinates are $z'\longleftarrow z$ and $\tau \longleftarrow t-\frac{z}{v_g}=t-k_1z$, changing the derivatives to $\frac{\partial}{\partial z} = \frac{\partial}{\partial z'}-k_1\frac{\partial}{\partial \tau}$ and $\frac{\partial}{\partial t}=\frac{\partial}{\partial \tau}$:
+
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 + \frac{\partial^2}{\partial z'^2} -2k_1\frac{\partial}{\partial z'}\frac{\partial}{\partial \tau} + 2ik_0 \frac{\partial}{\partial z'} + 2k_0\tilde{L} + \tilde{L}^2 +2ik_1\tilde{L}\frac{\partial}{\partial \tau}\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t)= -\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+We now apply the slowly varying envelope approximation (SVEA) to the spatial domain. Assuming the envelope varies smoothly over distances comparable to the wavelength, we can safely neglect the second-order longitudinal derivative $\frac{\partial^2}{\partial z'^2}$:
+
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 -2k_1\frac{\partial}{\partial z'}\frac{\partial}{\partial \tau} + 2ik_0 \frac{\partial}{\partial z'} + 2k_0\tilde{L} + 2ik_1\tilde{L}\frac{\partial}{\partial \tau} +\tilde{L}^2\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t)= -\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+Factoring the terms reveals a common temporal operator structure:
+\begin{equation*}
+\begin{split}
+\Bigg[\nabla_\perp^2 + 2ik_0 \frac{\partial}{\partial z'}\big(1+i\frac{k_1}{k_0}\frac{\partial}{\partial \tau}\big)
++ 2k_0\tilde{L}\big(1+i\frac{k_1}{k_0}\frac{\partial}{\partial \tau}\big) +\tilde{L}^2\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t) = -\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{split}
+\end{equation*}
+
+We introduce the space-time focusing operator $\hat{U}$:
+\begin{equation*}
+\hat{U} = 1+\frac{(\omega-\omega_0)k_1}{k_0} = 1+i\frac{k_1}{k_0}\frac{\partial}{\partial \tau}
+\end{equation*}
+
+\begin{equation*}
+\Bigg[\nabla_\perp^2 + 2ik_0 \hat{U} \frac{\partial}{\partial z'} + 2k_0\tilde{L}\hat{U}+\tilde{L}^2\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t)=-\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{equation*}
+
+Dividing by $2ik_0$ isolates the longitudinal evolution $\partial / \partial z'$, preparing the equation for numerical integration methods (like the split-step Fourier method):
+\begin{equation*}
+2ik_0\Bigg[\frac{\nabla_\perp^2}{2ik_0} + \hat{U} \frac{\partial}{\partial z'} -i\tilde{L}\hat{U} +\frac{\tilde{L}^2}{2ik_0}\Bigg] \tilde{\mathbf{A}}(\mathbf{r},t)=-\frac{4\pi\omega_0^2}{c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\gawa (\mathbf{r},t)
+\end{equation*}
+
+\begin{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\hat{U} +\frac{\tilde{L}^2}{2k_0}\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) -\frac{4\pi\omega_0^2}{2ik_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t)+\frac{\gawa(\mathbf{r},t)}{2ik_0}
+\end{split}
+\end{equation*}
+
+Rearranging terms and making the current sources explicit yields the generalized propagation equation:
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = &\, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+ i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) \\
+&+ \frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\big(\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)+\tilde{\mathbf{J}}_{plasma}(\mathbf{r},t)+\tilde{\mathbf{J}}_{S}(\mathbf{r},t)\big)
+\end{split}
+\end{empheq}
+
+\vspace{1em}
+\vspace{1em}
+\section{The Drude model for plasma absorption}
+\newline
+To evaluate the plasma current explicitly, let us consider a free electron in the conduction band, accelerated by the electric field $\tilde{\mathbf{E}}(\mathbf{r},t)$. We express the field in terms of its slowly varying amplitude $\tilde{\mathbf{A}}(\mathbf{r},t)$ and a rapidly oscillating carrier:
+\begin{equation*}
+\tilde{\mathbf{E}}(\mathbf{r},t) = \tilde{\mathbf{A}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}
+\end{equation*}
+
+The laws of dynamics give the equation of motion for the electron velocity $\mathbf{v}$:
+\begin{equation*}
+m_{eff} \frac{d\mathbf{v}}{dt} = -e\tilde{\mathbf{E}}(\mathbf{r},t)
+\end{equation*}
+
+The electron collides with the ions on average after a relaxation time $\tau_c$. The damping force of these collisions on the electron mobility can be expressed as $\mathbf{F}_{damp}=-\frac{m_{eff}}{\tau_c}\mathbf{v}$. The complete equation of motion is then:
+\begin{equation*}
+m_{eff} \frac{d\mathbf{v}}{dt} = -e\tilde{\mathbf{A}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} - \frac{m_{eff}}{\tau_c}\mathbf{v} + \text{c.c.}
+\end{equation*}
+
+We seek a velocity solution of the same form, $\mathbf{v}(\mathbf{r},t) = \tilde{\mathbf{v}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}$. 
+In the framework of the SVEA, we assume that the envelope varies much slower than the optical cycle ($\left| \partial \tilde{\mathbf{v}} / \partial t \right| \ll \omega_0 |\tilde{\mathbf{v}}|$). The time derivative of the velocity is therefore dominated by the carrier frequency:
+\begin{equation*}
+\frac{d\mathbf{v}}{dt} \approx -i\omega_0 \tilde{\mathbf{v}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}
+\end{equation*}
+
+Substituting this back into the equation of motion and isolating the positive frequency components, we get the relationship for the envelopes:
+\begin{equation*}
+-i\omega_0 m_{eff} \tilde{\mathbf{v}} = -e \tilde{\mathbf{A}} - \frac{m_{eff}}{\tau_c}\tilde{\mathbf{v}} \implies \tilde{\mathbf{v}} =  -\frac{e\tau_c}{m_{eff}(1-i\omega_0\tau_c)}\tilde{\mathbf{A}}
+\end{equation*}
+
+The density of current created by a plasma of density $\rho$ follows the same envelope form $\tilde{\mathbf{J}}_{plasma}(\mathbf{r},t) = \tilde{\mathbf{J}}_{env}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}$, where:
+\begin{equation*}
+\tilde{\mathbf{J}}_{env} = -e\rho\tilde{\mathbf{v}} = \frac{e^2\rho\tau_c}{m_{eff}(1-i\omega_0\tau_c)}\tilde{\mathbf{A}} = \frac{e^2\rho\tau_c(1+i\omega_0\tau_c)}{m_{eff}(1+\omega_0^2\tau_c^2)}\tilde{\mathbf{A}}
+\end{equation*}
+
+When computing the source term for the propagation equation, we again apply the SVEA to the time derivative of the current ($\partial \tilde{\mathbf{J}}_{plasma} / \partial t \approx -i\omega_0 \tilde{\mathbf{J}}_{env} e^{i(k_0z-\omega_0t)}$). The exponential phase factors cancel out perfectly:
+\begin{equation*}
+\begin{split}
+\frac{1}{2ik_0} \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t} &= \frac{1}{2ik_0} \frac{4\pi}{c^2} e^{-i(k_0z-\omega_0t)} \left[ -i\omega_0 \tilde{\mathbf{J}}_{env} e^{i(k_0z-\omega_0t)} \right] \\
+&= -\frac{2\pi}{k_0 c^2} \frac{\omega_0 e^2 \tau_c}{m_{eff}(1+\omega_0^2\tau_c^2)} \rho(1+i\omega_0\tau_c) \tilde{\mathbf{A}}
+\end{split}
+\end{equation*}
+
+We introduce the cross section for inverse bremsstrahlung $\sigma$. In SI units, it is defined as:
+\begin{equation*}
+\sigma = \frac{k_0 e^2}{n_0^2\omega_0^2\epsilon_0 m_{eff}} \frac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}
+\end{equation*}
+
+Converting to Gaussian units by substituting $\epsilon_0 \to \frac{1}{4\pi}$ and using the linear dispersion relation $n_0^2\omega_0^2 = k_0^2 c^2$, we obtain:
+\begin{equation*}
+\sigma = \frac{4\pi e^2}{k_0 c^2 m_{eff}} \frac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}
+\end{equation*}
+
+Recognizing that our derived prefactor is exactly half of this cross section ($\frac{\sigma}{2}$), the plasma source term in the final propagation equation simplifies to the well-known form:
+\begin{equation*}
+\frac{1}{2ik_0} \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t} = -\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{equation*}
+
+Finally, substituting this explicit plasma response back into our master equation, we isolate the distinct physical mechanisms driving the pulse evolution. The resulting equation elegantly accounts for spatial diffraction and temporal dispersion (first term), Kerr nonlinearity (second term), ionization losses (third term), and plasma absorption and defocusing (fourth term):
+
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = &\, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+ i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) \\
+&+ \frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)\\&-\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{split}
+\end{empheq}
+
+\vspace{1em}
+\vspace{1em}
+\section{The Lorentz model for STE}
+\newline
+When an electron is promoted from the valence band to the conduction band, by optical excitation for instance, it leaves behind a "hole" which possesses the opposite charge of an electron. Neglecting the Coulomb interaction, the energy of the electron-hole pair created this way is equal to the band gap energy, $E_g$. However, when taking into account the attractive Coulomb interaction between the electron and the hole, this pair forms a bound state called an exciton.
+
+The binding energy $E_b$ of the exciton is lower than that of the band gap ($E_b < 0$ relative to the conduction band edge, making the total energy $E = E_g - |E_b| < E_g$). This pair is delocalized within the crystal. To characterize the accessible energies $E_b$ of this quasi-particle, one method consists in considering the stationary solutions of the Schrödinger equation associated with a composite electron-hole particle of reduced mass $\mu = \frac{M_e M_h}{M_e+M_h}$, with the potential:
+
+$$V(r) = -\frac{e^2}{4\pi\epsilon_0 r} = -\frac{e^2}{\epsilon r}$$
+
+This amounts to determining the energy eigenstates of a hydrogen-like system:
+
+$$\left[\frac{p^2}{2\mu} - \frac{e^2}{\epsilon r}\right] \psi(r) = E_b \psi(r)$$
+
+The eigenvalues are then given by:
+
+
+$$E_b = -\frac{R_\chi}{n^2}$$
+
+
+with
+
+
+$$R_\chi = \frac{\mu e^4}{2(4\pi\epsilon)^2\hbar^2} = \frac{\hbar^2}{2\mu a_\chi^2}$$
+
+where $R_\chi$ is the exciton Rydberg energy and $a_\chi$ is the exciton Bohr radius.
+
+
+
+
+
+
+
+$\tilde{\mathbf{E}}(\mathbf{r},t)$. We express the field in terms of its slowly varying amplitude $\tilde{\mathbf{A}}(\mathbf{r},t)$ and a rapidly oscillating carrier:
+\begin{equation*}
+\tilde{\mathbf{E}}(\mathbf{r},t) = \tilde{\mathbf{A}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}
+\end{equation*}
+
+The laws of dynamics give the equation of motion for the exciton velocity $\mathbf{v}$:
+\begin{equation*}
+m_{eff} \frac{d\mathbf{v}}{dt} = -e\tilde{\mathbf{E}}(\mathbf{r},t)
+\end{equation*}
+
+The electron collides with the ions on average after a relaxation time $\tau_c$. The damping force of these collisions on the electron mobility can be expressed as $\mathbf{F}_{damp}=-\frac{m_{eff}}{\tau_c}\mathbf{v}$. The complete equation of motion is then:
+\begin{equation*}
+m_{eff} \frac{d\mathbf{v}}{dt} = -e\tilde{\mathbf{A}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} - \frac{m_{eff}}{\tau_c}\mathbf{v} + \text{c.c.}
+\end{equation*}
+
+We seek a velocity solution of the same form, $\mathbf{v}(\mathbf{r},t) = \tilde{\mathbf{v}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}$. 
+In the framework of the SVEA, we assume that the envelope varies much slower than the optical cycle ($\left| \partial \tilde{\mathbf{v}} / \partial t \right| \ll \omega_0 |\tilde{\mathbf{v}}|$). The time derivative of the velocity is therefore dominated by the carrier frequency:
+\begin{equation*}
+\frac{d\mathbf{v}}{dt} \approx -i\omega_0 \tilde{\mathbf{v}}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}
+\end{equation*}
+
+Substituting this back into the equation of motion and isolating the positive frequency components, we get the relationship for the envelopes:
+\begin{equation*}
+-i\omega_0 m_{eff} \tilde{\mathbf{v}} = -e \tilde{\mathbf{A}} - \frac{m_{eff}}{\tau_c}\tilde{\mathbf{v}} \implies \tilde{\mathbf{v}} =  -\frac{e\tau_c}{m_{eff}(1-i\omega_0\tau_c)}\tilde{\mathbf{A}}
+\end{equation*}
+
+The density of current created by a plasma of density $\rho$ follows the same envelope form $\tilde{\mathbf{J}}_{plasma}(\mathbf{r},t) = \tilde{\mathbf{J}}_{env}(\mathbf{r},t) e^{i(k_0z-\omega_0t)} + \text{c.c.}$, where:
+\begin{equation*}
+\tilde{\mathbf{J}}_{env} = -e\rho\tilde{\mathbf{v}} = \frac{e^2\rho\tau_c}{m_{eff}(1-i\omega_0\tau_c)}\tilde{\mathbf{A}} = \frac{e^2\rho\tau_c(1+i\omega_0\tau_c)}{m_{eff}(1+\omega_0^2\tau_c^2)}\tilde{\mathbf{A}}
+\end{equation*}
+
+When computing the source term for the propagation equation, we again apply the SVEA to the time derivative of the current ($\partial \tilde{\mathbf{J}}_{plasma} / \partial t \approx -i\omega_0 \tilde{\mathbf{J}}_{env} e^{i(k_0z-\omega_0t)}$). The exponential phase factors cancel out perfectly:
+\begin{equation*}
+\begin{split}
+\frac{1}{2ik_0} \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t} &= \frac{1}{2ik_0} \frac{4\pi}{c^2} e^{-i(k_0z-\omega_0t)} \left[ -i\omega_0 \tilde{\mathbf{J}}_{env} e^{i(k_0z-\omega_0t)} \right] \\
+&= -\frac{2\pi}{k_0 c^2} \frac{\omega_0 e^2 \tau_c}{m_{eff}(1+\omega_0^2\tau_c^2)} \rho(1+i\omega_0\tau_c) \tilde{\mathbf{A}}
+\end{split}
+\end{equation*}
+
+We introduce the cross section for inverse bremsstrahlung $\sigma$. In SI units, it is defined as:
+\begin{equation*}
+\sigma = \frac{k_0 e^2}{n_0^2\omega_0^2\epsilon_0 m_{eff}} \frac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}
+\end{equation*}
+
+Converting to Gaussian units by substituting $\epsilon_0 \to \frac{1}{4\pi}$ and using the linear dispersion relation $n_0^2\omega_0^2 = k_0^2 c^2$, we obtain:
+\begin{equation*}
+\sigma = \frac{4\pi e^2}{k_0 c^2 m_{eff}} \frac{\omega_0\tau_c}{1+\omega_0^2\tau_c^2}
+\end{equation*}
+
+Recognizing that our derived prefactor is exactly half of this cross section ($\frac{\sigma}{2}$), the plasma source term in the final propagation equation simplifies to the well-known form:
+\begin{equation*}
+\frac{1}{2ik_0} \frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial \tilde{\mathbf{J}}_{plasma}}{\partial t} = -\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{equation*}
+
+Finally, substituting this explicit plasma response back into our master equation, we isolate the distinct physical mechanisms driving the pulse evolution. The resulting equation elegantly accounts for spatial diffraction and temporal dispersion (first term), Kerr nonlinearity (second term), ionization losses (third term), and plasma absorption and defocusing (fourth term):
+
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = &\, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+ i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) \\
+&+ \frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)\\&-\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{split}
+\end{empheq}
+
+\section{Retarded Raman response}
+
+The bond between two nuclei of SiO$_2$ can be modeled as an oscillation of frequency $\Omega$ damped by a friction force. This oscillation is forced by the electric field $E$. The lifetime of the phonon is given by $\tau_d$.
+
+Since the carrier frequency is too high to drive the movement of the nuclei directly, we focus on the Raman-active mode where the electric field acts on the internal coordinate $q$ (the bond elongation). In the presence of the field $\tilde{\mathbf{E}}$, the molecule develops a dipole moment $\mathbf{p} = \alpha(q)\tilde{\mathbf{E}}$. The energy stored in the polarization of the molecule is given by:
+\begin{equation*}
+U = -\frac{1}{2}\alpha(q) E^2
+\end{equation*}
+Using the Placzek expansion $\alpha(q) \approx \alpha_0 + \alpha' q$, the force acting on the internal coordinate $q$ is:
+\begin{equation*}
+F_q = -\frac{\partial U}{\partial q} = \frac{1}{2} \frac{\partial \alpha}{\partial q} E^2 = \frac{1}{2} \alpha' E^2
+\end{equation*}
+Let's then write the equation of motion for the coordinate $q$:
+\begin{equation*}
+\mu \left[ \frac{d^2}{dt^2} + \frac{2}{\tau_d}\frac{d}{dt} + \Omega^2 \right] q = \frac{1}{2} \alpha' E^2
+\end{equation*}
+where $\mu$ is the reduced mass of the nuclei.
+
+
+Since the nuclei are too heavy to follow the rapid $2\omega_0$ terms, only the
+cycle-averaged square drives the mode. In the convention
+$\tilde{\mathbf{E}}=\tfrac12(\mathcal{E}e^{i\psi}+\text{c.c.})$:
+\begin{equation*}
+\langle\tilde{\mathbf{E}}^2\rangle = \frac{1}{2}|\mathcal{E}|^2
+\end{equation*}
+so the driving term becomes
+\begin{equation*}
+\mu\left[\frac{d^2}{dt^2}+\frac{2}{\tau_d}\frac{d}{dt}+\Omega^2\right]q
+= \frac{1}{2}\alpha'\langle\tilde{\mathbf{E}}^2\rangle
+= \frac{\alpha'}{4}|\mathcal{E}|^2
+\end{equation*}
+\begin{equation*}
+\left[ \frac{d^2}{dt^2} + \frac{2}{\tau_d}\frac{d}{dt} + \Omega^2 \right] q = \frac{\alpha'}{4\mu}|\mathcal{E}|^2
+\end{equation*}
+
+\begin{equation*}
+\Omega^2 q = \frac{\alpha'}{4\mu}|\mathcal{E}|^2 \equiv \kappa|\mathcal{E}|^2
+\implies q = \frac{\kappa}{\Omega^2}|\mathcal{E}|^2
+\end{equation*}
+We substitute $Q = q\,\Omega^2/\kappa$:
+\begin{equation*}
+\left[\frac{d^2}{dt^2}+\frac{2}{\tau_d}\frac{d}{dt}+\Omega^2\right]Q = \Omega^2|\mathcal{E}|^2
+\end{equation*}
+
+
+Unlike the electrostriction force involving a spatial gradient $\nabla I$, this Raman response is local and driven directly by the intensity $I$.
+We substitute $Q = q\frac{\Omega^2}{\kappa}$
+\begin{equation*}
+\left[ \frac{d^2}{dt^2} + \frac{2}{\tau_d}\frac{d}{dt} + \Omega^2 \right] Q = \Omega^2 I
+\end{equation*}
+We introduce the Green function $G(t)$ such that $G(t<0)=0$ : 
+\begin{equation*}
+    \mathcal{L}G=\delta(t)
+\end{equation*}
+with :
+\begin{equation*}
+    \mathcal{L}= \frac{d^2}{dt^2} + \frac{2}{\tau_d}\frac{d}{dt} + \Omega^2
+\end{equation*}
+
+Let's resolve the Green function at $t\ne0$
+
+\begin{equation*}
+\left[ \frac{d^2}{dt^2} + \frac{2}{\tau_d}\frac{d}{dt} + \Omega^2 \right] G(t)  = 0
+\end{equation*}
+\begin{equation*}
+s^2+\frac{2}{\tau_d}s+\Omega^2=0
+\end{equation*}
+\begin{equation*}
+s\pm = -\frac{1}{\tau_d}{\pm i\sqrt{\Omega^2-\frac{1}{\tau_d^2}}}
+\end{equation*}
+\begin{equation*}
+G(t) = \exp{\bigg(-\frac{t}{\tau_d}\bigg)}\Bigg[c_1\cos{\Bigg(\sqrt{\Omega^2-\frac{1}{\tau_d^2}}}t\Bigg)+c_2\sin{\Bigg(\sqrt{\Omega^2-\frac{1}{\tau_d^2}}}t\Bigg)\Bigg]
+\end{equation*}
+
+with $$ G(0) = 0$$
+\begin{equation*}
+G(t) = \exp{\bigg(-\frac{t}{\tau_d}\bigg)}c_2\sin{\Bigg(\sqrt{\Omega^2-\frac{1}{\tau_d^2}}}t\Bigg)
+\end{equation*}
+
+And we integrate overtime : 
+
+\begin{equation*}
+    \int \frac{d^2}{dt^2}G(t)dt + \int\frac{2}{\tau_d}\frac{d}{dt}G(t)dt + \int\Omega^2G(t)dt = \int \delta(t)dt
+    \end{equation*}
+\begin{equation*}
+    \bigg[G'(t)\bigg]^{0^+}_{0^-}+\frac{2}{\tau_d}\bigg[G(t)\bigg]^{0^+}_{0^-}+\Omega^2\int^{0^+}_{0^-} G(t)dt = 1
+\end{equation*}
+In a very short time around $0$ the $G(t)$ doesn't change so the second and third terms cancel out and we have the relation : 
+\begin{equation*}
+    \bigg[G'(t)\bigg]^{0^+}_{0^-}=G'(0^+)-G'(0^-)  = 1
+\end{equation*}
+Inserting in $G(t)$ definition : 
+\begin{equation*}
+\frac{d}{dt}G(t)\bigg|_{t=0} =  c_2\sqrt{\Omega^2-\frac{1}{\tau_d^2}}=1
+\end{equation*}
+
+\begin{equation*}
+c_2 =\frac{1}{\sqrt{\Omega^2-\frac{1}{\tau_d^2}}} = \tau_s
+\end{equation*}
+
+\begin{equation*}
+G(t) = \tau_s\exp{\bigg(-\frac{t}{\tau_d}\bigg)}\sin{\frac{t}{\tau_s}}\mathcal{H}(t)
+\end{equation*}
+With $\mathcal{H}(t)$ is the Heavyside function.
+This is the expression of a response to a dirac, in order to have the response of the source term $\Omega^2I(t)$ we take the convolution of the response with the source.
+\begin{equation*}
+G(t)\ast\Omega^2I(t) = \Omega^2\tau_s\exp{\bigg(-\frac{t}{\tau_d}\bigg)}\sin{\frac{t}{\tau_s}}\mathcal{H}(t)\ast I(t)
+\end{equation*}
+We can indentify $R(t)$ :
+\begin{equation*}
+R(t) = \Omega^2\tau_s\exp{\bigg(-\frac{t}{\tau_d}\bigg)}\sin{\frac{t}{\tau_s}}
+\end{equation*}
+Then the retarded Raman response reads : 
+\begin{equation*}
+(R(t)\mathcal{H}(t))\ast I(t) = \int_{-\infty}^{+\infty}R(t-\tau)\mathcal{H}(t-\tau)I(\tau)d\tau = \int_{-\infty}^{t}R(t-\tau)I(\tau)d\tau
+\end{equation*}
+
+\section{Nonlinear Polarisation Term}
+
+In the Gaussian convention :
+\begin{equation*}
+\tilde{\mathbf{D}} = \tilde{\mathbf{E}} + 4\pi\tilde{\mathbf{P}}
+\end{equation*}
+With the expression of $\tilde{\mathbf{E}}=\frac{1}{2}\big[\mathcal{E}e^{i(k_0z-\omega_0t)}+\mathcal{E}^*e^{-i(k_0z-\omega_0t)}\big] = Ae^{i(k_0z-\omega_0t)}+A^*e^{-i(k_0z-\omega_0t)}$ :
+
+\begin{equation*}
+\tilde{\mathbf{P}} = \chi^{(1)}\tilde{\mathbf{E}}+ \chi^{(3)}\tilde{\mathbf{E}}^3
+\end{equation*}
+\begin{equation*}
+\tilde{\mathbf{P}} = \chi^{(1)}\tilde{\mathbf{E}}+ \chi^{(3)}\Bigg[\frac{1}{8}\big[\mathcal{E}^3e^{3i(k_0z-\omega_0t)}+\mathcal{E}^{*3}e^{-3i(k_0z-\omega_0t)}\big] +\frac{3}{4}|\mathcal{E}|^2\tilde{\mathbf{E}}\Bigg]
+\end{equation*}
+
+The terms in $3\omega_0$ are linked with the Third order Harmonic Generation and can be thus discarted from the equation. 
+
+\begin{equation*}
+\tilde{\mathbf{P}} = \bigg[\chi^{(1)}+ \frac{3\chi^{(3)}}{4}|\mathcal{E}|^2\bigg]\tilde{\mathbf{E}}
+\end{equation*}
+\begin{equation*}
+\tilde{\mathbf{D}} =\tilde{\mathbf{E}} + 4\pi\Bigg[\chi^{(1)}+ \frac{3\chi^{(3)}}{4}|\mathcal{E}|^2\Bigg]\tilde{\mathbf{E}}
+\end{equation*}
+\begin{equation*}
+\tilde{\mathbf{D}} = \bigg[1+4\pi\chi^{(1)}+ 3\pi\chi^{(3)}|\mathcal{E}|^2\bigg]\tilde{\mathbf{E}}
+\end{equation*}
+\begin{equation*}
+\tilde{\mathbf{D}} = \bigg[n_0^2+ 3\pi\chi^{(3)}|\mathcal{E}|^2\bigg]\tilde{\mathbf{E}}
+\end{equation*}
+\begin{equation*}
+\tilde{\mathbf{D}} = \varepsilon_r\tilde{\mathbf{E}}
+\end{equation*}
+\begin{equation*}
+n = \sqrt{\varepsilon_r} = \sqrt{n_0^2+ 3\pi\chi^{(3)}|\mathcal{E}|^2}= n_0\sqrt{1+\frac{3\pi\chi^{(3)}|\mathcal{E}|^2}{n_0^2}}\approx n_0 + \frac{3\pi\chi^{(3)}|\mathcal{E}|^2}{2n_0}
+\end{equation*}
+\begin{equation*}
+n = n_0 + \frac{3\pi\chi^{(3)}|\mathcal{E}|^2}{2n_0} = n_0+n_2I = n_0 +n_2\frac{n_0c}{8\pi}|\mathcal{E}|^2
+\end{equation*}
+thus
+\begin{equation*}
+n_2 = \frac{12\pi^2\chi^{(3)}}{n_0^2c} \Longleftrightarrow \chi^{(3)}=\frac{n_0^2n_2c}{
+12\pi^2}
+\end{equation*}
+
+\begin{equation*}
+\begin{split}
+\tilde{\mathbf{P}}_{_{NL}} = \frac{3\chi^{(3)}}{4}|\mathcal{E}|^2\tilde{\mathbf{E}}
+\end{split}
+\end{equation*}
+\begin{equation*}
+\begin{split}
+\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) =  \frac{3\chi^{(3)}}{4}|\mathcal{E}|^2A
+\end{split}
+\end{equation*}
+
+Let's recall the Kerr nonlinearity term:
+\begin{equation*}
+i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) =i\frac{2\pi\omega_0^2}{k_0c^2} \frac{3\chi^{(3)}}{4}\hat{T}^2|\mathcal{E}|^2A
+\end{equation*}
+\begin{equation*}
+i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) =i\frac{3\pi k_0}{2n_0^2}\chi^{(3)} \hat{T^2}|\mathcal{E}|^2A
+\end{equation*}
+
+With $k_0 = \frac{n_0\omega_0}{c}$ and $K_0 = \frac{\omega_0}{c}$
+\begin{equation*}
+i\frac{2\pi\omega_0^2}{k_0c^2}\hat{T}^2\tilde{\mathbf{p}}_{_{NL}}(\mathbf{r},t) =i\frac{3\pi k_0}{2n_0^2}\frac{n_0^2n_2c}{12\pi^2} \hat{T^2}|\mathcal{E}|^2A=iK_0n_2\hat{T^2}\frac{n_0c}{8\pi}|\mathcal{E}|^2A
+\end{equation*}
+
+With $k_0 = \frac{n_0\omega_0}{c}$ and $K_0 = \frac{\omega_0}{c}$
+
+
+It yields : 
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = &\, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+iK_0n_2\hat{T}^2 \Bigg[(1-f_R)I(\mathbf{r},t) \quad + f_R\int_{-\infty}^tR(t-\tau) I(\mathbf{r},\tau) d\tau \Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+ \frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)\\&-\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{split}
+\end{empheq}
+
+\section{Ions screening}
+\begin{equation*}
+\frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\tilde{\mathbf{J}}_{ions}(\mathbf{r},t)
+\end{equation*}
+\begin{equation*}
+\frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\frac{\partial}{\partial t}\Big[\tilde{\mathbf{J}}_{ions}\big|_{_{env}}\cdot[e^{i(k_0z-\omega_0t)}+\text{c.c}]\Big]
+\end{equation*}
+
+\begin{equation*}
+\frac{1}{i2k_0}\frac{4\pi}{c^2}e^{-i(k_0z-\omega_0t)}\Bigg[\Big[\frac{\partial}{\partial t}\tilde{\mathbf{J}}_{ions}\big|_{_{env}}\Big][e^{i(k_0z-\omega_0t)}+\text{c.c}]+\tilde{\mathbf{J}}_{ions}\big|_{_{env}}\frac{\partial}{\partial t}[e^{i(k_0z-\omega_0t)}+\text{c.c}]\Bigg]
+\end{equation*}
+The phase terms cancels out:
+\begin{equation*}
+\frac{1}{i2k_0}\frac{4\pi}{c^2}\Bigg[\frac{\partial}{\partial t}-i\omega_0\Bigg]\tilde{\mathbf{J}}_{ions}\big|_{_{env}}
+\end{equation*}
+
+\begin{equation*}
+\frac{1}{i2k_0}\frac{4\pi}{c^2}\cdot-i\omega_0\Bigg[1+\frac{i}{\omega_0}\frac{\partial}{\partial t}\Bigg]\tilde{\mathbf{J}}_{ions}\big|_{_{env}}
+\end{equation*}
+Recalling $\hat{T}=1+\frac{i}{\omega_0}\frac{\partial}{\partial t}$
+
+\begin{equation*}
+-\frac{1}{2k_0}\frac{4\pi\omega_0}{c^2}\hat{T}\tilde{\mathbf{J}}_{ions}\big|_{_{env}}
+\end{equation*}
+
+The Keldysh's photoionisation ionisation rate $W_{PI}$ is given by the following formula :
+
+$$W_{PI}(\mathcal{|E|}) = \frac{2\omega_0}{9\pi} \left( \frac{\omega_0 m}{\hbar \sqrt{\Gamma}} \right)^{3/2} \left[ \sqrt{\frac{\pi}{2K(\Xi)}} \sum_{n=0}^{\infty} \exp(-n\alpha) \Phi(\sqrt{\beta(n+2\nu)}) \right] \exp(-\alpha\langle x+1\rangle)$$
+
+We define the following parameters:
+$$\gamma = \omega\frac{\sqrt{mU_i}}{e\mathcal{E}}$$
+$$\Gamma = \frac{\gamma^2}{1+\gamma^2}$$
+
+$$\Xi = \frac{1}{1+\gamma^2}$$
+$$\alpha = \pi \frac{K(\Gamma) - E(\Gamma)}{E(\Xi)}$$
+
+$$\beta = \frac{\pi^2}{4K(\Xi)E(\Xi)}$$
+$$x = \frac{2U_i}{\pi \hbar \omega_0} \frac{E(\Xi)}{\sqrt{\Gamma}}$$
+$$\nu = \langle x+1\rangle - x$$
+
+where $\langle \cdot \rangle$ denotes the integer part and $\Phi$ the Dawson function $\Phi(z) = \int_{0}^{z} \exp(y^2 - z^2) \, dy$
+The functions $K(m)$ and $E(m)$ are the complete elliptic integrals of the first and second kind, respectively. In these expressions, the argument $m$ denotes the square of the elliptic modulus ($m = k^2$)
+$$K(m) = \int_{0}^{\frac{\pi}{2}} \frac{d\theta}{\sqrt{1 - m \sin^2\theta}}$$
+$$E(m) = \int_{0}^{\frac{\pi}{2}} \sqrt{1 - m \sin^2\theta} \, d\theta$$
+
+The loss in energy $P_{loss}$ is equal to the energy gap $Ui$ multiplied by the rate at which the electrons are photo-ionized ($W_{PI}(\mathcal{|E|})$) Thus:
+$$P_{loss} = U_i W_{PI}(\mathcal{|E|})$$
+The electric field exerts a force on those ionized electrons and makes them movie. Such actions on charges diminish the intensity of the field acting on unionized electrons, lowering the rate of photo-ionization.
+The energy conservation yields:
+$$\frac{\partial u}{\partial t} + \nabla S = -\tilde{\mathbf{J}}_{ions}\tilde{\mathbf{E}}$$ 
+With $S$ the Poynting vector
+The power ceded to the electrons is :
+$$P_{loss} = \langle\tilde{\mathbf{J}}_{ions}\tilde{\mathbf{E}}\rangle_T = U_iW_{PI}(\mathcal{|E|})$$
+
+The curent is proportional to $\tilde{\mathbf{E}}$ such that $\tilde{\mathbf{J}}_{ions} = \gamma_{ions}\tilde{\mathbf{E}}$
+$$\langle\tilde{\mathbf{J}}_{ions}\tilde{\mathbf{E}}\rangle_T = \langle \gamma_{ions}\tilde{\mathbf{E}^2\rangle}_T = \gamma_{ions}\langle A^2e^{2i\psi}+A^{*2}e^{-2i\psi} +2|A|^2\rangle_T = 2\gamma_{ions}|A|^2 = U_iW_{PI}(\mathcal{|E|})$$
+$$\gamma_{ions} = \frac{U_iW_{PI}(\mathcal{|E|})}{2|A|^2}$$
+$$\tilde{\mathbf{J}}_{ions}\big|_{_{env}}=\frac{U_iW_{PI}(\mathcal{|E|})}{2|A|^2}A$$
+Recalling :
+\begin{equation*}
+-\frac{1}{2k_0}\frac{4\pi\omega_0}{c^2}\hat{T}\tilde{\mathbf{J}}_{ions}\big|_{_{env}}
+=-\frac{1}{2k_0}\frac{4\pi\omega_0}{c^2}\hat{T}\bigg[\frac{U_iW_{PI}(\mathcal{|E|})}{2|A|^2}A\bigg]=
+-\frac{\pi}{cn_0}\hat{T}\bigg[\frac{U_iW_{PI}(\mathcal{|E|})}{|A|^2}A\bigg]
+\end{equation*}
+
+The intensity reads in standard units : $ I_{SI} = \frac{\epsilon_0n_0c}{2}|E|^2 = \frac{\epsilon_0n_0c}{2}4|A|^2 =2\epsilon_0n_0c|A|^2$ $I_{Gauss}\equiv \frac{n_0c}{2\pi}|A|^2 $
+$$|A|^2\Longleftrightarrow \frac{2\pi}{n_0 c}I_{Gauss}$$
+
+\begin{equation*}
+-\frac{1}{2k_0}\frac{4\pi\omega_0}{c^2}\hat{T}\tilde{\mathbf{J}}_{ions}\big|_{_{env}}
+=
+-\frac{\pi}{cn_0}\hat{T}\frac{U_iW_{PI}(\mathcal{|E|})}{|A|^2}A = -\frac{\pi}{cn_0}\hat{T}\frac{U_iW_{PI}(\mathcal{|E|})}{\frac{2\pi}{n_0 c}I_{Gauss}}A =-\frac{1}{2}\hat{T}\frac{U_iW_{PI}(\mathcal{|E|})}{I_{Gauss}}A
+\end{equation*}
+
+
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) = &\, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&+iK_0n_2\hat{T}^2 \Bigg[(1-f_R)I(\mathbf{r},t) \quad + f_R\int_{-\infty}^tR(t-\tau) I(\mathbf{r},\tau) d\tau \Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) \\
+&-\frac{1}{2}\hat{T}\frac{U_iW_{PI}(\mathcal{|E|})}{I_{Gauss}}A\\&-\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{split}
+\end{empheq}
+
+
+\begin{empheq}[box=\fbox]{equation*}
+\begin{split}
+\hat{U} \frac{\partial}{\partial z'} \tilde{\mathbf{A}}(\mathbf{r},t) &= \, i\Bigg[\frac{\nabla_\perp^2}{2k_0}+\tilde{L}\bigg(\hat{U} +\frac{\tilde{L}}{2k_0}\bigg)\Bigg]\tilde{\mathbf{A}}(\mathbf{r},t) + i\hat{N}\\
+\hat{N}=K_0n_2\hat{T}^2 &\Bigg[(1-f_R)I(\mathbf{r},t) \quad + f_R\int_{-\infty}^tR(t-\tau) I(\mathbf{r},\tau) d\tau \Bigg]\tilde{\mathbf{A}}(\mathbf{r},t)\\&
++i\frac{1}{2}\hat{T}\frac{U_iW_{PI}(\mathcal{|E|})}{I_{Gauss}}A+i\frac{\sigma}{2} (1+i\omega_0\tau_c) \rho \tilde{\mathbf{A}}
+\end{split}
+\end{empheq}
+
+which matchs almost the couairon article that may have used a different conversion for intensity and missed factors forgot factors $i$ in the $\hat{N}$ operator
+
+
+
+
+\section{Comparison with }
+
+An independent derivation of the same physical model, written in SI units,
+provides a useful cross-check on the intensity prefactors obtained above. In SI
+units the propagation equation reads
+\begin{equation*}
+\frac{\partial}{\partial z}\psi = \frac{i}{2k}\nabla_\perp^2\psi
+-\frac{W_{PI}\,U}{n c_0\epsilon_0|\psi|^2}\psi
+-i\frac{k''}{2}\frac{\partial^2\psi}{\partial t'^2}
++ik_0n_2\frac{nc_0\epsilon_0}{2}|\psi|^2\psi
+-\frac{\sigma}{2}\varrho\,\psi
+-i\frac{\sigma}{2}\omega\tau\varrho\,\psi
+\end{equation*}
+where $\psi$ is the field envelope and the SI intensity is
+\begin{equation*}
+I = \frac{n c_0\epsilon_0}{2}|\psi|^2 .
+\end{equation*}
+
+Substituting $nc_0\epsilon_0|\psi|^2 = 2I$ into the
+SI ionization term gives
+\begin{equation*}
+-\frac{W_{PI}\,U}{n c_0\epsilon_0|\psi|^2}\psi
+= -\frac{W_{PI}\,U}{2I}\psi
+= -\frac{1}{2}\frac{U\,W_{PI}}{I}\psi ,
+\end{equation*}
+which is exactly the prefactor $-\tfrac12$ we obtained in Gaussian units. The
+denominator of the ionization term is therefore an \emph{intensity}, not a field
+amplitude squared --- in agreement with the dimensional argument made above
+($[U W_{PI}/I] = \mathrm{cm}^{-1}$).
+
+Likewise, $\frac{nc_0\epsilon_0}{2}|\psi|^2 = I$, so the SI
+Kerr term is
+\begin{equation*}
+ik_0n_2\frac{nc_0\epsilon_0}{2}|\psi|^2\psi = ik_0n_2\,I\,\psi ,
+\end{equation*}
+matching our Gaussian result $iK_0n_2\,I\,\mathcal{E}$ with
+$I = \frac{n_0c}{8\pi}|\mathcal{E}|^2$. In both unit systems the conversion factor
+($\frac{nc_0\epsilon_0}{2}$ in SI, $\frac{n_0c}{8\pi}$ in Gaussian) is not spurious:
+it converts the field amplitude squared into the intensity and must survive,
+since $n_2$ is defined through $\Delta n = n_2 I$ (with $n_2$ in cm$^2$/W).
+
+Written term by term, this SI
+equation also confirms the role of the global $i$: the conservative terms
+(diffraction, group-velocity dispersion, Kerr, plasma defocusing) each carry an
+$i$ and act as phases, whereas the dissipative terms (ionization, plasma
+absorption) carry no $i$ and act as real losses. This is precisely the structure
+of our boxed equation. It shows that the compact notation $\partial_z\mathcal{E}
+= i N(\mathcal{E})$ used by Couairon \emph{et al.} is not literally consistent
+term by term: inside $N$, the Kerr term is real (the global $i$ makes it a phase),
+while the ionization and plasma terms must already carry their own $i$ so that
+$iN$ reproduces the physical losses.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
