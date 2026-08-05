@@ -939,7 +939,9 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
     tau_opt = sigma * (rho_e @ A.T) * 1e-4          # cm^-3 * µm * cm^2 -> sans dim
     return dict(x_um=x_um, z_um=z_um, opl_nm=opl_nm,
                 transmittance=np.exp(-np.clip(tau_opt, 0, None)),
-                sigma_cm2=sigma, f_ste=f_ste)
+                sigma_cm2=sigma, f_ste=f_ste,
+                # bruts (r, z), pour la vue de dessus qui integre le long de z
+                dn_rz=dn, rho_e_rz=rho_e, r_pos_um=r_pos)
 
 
 def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
@@ -952,13 +954,31 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
     x, z = d["x_um"], d["z_um"] + z_shift_um
     opl, T = d["opl_nm"], d["transmittance"]
 
-    iz = (int(np.argmin(np.abs(z - z_face_um))) if z_face_um is not None
-          else int(np.argmax(np.abs(opl).max(axis=1))))
+    # --- vue de dessus : la sonde regarde LE LONG de l'axe, donc elle traverse
+    # toute la colonne. Il faut integrer Delta_n et rho_e sur TOUT z, pas
+    # echantillonner un seul plan. Comme le milieu est axisymetrique autour de
+    # z, chaque rayon a la distance r voit Delta_n(r, z) sur tout son trajet :
+    # pas de transformee d'Abel ici, une simple integrale en z.
+    dn_rz, rho_e_rz = d["dn_rz"], d["rho_e_rz"]
+    r_pos = d["r_pos_um"]
+    z_m = z * 1e-6
+    # np.trapz a disparu dans numpy 2, np.trapezoid n'existe pas avant
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    opl_top_nm = _trapz(dn_rz, z_m, axis=0) * 1e9                  # m -> nm
+    tau_top = d["sigma_cm2"] * _trapz(rho_e_rz, z_m, axis=0) * 1e2  # cm^-3 * m * cm^2
+    T_top = np.exp(-np.clip(tau_top, 0, None))
+
     X, Y = np.meshgrid(x, x)
     R = np.hypot(X, Y)
-    xp = x[x >= 0]
-    face_opl = np.interp(R, xp, opl[iz][x >= 0], left=0, right=0)
-    face_T = np.interp(R, xp, T[iz][x >= 0], left=1, right=1)
+    # left = valeur a r_pos[0] et non 0 : la grille de Hankel commence a
+    # r ~ 1e-2 um, donc le pixel central (R < r_pos[0]) tombait hors domaine
+    # et etait mis a zero -- exactement la ou le signal est maximal.
+    face_opl = np.interp(R, r_pos, opl_top_nm, left=opl_top_nm[0], right=0.0)
+    face_T = np.interp(R, r_pos, T_top, left=T_top[0], right=1.0)
+
+    # le plan repere sur les vues de cote (trait pointille) reste le plus intense
+    iz = (int(np.argmin(np.abs(z - z_face_um))) if z_face_um is not None
+          else int(np.argmax(np.abs(opl).max(axis=1))))
 
     fig, ax = plt.subplots(2, 2, figsize=(16, 9),
                            gridspec_kw=dict(width_ratios=[1, 2.9]))
@@ -967,7 +987,7 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
 
     im0 = ax[0, 0].imshow(face_opl, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
                           extent=ext_face, origin="lower")
-    ax[0, 0].set_title("top OPL"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
+    ax[0, 0].set_title("top OPL (integre sur toute la colonne)"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
 
     im1 = ax[0, 1].imshow(opl.T, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
                           extent=ext_side, origin="lower", aspect="auto")
@@ -977,7 +997,7 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
 
     im2 = ax[1, 0].imshow(face_T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
                           extent=ext_face, origin="lower")
-    ax[1, 0].set_title("top transmittance"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
+    ax[1, 0].set_title("top transmittance (integre sur toute la colonne)"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
 
     im3 = ax[1, 1].imshow(T.T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
                           extent=ext_side, origin="lower", aspect="auto")
