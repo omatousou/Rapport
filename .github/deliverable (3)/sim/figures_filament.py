@@ -138,15 +138,27 @@ def marburger_collapse(P_in, P_cr, w_input, wavelength, n0, f_ext=None):
     return ratio, L_DF, L_c, L_cf
 
 
-def count_refocusing_cycles(res, I_clamp=5e13, z_shift_um=0.0, verbose=True):
+def count_refocusing_cycles(res, I_clamp=5e13, z_shift_um=0.0,
+                            min_prominence_frac=0.3, verbose=True):
     """Maxima locaux de l'intensité crête au-dessus de I_clamp : le premier est
-    le collapse initial, les suivants sont les cycles de refocalisation."""
+    le collapse initial, les suivants sont les cycles de refocalisation.
+
+    `min_prominence_frac` est indispensable et vaut 0.3 par défaut. Sans lui,
+    find_peaks(height=I_clamp) compte toutes les rides d'une rampe montante :
+    sur un run où l'intensité grimpe régulièrement de 5.0 à 6.1e13, il
+    rapportait 12 "cycles" espacés de 6 µm et d'intensité strictement
+    croissante -- alors qu'un cycle de refocalisation ALTERNE (collapse, arrêt,
+    re-collapse), donc son intensité monte PUIS redescend, avec une
+    proéminence de l'ordre de 100 % du niveau et non de 2 %.
+    """
     from scipy.signal import find_peaks
     z_um = z_um_of(res, z_shift_um)
     Imax = np.asarray(res["Imax_z"])
-    idx, _ = find_peaks(Imax, height=I_clamp)
+    idx, _ = find_peaks(Imax, height=I_clamp,
+                        prominence=min_prominence_frac * I_clamp)
     if verbose:
-        print(f"{len(idx)} maximum(aux) local(aux) au-dessus de I_clamp={I_clamp:.0e} :")
+        print(f"{len(idx)} maximum(aux) local(aux) au-dessus de I_clamp={I_clamp:.0e} "
+              f"et de proeminence > {min_prominence_frac:.0%} :")
         for i, ip in enumerate(idx):
             print(f"  cycle {i+1}: z = {z_um[ip]:+9.2f} µm   I = {Imax[ip]:.3e} W/cm²")
         if len(idx) >= 2:
