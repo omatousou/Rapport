@@ -607,3 +607,160 @@ def decompose_probe_phase(res, lambda_probe_m=490e-9, E_tr_eV=4.2, n2=3.54e-20,
     out["x_um"] = x_um
     out["phi_xz"] = phi_tot
     return out
+
+
+# ================================================================================
+#  Cartes de déphasage sonde, style expérience pompe-sonde
+# ================================================================================
+def _populations_at(res, t_local_fs, tau_r_s=330e-15, tau_ste_s=None):
+    """rho_e, rho_s, I au temps local demandé pour chaque plan z.
+
+    Dans la fenêtre du solveur : interpolation dans le cube.
+    AU-DELÀ : intégration analytique. C'est légitime parce qu'à t = 5 t_p le
+    champ vaut exp(-25) ~ 1e-11 de son maximum, donc les équations de
+    population se réduisent à
+
+        drho_e/dt = -rho_e/tau_r
+        drho_s/dt = +rho_e/tau_r - rho_s/tau_ste
+
+    dont la solution est exacte :
+        rho_e(t) = rho_e0 exp(-t/tau_r)
+        rho_s(t) = rho_s0 exp(-t/tau_s) + B [exp(-t/tau_r) - exp(-t/tau_s)],
+        B = (rho_e0/tau_r) / (1/tau_s - 1/tau_r)
+    (et rho_s(t) = rho_s0 + rho_e0[1-exp(-t/tau_r)] si tau_ste est None,
+    c'est-à-dire sans canal de décroissance des STE.)
+
+    Ça permet d'atteindre 2 ps sans agrandir la fenêtre temporelle, donc sans
+    payer le Nt correspondant. Aucune physique thermique ou acoustique n'est
+    incluse : au-delà de quelques ps l'expérience en voit, pas ce modèle.
+    """
+    t_sub = np.asarray(res["t_sub_fs"], float)
+    rho_e_c = np.asarray(res["rho_rzt"], float)
+    rho_s_c = np.asarray(res["rho_s_rzt"], float)
+    I_c = np.asarray(res["I_rzt"], float)
+    nz = rho_e_c.shape[0]
+    t_local = np.atleast_1d(t_local_fs) * np.ones(nz)
+
+    inside = t_local <= t_sub[-1]
+    rho_e = np.empty(rho_e_c.shape[:2])
+    rho_s = np.empty_like(rho_e)
+    I = np.zeros_like(rho_e)
+
+    # --- dans la fenêtre : plus proche voisin en t (le cube est sous-échantillonné) ---
+    if inside.any():
+        k = np.clip(np.searchsorted(t_sub, t_local[inside]), 1, len(t_sub) - 1)
+        k = np.where(np.abs(t_sub[k - 1] - t_local[inside]) < np.abs(t_sub[k] - t_local[inside]),
+                     k - 1, k)
+        iz = np.arange(nz)[inside]
+        rho_e[inside] = rho_e_c[iz, :, k]
+        rho_s[inside] = rho_s_c[iz, :, k]
+        I[inside] = I_c[iz, :, k]
+
+    # --- au-delà : évolution analytique depuis le dernier plan temporel ---
+    if (~inside).any():
+        iz = np.arange(nz)[~inside]
+        dt = (t_local[~inside] - t_sub[-1])[:, None] * 1e-15      # s
+        e0, s0 = rho_e_c[iz, :, -1], rho_s_c[iz, :, -1]
+        decay_r = np.exp(-dt / tau_r_s)
+        rho_e[~inside] = e0 * decay_r
+        if tau_ste_s is None:
+            rho_s[~inside] = s0 + e0 * (1.0 - decay_r)
+        else:
+            decay_s = np.exp(-dt / tau_ste_s)
+            B = (e0 / tau_r_s) / (1.0 / tau_ste_s - 1.0 / tau_r_s)
+            rho_s[~inside] = s0 * decay_s + B * (decay_r - decay_s)
+        # I reste nul : plus de champ
+    return rho_e, rho_s, I
+
+
+def probe_phase_map(res, delay_fs, lambda_probe_m=490e-9, E_tr_eV=4.2,
+                    n2=3.54e-20, tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
+                    include=("drude", "ste", "kerr"), x_half_um=20.0, dx_um=0.1):
+    """Déphasage sonde phi(x, z) [rad] au délai pompe-sonde `delay_fs`.
+
+    Sonde TRANSVERSE : la pompe atteint le plan z au temps z/v_g, donc le temps
+    local vu en z vaut t_local(z) = delay - z/v_g. Même convention que
+    unified_filament_slider_v3.py.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+
+    n0p = _ns(lambda_probe_m)
+    nc = epsilon_0 * m_e * (2 * np.pi * c_ / lambda_probe_m)**2 / qe_**2 * 1e-6
+    E_probe = 1239.84193 / (lambda_probe_m * 1e9)
+    f_ste = E_probe**2 / (E_tr_eV**2 - E_probe**2)
+    lam_um = lambda_probe_m * 1e6
+
+    z_um = z_um_of(res)
+    v_g = 299.792458 / n_g                       # µm/ps
+    t_local = delay_fs - z_um / (v_g * 1e-3)     # fs
+
+    rho_e, rho_s, I = _populations_at(res, t_local, tau_r_s, tau_ste_s)
+
+    # axe radial du cube (sous-échantillonné si rho_r_stride > 1)
+    if res.get("r_sub") is not None and np.asarray(res["r_sub"]).shape != ():
+        r_pos = np.asarray(res["r_sub"], float) * 1e6
+    else:
+        r_full = r_um_of(res)
+        r_pos = r_full[len(r_full) // 2:]
+    r_pos = r_pos[:rho_e.shape[1]]
+
+    den = 2.0 * n0p * nc
+    dn = np.zeros_like(rho_e)
+    if "drude" in include:
+        dn -= rho_e / den
+    if "ste" in include:
+        dn += f_ste * rho_s / den
+    if "kerr" in include:
+        dn += n2 * I * 1e4
+
+    x_max = float(min(x_half_um, r_pos[-1]))
+    x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
+    A = build_abel_matrix(r_pos, x_um)
+    phi = (2.0 * np.pi / lam_um) * (dn @ A.T)
+    return x_um, z_um, phi
+
+
+def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
+                      x_half_um=15.0, **kw):
+    """Planche façon expérience pompe-sonde : une colonne par délai.
+
+    Ligne du haut  : vue de face phi(x, y) au plan z_face_um (axisymétrique).
+    Ligne du bas   : vue de côté phi(x, z), axe de propagation vertical,
+                     comme sur les figures expérimentales.
+    """
+    import matplotlib.pyplot as plt
+    n = len(delays_fs)
+    fig, axes = plt.subplots(2, n, figsize=(1.9 * n, 7.5),
+                             gridspec_kw=dict(height_ratios=[1, 2.6]))
+    axes = np.atleast_2d(axes)
+    maps = [probe_phase_map(res, d, x_half_um=x_half_um, **kw) for d in delays_fs]
+    if clip_rad is None:
+        clip_rad = max(float(np.nanmax(np.abs(p))) for _, _, p in maps) or 1.0
+
+    for j, (d, (x_um, z_um, phi)) in enumerate(zip(delays_fs, maps)):
+        iz = (int(np.argmin(np.abs(z_um - z_face_um))) if z_face_um is not None
+              else int(np.argmax(np.abs(phi).max(axis=1))))
+        prof = phi[iz]
+        X, Y = np.meshgrid(x_um, x_um)
+        R = np.hypot(X, Y)
+        face = np.interp(R, np.abs(x_um[x_um >= 0]), prof[x_um >= 0], left=0, right=0)
+        axes[0, j].imshow(face, cmap="bwr", vmin=-clip_rad, vmax=clip_rad,
+                          extent=[x_um[0], x_um[-1], x_um[0], x_um[-1]], origin="lower")
+        axes[0, j].set_title(f"{d/1000:.2f} ps", fontsize=11, fontweight="bold")
+        axes[0, j].tick_params(labelsize=6)
+        if j == 0:
+            axes[0, j].set_ylabel("y (µm)", fontsize=8)
+
+        im = axes[1, j].imshow(phi, cmap="bwr", vmin=-clip_rad, vmax=clip_rad, aspect="auto",
+                               extent=[x_um[0], x_um[-1], z_um[-1], z_um[0]])
+        axes[1, j].axhline(z_um[iz], color="k", lw=0.5, ls=":")
+        axes[1, j].tick_params(labelsize=6)
+        axes[1, j].set_xlabel("x (µm)", fontsize=8)
+        if j == 0:
+            axes[1, j].set_ylabel("z (µm), propagation", fontsize=8)
+    fig.colorbar(im, ax=axes.ravel().tolist(), fraction=0.015, pad=0.01,
+                 label="phase delay (rad)")
+    if save:
+        fig.savefig(save, dpi=150, bbox_inches="tight")
+    return fig
