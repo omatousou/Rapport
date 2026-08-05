@@ -6,7 +6,7 @@ The electric field is written as a carrier wave modulated by a slowly varying en
 \hat{U}\,\frac{\partial u}{\partial z} =\;
 &\underbrace{\frac{i}{2k_0}\nabla_\perp^2 u}_{\text{diffraction}}
 \;+\;
-\underbrace{i\,\hat{D}\,\hat{U}\,u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
+\underbrace{i\,\hat{D}\Big(\hat{U}+\frac{\hat{D}}{2k_0}\Big)u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
 \text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 u}} \nonumber\\[4pt]
 &+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)\,|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
 &+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}\,f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
@@ -29,10 +29,30 @@ where $k(\omega)$ is evaluated from the Sellmeier relation rather than truncated
 This is the form used by Couairon et al.~\cite{PhysRevB.71.125435}, whose Eq.~(2) is introduced with exactly that wording: the equation accounts for space-time focusing \emph{due to the presence of the operator $\hat{U}$ in front of $\partial/\partial z$}. The reason to prefer it over the algebraically equivalent form obtained by dividing through by $\hat{U}$ is that it contains no inverse operator, so there is no ambiguity about which terms $\hat{U}$ acts on. If one does divide by $\hat{U}$, it must be applied to \emph{every} term on the right-hand side, giving
 \begin{equation}
 \label{eq:master_divided}
-\frac{\partial u}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 u + i\hat{D}u
+\frac{\partial u}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 u
+ + i\hat{D}u + \frac{i\,\hat{D}^2}{2k_0}\hat{U}^{-1}u
  + \hat{U}^{-1}\Big\{\text{Kerr} + \text{Raman} + \text{ionization} + \text{plasma} + \text{STE}\Big\},
 \end{equation}
-where $\hat{U}$ cancels on the dispersion term alone. Since $\hat{U}\simeq\hat{T}$ to within one percent for fused silica at $800\ \text{nm}$ ($n_g/n_0=1.0095$), the Kerr operator in that form becomes $\hat{U}^{-1}\hat{T}^2\simeq\hat{T}$ and the ionization operator becomes $\hat{U}^{-1}\hat{T}\simeq1$, which is how the single-$\hat{T}$ expressions of the review literature arise. Applying $\hat{U}^{-1}$ to the Laplacian only, while leaving $\hat{T}^2$ on the Kerr term, is \emph{not} one of these two forms and leaves every nonlinear term with one power of $\hat{T}$ too many.
+where $\hat{U}$ cancels on the first power of $\hat{D}$ alone.
+
+\paragraph{Why the single-$\hat{T}$ form of the review literature follows.} The usual statement, that $\hat{U}\simeq\hat{T}$ for fused silica, is true but is not by itself an argument: it does not say what happens to $\hat{U}^{-1}\hat{T}^2$, which is the combination that actually appears. Expanding it settles the question. Write $\varepsilon=\Omega/\omega_0$, so that $\hat{T}=1+\varepsilon$ exactly, and note that
+\begin{equation}
+\hat{U} = 1+\frac{k'_\omega\Omega}{k_0} = 1+\frac{n_g}{n_0}\,\varepsilon \equiv 1+g\,\varepsilon,
+\qquad g=\frac{n_g}{n_0},
+\end{equation}
+since $k'_\omega=n_g/c$ and $k_0=n_0\omega_0/c$. Then
+\begin{equation}
+\hat{U}^{-1}\hat{T}^{2} = \frac{(1+\varepsilon)^2}{1+g\varepsilon}
+= \big(1+2\varepsilon+\varepsilon^2\big)\big(1-g\varepsilon+g^2\varepsilon^2-\dots\big)
+= 1+(2-g)\,\varepsilon+(1-g)^2\varepsilon^2+O(\varepsilon^3).
+\end{equation}
+For fused silica at $1030\ \text{nm}$, $n_0=1.4500$ and $n_g=1.4627$ give $g=1.00873$, hence
+\begin{equation}
+\hat{U}^{-1}\hat{T}^{2} = 1+0.99127\,\varepsilon+7.6\times10^{-5}\varepsilon^2+\dots \;\simeq\; 1+\varepsilon = \hat{T},
+\end{equation}
+the first-order coefficient differing from that of $\hat{T}$ by exactly $1-g=-0.87\ \%$ and the quadratic term being four orders of magnitude below it. The same expansion gives $\hat{U}^{-1}\hat{T}=1+(1-g)\varepsilon+\dots\simeq1$ for the ionization term. This is where the single-$\hat{T}$ expressions of the review literature come from, and the error committed in using them is $(g-1)\varepsilon$, not something merely assumed small. Applying $\hat{U}^{-1}$ to the Laplacian only, while leaving $\hat{T}^2$ on the Kerr term, is \emph{not} one of these two forms and leaves every nonlinear term with one power of $\hat{T}$ too many.
+
+\paragraph{The $\hat{D}^2/2k_0$ term is dropped by the solver.} Equation~\eqref{eq:master_divided} carries a third linear term, $i\hat{D}^2\hat{U}^{-1}u/2k_0$, which comes from expanding the exact dispersion relation $k_z=\sqrt{k(\omega)^2-k_\perp^2}$ beyond first order in $\hat{D}$. The code does not implement it: \texttt{LinearOperator.half\_linear} applies the phase $\hat{D}-k_\perp^2\hat{U}^{-1}/2k_0$, that is the first power of $\hat{D}$ only. The relative size of the omitted term is $|\hat{D}|/2k_0$, which for $\lambda_0=1030\ \text{nm}$ is $2.0\times10^{-4}$ at $800\ \text{nm}$, $1.6\times10^{-3}$ at $600\ \text{nm}$ and $1.1\times10^{-2}$ at $400\ \text{nm}$. It is therefore below a percent everywhere the pulse carries appreciable energy, and only becomes visible on a far blue wing that the spectral mask has already attenuated. Keeping it in Eq.~\eqref{eq:master_propagation} while noting that the solver truncates it is more honest than writing the truncated equation and calling it exact.
 
 Second, the depletion factor is the dimensionless $1-N/N_{at}$, not $N_{at}-N$. The Keldysh rate $W_{PI}$ returned by the lookup table is already a volumetric rate in $\text{cm}^{-3}\text{s}^{-1}$, so multiplying it by a density would leave the term with an extra $\text{cm}^{-3}$. The alternative convention, in which $W_{PI}$ is a per-atom rate in $\text{s}^{-1}$ multiplied by $N_{at}-N$, is equally valid but is not the quantity the code computes.
 
