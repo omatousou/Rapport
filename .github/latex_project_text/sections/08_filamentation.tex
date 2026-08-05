@@ -63,3 +63,17 @@ The critical power $P_{cr}$ corresponds to the value of $P_{in}$ at which self-f
     \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing, starting from an input beam launched at $z=0$. The first collapse occurs at $z=L_c$, the collapse length. Each collapse is arrested before the beam reaches a singular focus by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take back over, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament.}
     \label{fig:filamentation_schematic}
 \end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \repfig[0.85\linewidth]{rep_selffocusing.png}
+    \caption{Simulated $1/e^2$ beam radius along $z$ for the $5\ \mu$J, $1030\ \text{nm}$ run (red) against the linear Gaussian propagation of the same input beam (grey dashed). The gap between the two curves is the self-focusing: linear propagation opens as $w_0\sqrt{1+(z/z_R)^2}$ over the Rayleigh length $z_R$, while the nonlinear beam collapses instead. The green line marks the Dawes--Marburger collapse length $L_c$ predicted from $P/P_{cr}$ alone; the blue line marks where the simulated peak intensity actually maximizes. The point where the red curve stops falling is where the plasma of Section~\ref{sec:plasma} arrests the collapse, which no purely Kerr estimate can predict.}
+    \label{fig:rep_selffocusing}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \repfig[0.85\linewidth]{rep_clamping_equilibrium.png}
+    \caption{The clamping balance resolved along $z$ for the same run. Top: the focusing Kerr index $n_2I$ and the defocusing plasma index $\rho_e/2\rho_c$ on the axis, both on a log scale. Bottom: their signed sum, on a symmetric log scale, shaded red where the medium is net focusing and blue where it is net defocusing. Clamping is not a ceiling imposed on the intensity but the crossing of these two curves: below it the beam keeps contracting, above it the plasma wins and pushes the energy back out. The first crossing, rather than the intensity maximum, is what marks the entry into the filament regime.}
+    \label{fig:rep_clamping}
+\end{figure}

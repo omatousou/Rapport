@@ -125,6 +125,13 @@ where $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field ev
     \label{fig:fig13_electron_density}
 \end{figure}
 
+\begin{figure}[htbp]
+    \centering
+    \repfig[0.85\linewidth]{rep_energy_budget.png}
+    \caption{Cumulative energy fractions removed from the pulse along $z$ for the $5\ \mu$J, $1030\ \text{nm}$ run, separated into the two loss terms of Eq.~\eqref{eq:master_propagation}: the photoionization term, which costs $U_i$ per pair created, and the Drude term, which heats carriers that are already free. Their ratio answers a question the transmission measurement alone cannot: whether the depth of the measured absorption dip is set by how many carriers are made or by how hard the existing ones are driven. The total is the transmission deficit that Section~\ref{sec:comparison} compares against the imaginary part of the measured index.}
+    \label{fig:rep_energy_budget}
+\end{figure}
+
 Note the correspondence with Section~\ref{sec:avalanche}. There, we wrote the same pair of equations with $\sigma/E_g$ in place of $\sigma_\omega/U_i$ and $\tau_x$ in place of $\tau_r$. These are the same quantities, only the notation has been aligned here with the variable names used in the code (\texttt{tau\_r} for the trapping time, \texttt{avalanche\_coef} for $\sigma_\omega/U_i$).
 
 \paragraph{Update relative to the July solver.} The July code only let the self-trapped exciton population decay by re-ionization back into the conduction band, the $\big[W_{PI}(|u_x|)+\beta_sIN\big]N_{STE}/N_{at}$ term above. The parametrization referenced in the code (Sakurai et al.) tabulates for fused silica both a trapping time of $150\ \text{fs}$, already present as $\tau_r$, and a separate relaxation time of the trapped state itself of about $1\ \text{ps}$, which was missing. \texttt{deliverable~(3)} adds an optional term $-N_{STE}/\tau_{STE}$ to the $dN_{STE}/dt$ equation, controlled by \texttt{Config.tau\_ste}, defaulting to \texttt{None} which reproduces the July behavior exactly. This mainly matters for the probe phase at picosecond delays, since it changes how long the STE population, and therefore the index change it produces (Section~\ref{subsec:ste_polarizability}), survives after the pump pulse has left.

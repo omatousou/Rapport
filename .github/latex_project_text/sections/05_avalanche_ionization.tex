@@ -103,3 +103,12 @@ This process can repeat itself as long as the electric field is present and inte
     \caption{On-axis electron density at fixed $z=57\ \mu$m with and without the avalanche term $\sigma_\omega I N/U_i$ of Eq.~\eqref{eq:master_propagation}, reproducing Fig.~10 of~\cite{PhysRevB.71.125435} at $1.1\ \mu$J, $800\ \text{nm}$. Photoionization alone (dashed) already produces a plateau once the pulse has passed, but avalanche multiplication (solid) drives the final density roughly a factor of six higher, showing that impact ionization contributes substantially to the total carrier yield once seeded by the multiphoton channel, even for the $\sim100\ \text{fs}$ pulse duration used here.}
     \label{fig:fig10_avalanche}
 \end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \repfig[0.8\linewidth]{rep_avalanche_takeover.png}
+    \caption{Seeding and takeover, on axis at the most intense plane of the $5\ \mu$J, $1030\ \text{nm}$ run. Top: the free electron density $\rho_e$ (black, log scale) against the local intensity (orange, linear). Bottom: the total creation rate $\mathrm{d}\rho_e/\mathrm{d}t$ split into the avalanche term $\beta I \rho_e (1-\rho_e/\rho_{max})$ of Eq.~\eqref{eq:master_propagation} and the remainder, which is the photoionization contribution. The two curves cross well before the pulse peak: photoionization alone sets the seed density, after which impact ionization supplies almost all of the growth. This is the quantitative form of the statement made above that the cascade must first be started by another mechanism, since $\beta I \rho_e$ vanishes when $\rho_e$ does.}
+    \label{fig:rep_avalanche_takeover}
+\end{figure}
+
+\authornote{The avalanche coefficient plotted here is $\beta=\sigma_\omega/U_i$ evaluated with the collision time \texttt{tau\_c} used by the solver, $1.7\ \text{fs}$ ($\omega_0\tau_c\approx3$). Couairon et al.~\cite{PhysRevB.71.125435} instead calibrate $\tau_c=10\ \text{fs}$ ($\omega_0\tau_c\approx24$) against transmission measurements. Because $\sigma_\omega\propto\tau_c/(1+\omega_0^2\tau_c^2)$ is non-monotonic, the shorter time gives the \emph{larger} cross section, and the resulting $\beta$ differs by about a factor five between the two conventions. The final density that follows differs by several orders of magnitude, so this figure should be read as showing the mechanism, not as a calibrated prediction of $\rho_e$, until the choice of $\tau_c$ is settled.}

@@ -282,7 +282,15 @@ directly implementable without ever storing $\Delta x$ as a separate factor.
     \label{fig:trapezoidal}
 \end{figure}
 
+\begin{figure}[htbp]
+    \centering
+    \repfig[\linewidth]{rep_abel_illustration.png}
+    \caption{The forward Abel transform applied to one plane of the $5\ \mu$J simulation. Left: the true local index change $\Delta n(r)$ that the model computes. Right: its integral along the line of sight, expressed as an optical path length in nanometres, which is the quantity the interferometer actually records (the right axis converts it to a phase at $515\ \text{nm}$, where $1\ \text{rad}$ corresponds to $82\ \text{nm}$). The projection is both wider and smoother than the underlying profile: structure concentrated near the axis is diluted over the whole chord. Recovering the left panel from the right is the inversion derived in Section~\ref{subsec:abel_inversion}, and this figure shows why that inversion is ill conditioned near $r=0$, where the projection carries the least information about the profile.}
+    \label{fig:rep_abel}
+\end{figure}
+
 \subsection{Why a Propagation Model Is Needed}
+
 \label{sec:why_model}
 
 The pipeline above turns a raw interferogram into a two dimensional map of the complex refractive index change: the real part from the phase, the imaginary part from the amplitude, both resolved in the plane transverse to the probe and, through the delay stage, in time. That is the complete experimental output, and it is already enough to see that something structured happens inside the glass, since the maps show a channel far longer than a focal spot, changing sign as the delay is scanned.

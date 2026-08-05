@@ -43,6 +43,19 @@
     \par\vspace{0.3em}%
 }
 
+% Figure produite par le notebook (deliverable (3)/notebooks/filament_1030nm_5uJ.ipynb,
+% section 9). Tant que le PNG n'a pas ete genere et copie ici, on affiche un
+% cadre explicatif au lieu de casser la compilation.
+\newcommand{\repfig}[2][0.85\linewidth]{%
+    \IfFileExists{#2}{\includegraphics[width=#1]{#2}}{%
+        \fbox{\parbox{\dimexpr#1-2\fboxsep-2\fboxrule}{%
+            \vspace{1em}\centering
+            \texttt{\detokenize{#2}}\par\smallskip
+            \small figure not generated yet: run section~9 of
+            the 5\,\textmu J notebook\par\vspace{1em}}}%
+    }%
+}
+
 \hypersetup{
     colorlinks=true,
     linkcolor=black,
