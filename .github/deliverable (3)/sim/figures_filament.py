@@ -138,15 +138,27 @@ def marburger_collapse(P_in, P_cr, w_input, wavelength, n0, f_ext=None):
     return ratio, L_DF, L_c, L_cf
 
 
-def count_refocusing_cycles(res, I_clamp=5e13, z_shift_um=0.0, verbose=True):
+def count_refocusing_cycles(res, I_clamp=5e13, z_shift_um=0.0,
+                            min_prominence_frac=0.3, verbose=True):
     """Maxima locaux de l'intensité crête au-dessus de I_clamp : le premier est
-    le collapse initial, les suivants sont les cycles de refocalisation."""
+    le collapse initial, les suivants sont les cycles de refocalisation.
+
+    `min_prominence_frac` est indispensable et vaut 0.3 par défaut. Sans lui,
+    find_peaks(height=I_clamp) compte toutes les rides d'une rampe montante :
+    sur un run où l'intensité grimpe régulièrement de 5.0 à 6.1e13, il
+    rapportait 12 "cycles" espacés de 6 µm et d'intensité strictement
+    croissante -- alors qu'un cycle de refocalisation ALTERNE (collapse, arrêt,
+    re-collapse), donc son intensité monte PUIS redescend, avec une
+    proéminence de l'ordre de 100 % du niveau et non de 2 %.
+    """
     from scipy.signal import find_peaks
     z_um = z_um_of(res, z_shift_um)
     Imax = np.asarray(res["Imax_z"])
-    idx, _ = find_peaks(Imax, height=I_clamp)
+    idx, _ = find_peaks(Imax, height=I_clamp,
+                        prominence=min_prominence_frac * I_clamp)
     if verbose:
-        print(f"{len(idx)} maximum(aux) local(aux) au-dessus de I_clamp={I_clamp:.0e} :")
+        print(f"{len(idx)} maximum(aux) local(aux) au-dessus de I_clamp={I_clamp:.0e} "
+              f"et de proeminence > {min_prominence_frac:.0%} :")
         for i, ip in enumerate(idx):
             print(f"  cycle {i+1}: z = {z_um[ip]:+9.2f} µm   I = {Imax[ip]:.3e} W/cm²")
         if len(idx) >= 2:
@@ -461,10 +473,35 @@ def fluence_level_extent(res, levels=(1.0, 2.0, 3.0), z_shift_um=0.0, label=""):
     return out
 
 
+def clamping_density(n2, I_clamp_Wcm2, wavelength_m, peak_factor=6.0):
+    """Densité électronique attendue au clampage : rho = 2 rho_c n2 I_clamp.
+
+    C'est l'égalité des deux termes d'indice, n2*I = rho/(2 rho_c), qui EST la
+    définition du clampage. `peak_factor` traduit que le pic dépasse
+    transitoirement l'équilibre : Couairon 2005 rapporte 2-4e20 là où ce bilan
+    donne 6.2e19, soit un facteur ~6.
+
+    Important : rho_c décroît quand lambda augmente, donc la densité attendue à
+    1030 nm est PLUS BASSE qu'à 800 nm. Comparer un run à 1030 nm à la bande
+    2-4e20 de Couairon, mesurée à 800 nm et à ses w0/énergie, n'a pas de sens.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    rho_c = epsilon_0 * m_e * (2 * np.pi * c_ / wavelength_m)**2 / qe_**2 * 1e-6
+    return 2 * rho_c * n2 * I_clamp_Wcm2 * 1e4 * peak_factor
+
+
 def run_health_check(res, out_dir=None, label="", I_band=(4.5e13, 5.5e13),
-                     rho_band=(2e20, 4e20), rho_max=2.1e22):
-    """Confronte un run aux valeurs chiffrées de Couairon 2005 et rappelle
-    quels interrupteurs ont RÉELLEMENT servi (lus dans params.json)."""
+                     rho_band=(2e20, 4e20), rho_max=2.1e22,
+                     rho_band_source="Couairon 2005 @800nm, 1.1uJ, w0=1um"):
+    """Confronte un run à des valeurs de référence et rappelle quels
+    interrupteurs ont RÉELLEMENT servi (lus dans params.json).
+
+    `rho_band` par défaut est celle de Couairon 2005 à SES paramètres. Elle
+    n'est pas universelle : la densité de clampage vaut 2 rho_c n2 I, donc elle
+    dépend de lambda (via rho_c), de n2 et de I_clamp. Pour un run à d'autres
+    paramètres, passer `rho_band` calculée avec `clamping_density()`, sinon le
+    verdict HORS BANDE compare des choses différentes.
+    """
     print(f"=== {label} ===")
     I_pk = float(np.max(res["Imax_z"]))
     z_pk = z_um_of(res)[int(np.argmax(res["Imax_z"]))]
@@ -473,7 +510,8 @@ def run_health_check(res, out_dir=None, label="", I_band=(4.5e13, 5.5e13),
 
     rho_pk = float(np.max(res["rho_rz"]))
     flag = "OK" if rho_band[0] <= rho_pk <= rho_band[1] else "HORS BANDE"
-    print(f"  rho_e max        = {rho_pk:.3e} cm-3   [attendu {rho_band[0]:.0e}-{rho_band[1]:.0e} -> {flag}]")
+    print(f"  rho_e max        = {rho_pk:.3e} cm-3   [ref {rho_band[0]:.0e}-{rho_band[1]:.0e} "
+          f"({rho_band_source}) -> {flag}]")
     if rho_pk > 0.5 * rho_max:
         print(f"    /!\\ rho_e s'approche de rho_max={rho_max:.1e} : emballement, pas un clampage physique")
 
@@ -722,7 +760,7 @@ def probe_phase_map(res, delay_fs, lambda_probe_m=490e-9, E_tr_eV=4.2,
 
 
 def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
-                      x_half_um=15.0, **kw):
+                      x_half_um=15.0, z_lim=None, **kw):
     """Planche façon expérience pompe-sonde : une colonne par délai.
 
     Ligne du haut  : vue de face phi(x, y) au plan z_face_um (axisymétrique).
@@ -736,9 +774,16 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
     axes = np.atleast_2d(axes)
     maps = [probe_phase_map(res, d, x_half_um=x_half_um, **kw) for d in delays_fs]
     if clip_rad is None:
-        clip_rad = max(float(np.nanmax(np.abs(p))) for _, _, p in maps) or 1.0
+        # Percentile 99.5 et non le maximum : un run ou le milieu s'ionise
+        # totalement produit quelques pixels a des centaines de radians, qui
+        # ecrasent toute l'echelle et rendent la planche uniformement blanche.
+        allv = np.concatenate([np.abs(p).ravel() for _, _, p in maps])
+        clip_rad = float(np.percentile(allv, 99.5)) or 1.0
 
     for j, (d, (x_um, z_um, phi)) in enumerate(zip(delays_fs, maps)):
+        # Par defaut le plan ou le signal est maximum. Imposer z_face_um a une
+        # valeur theorique (L_c par exemple) donne une vignette vide des que le
+        # run ne se comporte pas comme prevu -- exactement le cas a debugger.
         iz = (int(np.argmin(np.abs(z_um - z_face_um))) if z_face_um is not None
               else int(np.argmax(np.abs(phi).max(axis=1))))
         prof = phi[iz]
@@ -754,6 +799,10 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
 
         im = axes[1, j].imshow(phi, cmap="bwr", vmin=-clip_rad, vmax=clip_rad, aspect="auto",
                                extent=[x_um[0], x_um[-1], z_um[-1], z_um[0]])
+        # z_lim : cadrer sur la zone d'interaction pour comparer aux figures
+        # experimentales, dont l'axe long ne couvre que quelques dizaines de um.
+        if z_lim is not None:
+            axes[1, j].set_ylim(max(z_lim), min(z_lim))
         axes[1, j].axhline(z_um[iz], color="k", lw=0.5, ls=":")
         axes[1, j].tick_params(labelsize=6)
         axes[1, j].set_xlabel("x (µm)", fontsize=8)
@@ -764,3 +813,246 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
     return fig
+
+
+def check_entrance_intensity(energy_uJ, w0_m, delta_t_s, begin_m, wavelength_m, n0,
+                             I_clamp_Wcm2=5e13, verbose=True):
+    """Intensité crête au plan d'ENTRÉE, comparée au clampage.
+
+    À écrire avant tout `run()`. Le solveur pose I0 = 2P/(pi w0^2) au waist ;
+    si le plan de départ est proche du waist et que l'énergie est grande, on
+    démarre au-dessus du seuil d'ionisation, le milieu s'ionise dès le premier
+    micron (rho_e -> rho_max), l'énergie est absorbée et il ne reste rien à
+    propager. Le run se termine normalement, sans erreur : c'est pour ça que
+    ce contrôle doit être explicite.
+
+    Renvoie (I_entree, w_entree, z_min_safe) où z_min_safe est la distance
+    minimale au waist pour rester sous I_clamp.
+    """
+    tp = delta_t_s / np.sqrt(2 * np.log(2))
+    P = energy_uJ * 1e-6 / (tp * np.sqrt(np.pi / 2))
+    I0 = 2 * P / (np.pi * w0_m**2) * 1e-4                 # W/cm^2, au waist
+    z_R = 2 * np.pi * n0 / wavelength_m * w0_m**2 / 2
+    w_in = w0_m * np.sqrt(1 + (begin_m / z_R)**2)
+    I_in = I0 * (w0_m / w_in)**2
+    z_safe = z_R * np.sqrt(max(I0 / I_clamp_Wcm2 - 1, 0.0))
+    if verbose:
+        print(f"  P_crete   = {P*1e-6:.1f} MW")
+        print(f"  I au waist= {I0:.2e} W/cm2   ({I0/I_clamp_Wcm2:.1f} x I_clamp)")
+        print(f"  w(entree) = {w_in*1e6:.1f} um  ->  I(entree) = {I_in:.2e} W/cm2")
+        if I_in > I_clamp_Wcm2:
+            print(f"  /!\\ ENTREE AU-DESSUS DU CLAMPAGE : le milieu va s'ioniser des le")
+            print(f"       premier micron et absorber l'impulsion. Demarrer a |z| > "
+                  f"{z_safe*1e6:.0f} um du waist, ou baisser l'energie a "
+                  f"{energy_uJ*I_clamp_Wcm2/I0:.2f} uJ.")
+        else:
+            print(f"  OK : {I_clamp_Wcm2/I_in:.1f} x sous le clampage a l'entree.")
+    return I_in, w_in, z_safe
+
+
+def w0_from_channel_length(L_um, wavelength_m=1030e-9, n0=1.4500):
+    """Waist déduit de la longueur du canal observé.
+
+    La longueur sur laquelle un faisceau focalisé reste assez intense pour
+    ioniser est fixée par sa longueur de Rayleigh, z_R = pi w0^2 n0/lambda.
+    Un canal de longueur L implique donc w0 ~ sqrt(L lambda/(pi n0)).
+
+    C'est une mesure de w0 gratuite, et surtout indépendante de toute
+    calibration de caméra : si la simulation étale l'ionisation sur bien plus
+    de longueur que l'expérience, c'est que le waist utilisé est trop grand.
+    """
+    return float(np.sqrt(L_um * wavelength_m * 1e6 / (np.pi * n0)))
+
+
+# ================================================================================
+#  OPL (nm) et transmittance : le format des figures experimentales
+# ================================================================================
+def probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel=1.0):
+    """Section efficace d'absorption par porteurs libres (Bremsstrahlung
+    inverse) À LA LONGUEUR D'ONDE SONDE, en cm².
+
+    Même expression que le `sigmaomega` du solveur, mais évaluée à
+    omega_sonde et non omega_pompe. C'est elle qui donne la partie IMAGINAIRE
+    de l'indice, donc la transmittance -- la partie réelle (défocalisation)
+    seule ne suffit pas à reproduire les cartes expérimentales.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+    n0p = _ns(lambda_probe_m)
+    w = 2 * np.pi * c_ / lambda_probe_m
+    k = w * n0p / c_
+    m = meff_drude_rel * m_e
+    return (k * qe_**2 * tau_c_s) / (n0p**2 * m * epsilon_0 * w * (1 + (w * tau_c_s)**2)) * 1e4
+
+
+def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
+                            n2=3.54e-20, tau_c_s=1.7e-15, meff_drude_rel=1.0,
+                            tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
+                            include=("drude", "ste", "kerr"),
+                            x_half_um=70.0, dx_um=0.25):
+    """OPL [nm] et transmittance le long de la ligne de visée, au délai donné.
+
+    OPL = integrale de Delta_n sur la corde, en nanomètres -- c'est la
+    grandeur que trace l'expérience, reliée à la phase par
+    phi = 2 pi OPL / lambda (soit 1 rad = 82 nm à 515 nm).
+
+    Transmittance = exp(-sigma_sonde * integrale de rho_e), l'absorption par
+    porteurs libres. Les STE n'y contribuent pas ici : leur bande d'absorption
+    est à 5.2 eV et la sonde à 515 nm ne fait que 2.41 eV, donc l'oscillateur
+    de Lorentz y est purement dispersif.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+
+    n0p = _ns(lambda_probe_m)
+    nc = epsilon_0 * m_e * (2 * np.pi * c_ / lambda_probe_m)**2 / qe_**2 * 1e-6
+    E_probe = 1239.84193 / (lambda_probe_m * 1e9)
+    f_ste = E_probe**2 / (E_tr_eV**2 - E_probe**2)
+
+    z_um = z_um_of(res)
+    v_g = 299.792458 / n_g
+    t_local = delay_fs - z_um / (v_g * 1e-3)
+    rho_e, rho_s, I = _populations_at(res, t_local, tau_r_s, tau_ste_s)
+
+    if res.get("r_sub") is not None and np.asarray(res["r_sub"]).shape != ():
+        r_pos = np.asarray(res["r_sub"], float) * 1e6
+    else:
+        r_full = r_um_of(res)
+        r_pos = r_full[len(r_full) // 2:]
+    r_pos = r_pos[:rho_e.shape[1]]
+
+    den = 2.0 * n0p * nc
+    dn = np.zeros_like(rho_e)
+    if "drude" in include:
+        dn -= rho_e / den
+    if "ste" in include:
+        dn += f_ste * rho_s / den
+    if "kerr" in include:
+        dn += n2 * I * 1e4
+
+    x_max = float(min(x_half_um, r_pos[-1]))
+    x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
+    A = build_abel_matrix(r_pos, x_um)
+
+    opl_nm = (dn @ A.T) * 1e3                       # µm -> nm
+    sigma = probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel)
+    tau_opt = sigma * (rho_e @ A.T) * 1e-4          # cm^-3 * µm * cm^2 -> sans dim
+    return dict(x_um=x_um, z_um=z_um, opl_nm=opl_nm,
+                transmittance=np.exp(-np.clip(tau_opt, 0, None)),
+                sigma_cm2=sigma, f_ste=f_ste,
+                # bruts (r, z), pour la vue de dessus qui integre le long de z
+                dn_rz=dn, rho_e_rz=rho_e, r_pos_um=r_pos)
+
+
+def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
+                   r_lim=None, opl_clip_nm=15.0, t_lim=(0.75, 1.15), x_half_um=75.0,
+                   rho_max_cm3=None, validity_frac=0.1, title=None, save=None, **kw):
+    """Planche 4 panneaux au format des figures expérimentales :
+    OPL vue de dessus / de côté, transmittance vue de dessus / de côté."""
+    import matplotlib.pyplot as plt
+    d = probe_opl_transmittance(res, delay_fs, x_half_um=x_half_um, **kw)
+    x, z = d["x_um"], d["z_um"] + z_shift_um
+    opl, T = d["opl_nm"], d["transmittance"]
+
+    # --- vue de dessus : la sonde regarde LE LONG de l'axe, donc elle traverse
+    # toute la colonne. Il faut integrer Delta_n et rho_e sur TOUT z, pas
+    # echantillonner un seul plan. Comme le milieu est axisymetrique autour de
+    # z, chaque rayon a la distance r voit Delta_n(r, z) sur tout son trajet :
+    # pas de transformee d'Abel ici, une simple integrale en z.
+    dn_rz, rho_e_rz = d["dn_rz"], d["rho_e_rz"]
+    r_pos = d["r_pos_um"]
+    z_m = z * 1e-6
+    # np.trapz a disparu dans numpy 2, np.trapezoid n'existe pas avant
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    opl_top_nm = _trapz(dn_rz, z_m, axis=0) * 1e9                  # m -> nm
+    tau_top = d["sigma_cm2"] * _trapz(rho_e_rz, z_m, axis=0) * 1e2  # cm^-3 * m * cm^2
+    T_top = np.exp(-np.clip(tau_top, 0, None))
+
+    X, Y = np.meshgrid(x, x)
+    R = np.hypot(X, Y)
+    # left = valeur a r_pos[0] et non 0 : la grille de Hankel commence a
+    # r ~ 1e-2 um, donc le pixel central (R < r_pos[0]) tombait hors domaine
+    # et etait mis a zero -- exactement la ou le signal est maximal.
+    face_opl = np.interp(R, r_pos, opl_top_nm, left=opl_top_nm[0], right=0.0)
+    face_T = np.interp(R, r_pos, T_top, left=T_top[0], right=1.0)
+
+    # le plan repere sur les vues de cote (trait pointille) reste le plus intense
+    iz = (int(np.argmin(np.abs(z - z_face_um))) if z_face_um is not None
+          else int(np.argmax(np.abs(opl).max(axis=1))))
+
+    fig, ax = plt.subplots(2, 2, figsize=(16, 9),
+                           gridspec_kw=dict(width_ratios=[1, 2.9]))
+    ext_face = [x[0], x[-1], x[0], x[-1]]
+    ext_side = [z[0], z[-1], x[0], x[-1]]
+
+    im0 = ax[0, 0].imshow(face_opl, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
+                          extent=ext_face, origin="lower")
+    ax[0, 0].set_title("top OPL (integre sur toute la colonne)"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
+
+    im1 = ax[0, 1].imshow(opl.T, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
+                          extent=ext_side, origin="lower", aspect="auto")
+    ax[0, 1].set_title("side OPL")
+    ax[0, 1].set_xlabel("z from interface [um]"); ax[0, 1].set_ylabel("r from axis [um]")
+    fig.colorbar(im1, ax=ax[0, 1], label="OPL [nm]", fraction=0.02, pad=0.01)
+
+    im2 = ax[1, 0].imshow(face_T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
+                          extent=ext_face, origin="lower")
+    ax[1, 0].set_title("top transmittance (integre sur toute la colonne)"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
+
+    im3 = ax[1, 1].imshow(T.T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
+                          extent=ext_side, origin="lower", aspect="auto")
+    ax[1, 1].set_title("side transmittance")
+    ax[1, 1].set_xlabel("z from interface [um]"); ax[1, 1].set_ylabel("r from axis [um]")
+    fig.colorbar(im3, ax=ax[1, 1], label="transmittance", fraction=0.02, pad=0.01)
+
+    # z_lim / r_lim : caler exactement sur les bornes des figures
+    # experimentales, sinon la comparaison visuelle est trompeuse (une zone
+    # d'interaction parait large ou etroite selon le cadrage, pas selon la
+    # physique -- c'est ce qui avait masque le probleme de waist trop grand).
+    for a in (ax[0, 1], ax[1, 1]):
+        a.axhline(0, color="k", lw=0.5, ls=":")
+        a.axvline(z[iz], color="k", lw=0.5, ls=":")
+        if z_lim is not None:
+            a.set_xlim(*z_lim)
+        if r_lim is not None:
+            a.set_ylim(*r_lim)
+    for a in (ax[0, 0], ax[1, 0]):
+        if r_lim is not None:
+            a.set_xlim(*r_lim); a.set_ylim(*r_lim)
+    # Domaine de validite : la ou rho_e depasse une fraction de rho_max, le
+    # modele sort de son domaine (pas d'enlevement de matiere, Drude a tau_c
+    # fixe, pas de renormalisation du gap). On le marque au lieu de laisser
+    # croire que la carte y est quantitative.
+    if rho_max_cm3 is not None and "rho_rz" in res:
+        rho_side = np.asarray(res["rho_rz"])
+        half_r = rho_side.shape[1] // 2
+        rho_max_z = rho_side[:, half_r:].max(axis=1)
+        bad = rho_max_z > validity_frac * rho_max_cm3
+        if bad.any():
+            for a in (ax[0, 1], ax[1, 1]):
+                a.fill_between(z, x[0], x[-1], where=bad, color="lime",
+                               alpha=0.13, step="mid", zorder=5)
+            zb = z[bad]
+            print(f"/!\\ hors domaine de validite (rho_e > {validity_frac:.0%} de rho_max) "
+                  f"sur z = {zb.min():.0f} a {zb.max():.0f} um  -- zones hachurees")
+
+    fig.suptitle(title or f"simulation, delay {delay_fs/1000:+.3f} ps"
+                          f"   (sigma_probe = {d['sigma_cm2']:.2e} cm2)", fontsize=12)
+    fig.tight_layout()
+    if save:
+        fig.savefig(save, dpi=140, bbox_inches="tight")
+    return fig, d
+
+
+def max_energy_for_clamping(w0_m, delta_t_s, I_clamp_Wcm2=5e13, fraction=1.0):
+    """Énergie maximale (J, dans le milieu) pour que l'intensité AU WAIST reste
+    sous `fraction * I_clamp`.
+
+    Utile quand le waist est au plan d'entrée : là I(entrée) = I(waist), donc
+    l'énergie est bornée par le clampage, et la borne croît comme w0².
+    C'est aussi pour ça que P/P_cr accessible sans dépasser le clampage croît
+    en w0² : un waist plus large autorise beaucoup plus de puissance.
+    """
+    tp = delta_t_s / np.sqrt(2 * np.log(2))
+    P = fraction * I_clamp_Wcm2 * 1e4 * np.pi * w0_m**2 / 2
+    return P * tp * np.sqrt(np.pi / 2)
