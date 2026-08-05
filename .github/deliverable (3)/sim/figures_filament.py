@@ -984,3 +984,17 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
     if save:
         fig.savefig(save, dpi=140, bbox_inches="tight")
     return fig, d
+
+
+def max_energy_for_clamping(w0_m, delta_t_s, I_clamp_Wcm2=5e13, fraction=1.0):
+    """Énergie maximale (J, dans le milieu) pour que l'intensité AU WAIST reste
+    sous `fraction * I_clamp`.
+
+    Utile quand le waist est au plan d'entrée : là I(entrée) = I(waist), donc
+    l'énergie est bornée par le clampage, et la borne croît comme w0².
+    C'est aussi pour ça que P/P_cr accessible sans dépasser le clampage croît
+    en w0² : un waist plus large autorise beaucoup plus de puissance.
+    """
+    tp = delta_t_s / np.sqrt(2 * np.log(2))
+    P = fraction * I_clamp_Wcm2 * 1e4 * np.pi * w0_m**2 / 2
+    return P * tp * np.sqrt(np.pi / 2)
