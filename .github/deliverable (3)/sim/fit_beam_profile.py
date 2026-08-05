@@ -30,7 +30,7 @@ from scipy.ndimage import gaussian_filter
 
 __all__ = ["load_profiles", "fit_gaussian_2d", "measure_caustic",
            "fit_caustic", "caustic_asymmetry", "calibration_table", "plot_caustic",
-           "peak_intensity_ratio", "power_consistency"]
+           "peak_intensity_ratio", "power_consistency", "w0_from_pixel_size"]
 
 SAT_LEVEL = 1023.0          # caméra 10 bits
 
@@ -319,3 +319,46 @@ def power_consistency(caus, folder, plateau=None, tol=0.20, verbose=True):
             print(f"{z:8.0f} {r:10.2f}  {v}")
         print(f"\n{good.sum()}/{len(good)} images cohérentes a +/-{tol*100:.0f} %")
     return good
+
+
+def w0_from_pixel_size(fit, pixel_um, NA=None, wavelength_um=1.030,
+                       s_um_per_unit=None, w0_sim_um=None, verbose=True):
+    """w0 physique à partir du seul pixel effectif.
+
+        w0 [µm] = w0_px * p
+
+    C'est tout : ni l'échelle de l'axe z ni la longueur d'onde n'entrent ici.
+    Elles ne servent qu'à en déduire M² (si s est fourni).
+
+    Si NA est donné, corrige la PSF de l'imageur par déconvolution quadratique
+    w_vrai² = w_mesuré² − w_psf², avec w_psf ≈ 0.42 λ/NA : à NA=0.28 et
+    1030 nm la PSF fait 1.5 µm, ce qui gonfle de 13 % une mesure de 2.9 µm et
+    de 3 % seulement une mesure de 5.8 µm — négligeable dans un cas, pas dans
+    l'autre.
+    """
+    w0_meas = fit["w0_px"] * pixel_um
+    out = dict(pixel_um=pixel_um, w0_measured_um=w0_meas, w0_um=w0_meas)
+    if NA:
+        w_psf = 0.42 * wavelength_um / NA
+        out["w_psf_um"] = w_psf
+        out["w0_um"] = float(np.sqrt(max(w0_meas**2 - w_psf**2, 0.0)))
+    if s_um_per_unit:
+        zR = fit["zR"] * s_um_per_unit
+        out["zR_um"] = zR
+        out["M2"] = float(np.pi * out["w0_um"]**2 / (wavelength_um * zR))
+    if verbose:
+        print(f"p = {pixel_um:.4f} µm/px  ->  w0 mesure = {w0_meas:.2f} µm")
+        if NA:
+            print(f"  PSF (NA={NA}, {wavelength_um*1000:.0f} nm) = {out['w_psf_um']:.2f} µm"
+                  f"  ->  w0 deconvolue = {out['w0_um']:.2f} µm")
+        if s_um_per_unit:
+            print(f"  zR = {out['zR_um']:.1f} µm  ->  M2 = {out['M2']:.2f}"
+                  + ("   /!\\ M2 < 1 : NON PHYSIQUE, une hypothese est fausse"
+                     if out["M2"] < 1 else ""))
+        if w0_sim_um:
+            f_w = (out["w0_um"] / w0_sim_um)**2
+            print(f"\n  simulation : w0 = {w0_sim_um:.2f} µm  ->  facteur {out['w0_um']/w0_sim_um:.2f} sur w0")
+            print(f"  intensite crete surestimee de {f_w:.2f}x par ce seul effet")
+            print(f"  a combiner avec le facteur 1.6-2.4 du profil non gaussien")
+            print(f"  -> surestimation totale : {f_w*1.6:.1f} a {f_w*2.4:.1f}x")
+    return out
