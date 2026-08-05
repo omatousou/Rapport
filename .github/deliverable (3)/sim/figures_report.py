@@ -107,19 +107,19 @@ def plot_clamping_equilibrium(res, n2, wavelength_m, meff_rel=1.0,
     ax[0].set_ylabel(r"$|\Delta n|$")
     ax[0].legend(loc="upper left")
     ax[0].grid(alpha=0.3, which="both")
-    ax[0].set_title(f"equilibre de clampage {label}".strip())
+    ax[0].set_title(f"clamping balance {label}".strip())
 
     ax[1].plot(z_um, dn_net, color="k", lw=1.6)
     ax[1].axhline(0.0, color="0.4", lw=1, ls="--")
     ax[1].fill_between(z_um, 0, dn_net, where=dn_net > 0,
-                       color="crimson", alpha=0.25, label="auto-focalisation")
+                       color="crimson", alpha=0.25, label="net self-focusing")
     ax[1].fill_between(z_um, 0, dn_net, where=dn_net <= 0,
-                       color="royalblue", alpha=0.25, label="defocalisation")
+                       color="royalblue", alpha=0.25, label="net defocusing")
     # symlog : sans ca le puits de plasma (1e-1) ecrase completement la zone
     # auto-focalisante (1e-3), qui est justement celle qu'on veut montrer.
     lin = max(float(np.nanmax(np.abs(dn_kerr))) * 1e-2, 1e-12)
     ax[1].set_yscale("symlog", linthresh=lin)
-    ax[1].set_ylabel(r"$\Delta n$ net")
+    ax[1].set_ylabel(r"net $\Delta n$")
     ax[1].set_xlabel(r"$z$ [$\mu$m]")
     ax[1].legend(loc="upper right", fontsize=9)
     ax[1].grid(alpha=0.3)
@@ -192,18 +192,18 @@ def plot_selffocusing_vs_diffraction(res, w0_m, wavelength_m, n0, n2,
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
     ax.plot(z_um, w_lin, color="0.55", lw=2, ls="--",
-            label=rf"propagation lineaire ($z_R$ = {zR_um:.0f} $\mu$m)")
-    ax.plot(z_um, w_sim, color="crimson", lw=2, label=r"simulation, rayon $1/e^2$")
+            label=rf"linear propagation ($z_R$ = {zR_um:.0f} $\mu$m)")
+    ax.plot(z_um, w_sim, color="crimson", lw=2, label=r"simulation, $1/e^2$ radius")
     if 0 < L_c * 1e6 < z_um[-1]:
         ax.axvline(L_c * 1e6, color="darkgreen", lw=1.5, ls="-.",
-                   label=rf"$L_c$ Marburger = {L_c*1e6:.0f} $\mu$m")
+                   label=rf"Marburger $L_c$ = {L_c*1e6:.0f} $\mu$m")
     iz = int(np.argmax(np.asarray(res["Imax_z"])))
     ax.axvline(z_um[iz], color="royalblue", lw=1.2, ls=":",
-               label=rf"$I$ max simulee ({z_um[iz]:.0f} $\mu$m)")
+               label=rf"simulated $I$ max ({z_um[iz]:.0f} $\mu$m)")
     ax.set_xlabel(r"$z$ [$\mu$m]")
-    ax.set_ylabel(r"rayon [$\mu$m]")
+    ax.set_ylabel(r"radius [$\mu$m]")
     ax.set_yscale("log")
-    ax.set_title(f"auto-focalisation vs diffraction {label}   "
+    ax.set_title(f"self-focusing vs diffraction {label}   "
                  rf"($P/P_{{cr}}$ = {ratio:.1f})".strip())
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3, which="both")
@@ -256,17 +256,17 @@ def plot_avalanche_takeover(res, wavelength_m, tau_c_s, Ui_eV, meff_rel=1.0,
     axI.plot(t_fs, I, color="darkorange", lw=1.2, alpha=0.8)
     axI.set_ylabel(r"$I$ [W/cm$^2$]", color="darkorange")
     axI.tick_params(axis="y", colors="darkorange")
-    ax[0].set_title(f"amorcage puis avalanche, z = {z_um[iz]:.0f} um {label}".strip())
+    ax[0].set_title(f"seeding then avalanche, z = {z_um[iz]:.0f} um {label}".strip())
 
     ax[1].plot(t_fs, np.clip(rate_mpi, 1e-30, None), color="royalblue", lw=1.8,
-               label=r"photoionisation = d$\rho_e$/d$t$ $-$ avalanche")
+               label=r"photoionization = d$\rho_e$/d$t$ $-$ avalanche")
     ax[1].plot(t_fs, np.clip(rate_aval, 1e-30, None), color="crimson", lw=1.8,
                label=rf"avalanche $\beta I \rho_e$  ($\beta$ = {beta:.2f} cm$^2$/J)")
     ax[1].set_yscale("log")
     ax[1].set_ylim(max(1e10, np.nanmax(rate_tot) * 1e-6),
                    np.nanmax(rate_tot) * 3.0)
     ax[1].set_ylabel(r"d$\rho_e$/d$t$ [cm$^{-3}$ s$^{-1}$]")
-    ax[1].set_xlabel(r"$t$ local [fs]")
+    ax[1].set_xlabel(r"local $t$ [fs]")
     ax[1].legend(fontsize=9, loc="upper left")
     ax[1].grid(alpha=0.3, which="both")
 
@@ -276,7 +276,7 @@ def plot_avalanche_takeover(res, wavelength_m, tau_c_s, Ui_eV, meff_rel=1.0,
     if np.isfinite(t_switch):
         for a in ax:
             a.axvline(t_switch, color="0.4", lw=1, ls="--")
-        ax[1].annotate(f"bascule {t_switch:+.0f} fs", (t_switch, ax[1].get_ylim()[1]),
+        ax[1].annotate(f"takeover {t_switch:+.0f} fs", (t_switch, ax[1].get_ylim()[1]),
                        xytext=(6, -14), textcoords="offset points", fontsize=9)
 
     fig.tight_layout()
@@ -326,17 +326,18 @@ def plot_trapping_sequence(res, tau_r_s=330e-15, tau_ste_s=1e-12,
     s_all = np.concatenate([rho_s_in, s_tail])
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    ax.plot(t_all, e_all, color="royalblue", lw=2, label=r"$\rho_e$ libres")
-    ax.plot(t_all, s_all, color="darkgreen", lw=2, label=r"$\rho_{STE}$ pieges")
+    ax.plot(t_all, e_all, color="royalblue", lw=2, label=r"$\rho_e$ free")
+    ax.plot(t_all, s_all, color="darkgreen", lw=2, label=r"$\rho_{STE}$ trapped")
     ax.axvline(t_fs[-1] * 1e-3, color="0.6", lw=1, ls="--")
-    ax.annotate("fin de la fenetre du solveur\n(suite analytique)",
-                (t_fs[-1] * 1e-3, e_all.max()), xytext=(8, -30),
-                textcoords="offset points", fontsize=8, color="0.35")
+    ax.annotate("end of solver window\n(analytic continuation)",
+                xy=(t_fs[-1] * 1e-3, 1.0), xycoords=("data", "axes fraction"),
+                xytext=(7, -26), textcoords="offset points",
+                fontsize=8, color="0.35")
     ax.set_yscale("log")
     ax.set_ylim(max(e_all.max(), s_all.max()) * 1e-4, None)
-    ax.set_xlabel(r"$t$ local [ps]")
-    ax.set_ylabel(r"densite [cm$^{-3}$]")
-    ax.set_title(rf"libres $\to$ pieges, z = {z_um[iz]:.0f} $\mu$m   "
+    ax.set_xlabel(r"local $t$ [ps]")
+    ax.set_ylabel(r"density [cm$^{-3}$]")
+    ax.set_title(rf"free $\to$ trapped, z = {z_um[iz]:.0f} $\mu$m   "
                  rf"($\tau_r$ = {tau_r_s*1e15:.0f} fs, "
                  rf"$\tau_{{STE}}$ = {tau_ste_s*1e12:.1f} ps) {label}".strip())
     ax.legend()
@@ -399,7 +400,7 @@ def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
             label=r"Drude  $-\rho_e/2n_0\rho_c$")
     ax.plot(r_pos[m], dn_ste[m], color="darkgreen", lw=2,
             label=rf"STE  $+f\,\rho_{{STE}}/2n_0\rho_c$  ($f$ = {f_ste:.3f})")
-    ax.plot(r_pos[m], dn_tot[m], color="k", lw=2.2, ls="--", label="somme")
+    ax.plot(r_pos[m], dn_tot[m], color="k", lw=2.2, ls="--", label="sum")
     ax.axhline(0.0, color="0.5", lw=1)
     if yscale == "symlog":
         # les trois canaux peuvent differer de plusieurs decades (le Kerr
@@ -409,9 +410,9 @@ def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
                    np.abs(dn_ste).max())
         ax.set_yscale("symlog", linthresh=max(span * 1e-4, 1e-14))
     ax.set_xlabel(r"$r$ [$\mu$m]")
-    ax.set_ylabel(r"$\Delta n$ vu par la sonde")
-    ax.set_title(rf"canaux d'indice, z = {z_um[iz]:.0f} $\mu$m, "
-                 rf"delai {delay_fs:+.0f} fs {label}".strip())
+    ax.set_ylabel(r"$\Delta n$ seen by the probe")
+    ax.set_title(rf"index channels, z = {z_um[iz]:.0f} $\mu$m, "
+                 rf"delay {delay_fs:+.0f} fs {label}".strip())
     ax.legend(fontsize=9)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -455,21 +456,21 @@ def plot_abel_illustration(res, delay_fs=0.0, lambda_probe_m=515e-9,
     ax[0].axhline(0.0, color="0.5", lw=1)
     ax[0].set_xlabel(r"$r$ [$\mu$m]")
     ax[0].set_ylabel(r"$\Delta n(r)$  (local)")
-    ax[0].set_title("profil radial vrai (simulation)")
+    ax[0].set_title("true radial profile (simulation)")
     ax[0].grid(alpha=0.3)
 
     ax[1].plot(x, opl, color="royalblue", lw=2)
     ax[1].axhline(0.0, color="0.5", lw=1)
-    ax[1].set_xlabel(r"$x$ [$\mu$m]  (corde)")
+    ax[1].set_xlabel(r"$x$ [$\mu$m]  (chord)")
     ax[1].set_ylabel("OPL [nm]")
-    ax[1].set_title("projection Abel = ce que la sonde mesure")
+    ax[1].set_title("Abel projection = what the probe measures")
     ax[1].grid(alpha=0.3)
     axp = ax[1].twinx()
     axp.plot(x, 2.0 * np.pi * opl / lam_nm, alpha=0.0)
-    axp.set_ylabel(rf"$\varphi$ [rad] a {lam_nm:.0f} nm")
+    axp.set_ylabel(rf"$\varphi$ [rad] at {lam_nm:.0f} nm")
 
-    fig.suptitle(rf"transformee d'Abel directe, z = {z_um[iz]:.0f} $\mu$m, "
-                 rf"delai {delay_fs:+.0f} fs {label}".strip())
+    fig.suptitle(rf"forward Abel transform, z = {z_um[iz]:.0f} $\mu$m, "
+                 rf"delay {delay_fs:+.0f} fs {label}".strip())
     fig.tight_layout()
     if save:
         fig.savefig(save, dpi=160, bbox_inches="tight")
@@ -495,12 +496,12 @@ def plot_energy_budget(res, label="", save=None):
     E_tot = np.asarray(res["E_total_z"], float)
 
     fig, ax = plt.subplots(figsize=(9, 5.2))
-    ax.plot(z_um, E_mpi, color="royalblue", lw=2, label="photoionisation")
+    ax.plot(z_um, E_mpi, color="royalblue", lw=2, label="photoionization")
     ax.plot(z_um, E_pl, color="crimson", lw=2, label="plasma (Drude)")
     ax.plot(z_um, E_tot, color="k", lw=2.2, ls="--", label="total")
     ax.set_xlabel(r"$z$ [$\mu$m]")
-    ax.set_ylabel(r"fraction cumulee de $U_0$")
-    ax.set_title(f"bilan d'energie {label}".strip())
+    ax.set_ylabel(r"cumulative fraction of $U_0$")
+    ax.set_title(f"energy budget {label}".strip())
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
