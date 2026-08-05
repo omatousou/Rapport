@@ -1,4 +1,5 @@
 \subsection{Filamentation}
+\label{sec:filamentation}
 
 A low-intensity Gaussian beam propagating through a transparent medium converges and focuses at a specific point before diverging. The entire process is symmetric about the focal point: energy density increases up to the focus and then decreases. The Rayleigh length, denoted as $z_R = \frac{\pi n_0 w_0^2}{\lambda_0}$, represents the characteristic propagation distance over which a Gaussian beam's radius expands by a factor of $\sqrt{2}$. 
 At higher intensities, near the focusing point, the Kerr effect causes the beam to focus more rapidly while distorting the wavefront. This high intensity near the focus point can balance the diffractive effects given by Gaussian propagation laws.
@@ -52,13 +53,13 @@ The critical power $P_{cr}$ corresponds to the value of $P_{in}$ at which self-f
         \draw[dotted, thick] (0,-\ymax-0.3) -- (0, \ymax+0.3);
         \node[below] at (0,-\ymax-0.3) {\footnotesize $z=0$};
         \draw[dotted, thick] (4.2,-\ymax-0.3) -- (4.2, -0.9);
-        \draw[<->, thick] (0,-\ymax-0.8) -- node[below] {\footnotesize $L_{c}$: first collapse (Eq.~\ref{eq:marburger})} (4.2,-\ymax-0.8);
+        \draw[<->, thick] (0,-\ymax-0.8) -- node[below] {\footnotesize $L_{c}$: first collapse} (4.2,-\ymax-0.8);
         \draw[<->, thick] (4.2,-\ymax-0.8) -- node[above] {\footnotesize refocusing cycle} (9.0,-\ymax-0.8);
 
         \draw[decorate, decoration={brace, amplitude=9pt, mirror}, thick]
             (3.2, -2.4) -- (15.5, -2.4) node[midway, below=25pt] {\huge Filament};
     \end{tikzpicture}%
     }
-    \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing, starting from an input beam launched at $z=0$. The first collapse occurs at $z=L_c$, given by Eq.~\eqref{eq:marburger}. Each collapse is arrested before the beam reaches a singular focus by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take back over, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament. Figure~\ref{fig:comparison_fig7_cycles} shows this same sequence of collapses in an actual simulation, rather than as a schematic.}
+    \caption{Schematic beam envelope undergoing repeated cycles of Kerr self-focusing and plasma defocusing, starting from an input beam launched at $z=0$. The first collapse occurs at $z=L_c$, the collapse length. Each collapse is arrested before the beam reaches a singular focus by the free electron plasma generated near the intensity peak (yellow), which defocuses the beam until the intensity drops enough for the plasma to recombine and self-focusing to take back over, refilled by the surrounding energy reservoir. This repeated breathing over an extended propagation distance is the filament.}
     \label{fig:filamentation_schematic}
 \end{figure}

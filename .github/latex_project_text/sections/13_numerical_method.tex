@@ -1,6 +1,7 @@
 \section{Numerical Method}
+\label{sec:numerical}
 
-The propagation equation of Section~11 mixes a transverse diffraction term, a temporal dispersion term, and a nonlinear term that depends locally on the field at every point in space and time. No single numerical scheme handles all three cheaply. The code therefore treats each physical mechanism with the tool best suited to it, and recombines them at every propagation step through operator splitting. This section explains the three pieces in turn: the radial basis used for diffraction, the time stepping scheme that combines them, and the population equations that must be solved alongside the field.
+The propagation equation of Section~\ref{sec:propagation} mixes a transverse diffraction term, a temporal dispersion term, and a nonlinear term that depends locally on the field at every point in space and time. No single numerical scheme handles all three cheaply. The code therefore treats each physical mechanism with the tool best suited to it, and recombines them at every propagation step through operator splitting. This section explains the three pieces in turn: the radial basis used for diffraction, the time stepping scheme that combines them, and the population equations that must be solved alongside the field.
 
 \subsection{Quasi Discrete Hankel Transform for the Radial Coordinate}
 
@@ -16,7 +17,7 @@ Multiplying a field sampled at the radii $r_m = j_m R/j_N$ by $Y$ gives its Hank
 
 \subsection{Strang Splitting of the Propagation Step}
 
-The full propagation equation of Section~11 can be written schematically as $\partial_z u = (\mathcal{L}+\mathcal{N})u$, where $\mathcal{L}$ groups the linear, z-independent operators, diffraction and dispersion, and $\mathcal{N}$ groups the nonlinear terms, Kerr, self-steepening, and the two loss channels. Solving $\mathcal{L}$ alone and $\mathcal{N}$ alone are both computationally cheap, diffraction and dispersion are diagonal in the Hankel and Fourier bases respectively, and the nonlinear term is diagonal in real space. Solving $\mathcal{L}+\mathcal{N}$ together is not.
+The full propagation equation of Section~\ref{sec:propagation} can be written schematically as $\partial_z u = (\mathcal{L}+\mathcal{N})u$, where $\mathcal{L}$ groups the linear, z-independent operators, diffraction and dispersion, and $\mathcal{N}$ groups the nonlinear terms, Kerr, self-steepening, and the two loss channels. Solving $\mathcal{L}$ alone and $\mathcal{N}$ alone are both computationally cheap, diffraction and dispersion are diagonal in the Hankel and Fourier bases respectively, and the nonlinear term is diagonal in real space. Solving $\mathcal{L}+\mathcal{N}$ together is not.
 
 Strang splitting exploits this by approximating the exact evolution operator $e^{(\mathcal{L}+\mathcal{N})dz}$ with the symmetric product:
 \begin{equation}
@@ -28,7 +29,7 @@ Inside the nonlinear half step, the code separates two things that behave very d
 
 \subsection{Population Rate Equations on the GPU}
 
-The rate equations of Section~11.2 are solved separately from the field envelope, using an explicit time marching scheme along the temporal axis at fixed radius, before every propagation step. Because the equations for $N$ and $N_{STE}$ are stiff, the photoionization and avalanche rates can change by orders of magnitude within a single time sample, a naive explicit Euler step would require an impractically small $\Delta t$. The code avoids this by treating the coupled pair as a locally linear system over each time interval $[t_j,t_{j+1}]$,
+The rate equations of Section~\ref{subsec:rate_equations} are solved separately from the field envelope, using an explicit time marching scheme along the temporal axis at fixed radius, before every propagation step. Because the equations for $N$ and $N_{STE}$ are stiff, the photoionization and avalanche rates can change by orders of magnitude within a single time sample, a naive explicit Euler step would require an impractically small $\Delta t$. The code avoids this by treating the coupled pair as a locally linear system over each time interval $[t_j,t_{j+1}]$,
 \begin{equation}
 \frac{dx}{dt} = S + Lx
 \end{equation}
@@ -73,6 +74,6 @@ Figure~\ref{fig:main_loop} puts the three preceding subsections together into th
         \draw[arr] (test) -- node[right] {no} (save);
         \draw[arr] (test.west) -- ++(-2.4,0) node[midway, above] {yes, $z \mathrel{+}= dz$} |- (rate.west);
     \end{tikzpicture}
-    \caption{One iteration of the main propagation loop in \texttt{Integrator.propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$ (Section~13), then applies the symmetric Strang sequence of diffraction, dispersion, and nonlinear substeps derived above to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps (omitted here for clarity) before the loop repeats until $z$ reaches the end of the propagation window.}
+    \caption{One iteration of the main propagation loop in \texttt{Integrator.propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$ (Section~\ref{sec:cuda}), then applies the symmetric Strang sequence of diffraction, dispersion, and nonlinear substeps derived above to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps (omitted here for clarity) before the loop repeats until $z$ reaches the end of the propagation window.}
     \label{fig:main_loop}
 \end{figure}
