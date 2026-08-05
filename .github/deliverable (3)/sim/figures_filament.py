@@ -824,3 +824,137 @@ def w0_from_channel_length(L_um, wavelength_m=1030e-9, n0=1.4500):
     de longueur que l'expérience, c'est que le waist utilisé est trop grand.
     """
     return float(np.sqrt(L_um * wavelength_m * 1e6 / (np.pi * n0)))
+
+
+# ================================================================================
+#  OPL (nm) et transmittance : le format des figures experimentales
+# ================================================================================
+def probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel=1.0):
+    """Section efficace d'absorption par porteurs libres (Bremsstrahlung
+    inverse) À LA LONGUEUR D'ONDE SONDE, en cm².
+
+    Même expression que le `sigmaomega` du solveur, mais évaluée à
+    omega_sonde et non omega_pompe. C'est elle qui donne la partie IMAGINAIRE
+    de l'indice, donc la transmittance -- la partie réelle (défocalisation)
+    seule ne suffit pas à reproduire les cartes expérimentales.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+    n0p = _ns(lambda_probe_m)
+    w = 2 * np.pi * c_ / lambda_probe_m
+    k = w * n0p / c_
+    m = meff_drude_rel * m_e
+    return (k * qe_**2 * tau_c_s) / (n0p**2 * m * epsilon_0 * w * (1 + (w * tau_c_s)**2)) * 1e4
+
+
+def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
+                            n2=3.54e-20, tau_c_s=1.7e-15, meff_drude_rel=1.0,
+                            tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
+                            include=("drude", "ste", "kerr"),
+                            x_half_um=70.0, dx_um=0.25):
+    """OPL [nm] et transmittance le long de la ligne de visée, au délai donné.
+
+    OPL = integrale de Delta_n sur la corde, en nanomètres -- c'est la
+    grandeur que trace l'expérience, reliée à la phase par
+    phi = 2 pi OPL / lambda (soit 1 rad = 82 nm à 515 nm).
+
+    Transmittance = exp(-sigma_sonde * integrale de rho_e), l'absorption par
+    porteurs libres. Les STE n'y contribuent pas ici : leur bande d'absorption
+    est à 5.2 eV et la sonde à 515 nm ne fait que 2.41 eV, donc l'oscillateur
+    de Lorentz y est purement dispersif.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+
+    n0p = _ns(lambda_probe_m)
+    nc = epsilon_0 * m_e * (2 * np.pi * c_ / lambda_probe_m)**2 / qe_**2 * 1e-6
+    E_probe = 1239.84193 / (lambda_probe_m * 1e9)
+    f_ste = E_probe**2 / (E_tr_eV**2 - E_probe**2)
+
+    z_um = z_um_of(res)
+    v_g = 299.792458 / n_g
+    t_local = delay_fs - z_um / (v_g * 1e-3)
+    rho_e, rho_s, I = _populations_at(res, t_local, tau_r_s, tau_ste_s)
+
+    if res.get("r_sub") is not None and np.asarray(res["r_sub"]).shape != ():
+        r_pos = np.asarray(res["r_sub"], float) * 1e6
+    else:
+        r_full = r_um_of(res)
+        r_pos = r_full[len(r_full) // 2:]
+    r_pos = r_pos[:rho_e.shape[1]]
+
+    den = 2.0 * n0p * nc
+    dn = np.zeros_like(rho_e)
+    if "drude" in include:
+        dn -= rho_e / den
+    if "ste" in include:
+        dn += f_ste * rho_s / den
+    if "kerr" in include:
+        dn += n2 * I * 1e4
+
+    x_max = float(min(x_half_um, r_pos[-1]))
+    x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
+    A = build_abel_matrix(r_pos, x_um)
+
+    opl_nm = (dn @ A.T) * 1e3                       # µm -> nm
+    sigma = probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel)
+    tau_opt = sigma * (rho_e @ A.T) * 1e-4          # cm^-3 * µm * cm^2 -> sans dim
+    return dict(x_um=x_um, z_um=z_um, opl_nm=opl_nm,
+                transmittance=np.exp(-np.clip(tau_opt, 0, None)),
+                sigma_cm2=sigma, f_ste=f_ste)
+
+
+def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
+                   opl_clip_nm=15.0, t_lim=(0.75, 1.15), x_half_um=70.0,
+                   title=None, save=None, **kw):
+    """Planche 4 panneaux au format des figures expérimentales :
+    OPL vue de dessus / de côté, transmittance vue de dessus / de côté."""
+    import matplotlib.pyplot as plt
+    d = probe_opl_transmittance(res, delay_fs, x_half_um=x_half_um, **kw)
+    x, z = d["x_um"], d["z_um"] + z_shift_um
+    opl, T = d["opl_nm"], d["transmittance"]
+
+    iz = (int(np.argmin(np.abs(z - z_face_um))) if z_face_um is not None
+          else int(np.argmax(np.abs(opl).max(axis=1))))
+    X, Y = np.meshgrid(x, x)
+    R = np.hypot(X, Y)
+    xp = x[x >= 0]
+    face_opl = np.interp(R, xp, opl[iz][x >= 0], left=0, right=0)
+    face_T = np.interp(R, xp, T[iz][x >= 0], left=1, right=1)
+
+    fig, ax = plt.subplots(2, 2, figsize=(16, 9),
+                           gridspec_kw=dict(width_ratios=[1, 2.9]))
+    ext_face = [x[0], x[-1], x[0], x[-1]]
+    ext_side = [z[0], z[-1], x[0], x[-1]]
+
+    im0 = ax[0, 0].imshow(face_opl, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
+                          extent=ext_face, origin="lower")
+    ax[0, 0].set_title("top OPL"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
+
+    im1 = ax[0, 1].imshow(opl.T, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
+                          extent=ext_side, origin="lower", aspect="auto")
+    ax[0, 1].set_title("side OPL")
+    ax[0, 1].set_xlabel("z from interface [um]"); ax[0, 1].set_ylabel("r from axis [um]")
+    fig.colorbar(im1, ax=ax[0, 1], label="OPL [nm]", fraction=0.02, pad=0.01)
+
+    im2 = ax[1, 0].imshow(face_T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
+                          extent=ext_face, origin="lower")
+    ax[1, 0].set_title("top transmittance"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
+
+    im3 = ax[1, 1].imshow(T.T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
+                          extent=ext_side, origin="lower", aspect="auto")
+    ax[1, 1].set_title("side transmittance")
+    ax[1, 1].set_xlabel("z from interface [um]"); ax[1, 1].set_ylabel("r from axis [um]")
+    fig.colorbar(im3, ax=ax[1, 1], label="transmittance", fraction=0.02, pad=0.01)
+
+    for a in (ax[0, 1], ax[1, 1]):
+        a.axhline(0, color="k", lw=0.5, ls=":")
+        a.axvline(z[iz], color="k", lw=0.5, ls=":")
+        if z_lim is not None:
+            a.set_xlim(*z_lim)
+    fig.suptitle(title or f"simulation, delay {delay_fs/1000:+.3f} ps"
+                          f"   (sigma_probe = {d['sigma_cm2']:.2e} cm2)", fontsize=12)
+    fig.tight_layout()
+    if save:
+        fig.savefig(save, dpi=140, bbox_inches="tight")
+    return fig, d
