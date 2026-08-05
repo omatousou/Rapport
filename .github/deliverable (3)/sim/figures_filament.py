@@ -905,8 +905,8 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
 
 
 def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
-                   opl_clip_nm=15.0, t_lim=(0.75, 1.15), x_half_um=70.0,
-                   title=None, save=None, **kw):
+                   r_lim=None, opl_clip_nm=15.0, t_lim=(0.75, 1.15), x_half_um=75.0,
+                   rho_max_cm3=None, validity_frac=0.1, title=None, save=None, **kw):
     """Planche 4 panneaux au format des figures expérimentales :
     OPL vue de dessus / de côté, transmittance vue de dessus / de côté."""
     import matplotlib.pyplot as plt
@@ -947,11 +947,37 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
     ax[1, 1].set_xlabel("z from interface [um]"); ax[1, 1].set_ylabel("r from axis [um]")
     fig.colorbar(im3, ax=ax[1, 1], label="transmittance", fraction=0.02, pad=0.01)
 
+    # z_lim / r_lim : caler exactement sur les bornes des figures
+    # experimentales, sinon la comparaison visuelle est trompeuse (une zone
+    # d'interaction parait large ou etroite selon le cadrage, pas selon la
+    # physique -- c'est ce qui avait masque le probleme de waist trop grand).
     for a in (ax[0, 1], ax[1, 1]):
         a.axhline(0, color="k", lw=0.5, ls=":")
         a.axvline(z[iz], color="k", lw=0.5, ls=":")
         if z_lim is not None:
             a.set_xlim(*z_lim)
+        if r_lim is not None:
+            a.set_ylim(*r_lim)
+    for a in (ax[0, 0], ax[1, 0]):
+        if r_lim is not None:
+            a.set_xlim(*r_lim); a.set_ylim(*r_lim)
+    # Domaine de validite : la ou rho_e depasse une fraction de rho_max, le
+    # modele sort de son domaine (pas d'enlevement de matiere, Drude a tau_c
+    # fixe, pas de renormalisation du gap). On le marque au lieu de laisser
+    # croire que la carte y est quantitative.
+    if rho_max_cm3 is not None and "rho_rz" in res:
+        rho_side = np.asarray(res["rho_rz"])
+        half_r = rho_side.shape[1] // 2
+        rho_max_z = rho_side[:, half_r:].max(axis=1)
+        bad = rho_max_z > validity_frac * rho_max_cm3
+        if bad.any():
+            for a in (ax[0, 1], ax[1, 1]):
+                a.fill_between(z, x[0], x[-1], where=bad, color="lime",
+                               alpha=0.13, step="mid", zorder=5)
+            zb = z[bad]
+            print(f"/!\\ hors domaine de validite (rho_e > {validity_frac:.0%} de rho_max) "
+                  f"sur z = {zb.min():.0f} a {zb.max():.0f} um  -- zones hachurees")
+
     fig.suptitle(title or f"simulation, delay {delay_fs/1000:+.3f} ps"
                           f"   (sigma_probe = {d['sigma_cm2']:.2e} cm2)", fontsize=12)
     fig.tight_layout()
