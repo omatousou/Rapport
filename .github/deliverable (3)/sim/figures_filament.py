@@ -722,7 +722,7 @@ def probe_phase_map(res, delay_fs, lambda_probe_m=490e-9, E_tr_eV=4.2,
 
 
 def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
-                      x_half_um=15.0, **kw):
+                      x_half_um=15.0, z_lim=None, **kw):
     """Planche façon expérience pompe-sonde : une colonne par délai.
 
     Ligne du haut  : vue de face phi(x, y) au plan z_face_um (axisymétrique).
@@ -761,6 +761,10 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
 
         im = axes[1, j].imshow(phi, cmap="bwr", vmin=-clip_rad, vmax=clip_rad, aspect="auto",
                                extent=[x_um[0], x_um[-1], z_um[-1], z_um[0]])
+        # z_lim : cadrer sur la zone d'interaction pour comparer aux figures
+        # experimentales, dont l'axe long ne couvre que quelques dizaines de um.
+        if z_lim is not None:
+            axes[1, j].set_ylim(max(z_lim), min(z_lim))
         axes[1, j].axhline(z_um[iz], color="k", lw=0.5, ls=":")
         axes[1, j].tick_params(labelsize=6)
         axes[1, j].set_xlabel("x (µm)", fontsize=8)
@@ -806,3 +810,17 @@ def check_entrance_intensity(energy_uJ, w0_m, delta_t_s, begin_m, wavelength_m, 
         else:
             print(f"  OK : {I_clamp_Wcm2/I_in:.1f} x sous le clampage a l'entree.")
     return I_in, w_in, z_safe
+
+
+def w0_from_channel_length(L_um, wavelength_m=1030e-9, n0=1.4500):
+    """Waist déduit de la longueur du canal observé.
+
+    La longueur sur laquelle un faisceau focalisé reste assez intense pour
+    ioniser est fixée par sa longueur de Rayleigh, z_R = pi w0^2 n0/lambda.
+    Un canal de longueur L implique donc w0 ~ sqrt(L lambda/(pi n0)).
+
+    C'est une mesure de w0 gratuite, et surtout indépendante de toute
+    calibration de caméra : si la simulation étale l'ionisation sur bien plus
+    de longueur que l'expérience, c'est que le waist utilisé est trop grand.
+    """
+    return float(np.sqrt(L_um * wavelength_m * 1e6 / (np.pi * n0)))
