@@ -30,6 +30,7 @@ __all__ = [
     "plot_scenario_summary", "fluence_level_extent", "run_health_check",
     "count_refocusing_cycles",
     "critical_power", "entrance_radius", "marburger_collapse",
+    "build_abel_matrix", "decompose_probe_phase",
 ]
 
 
@@ -272,6 +273,17 @@ def _plot_energy_losses_ax(ax, res, label="", z_shift_um=0.0, xlim=(0, 150), yli
     """Pertes d'énergie cumulées (fraction de U0) vs z, styles de la Fig. 12
     de Couairon 2005."""
     z_um = z_um_of(res, z_shift_um)
+    # NewSim3juillet.py alloue E_plasma_z/E_MPI_z mais ne les remplit jamais :
+    # le tracé serait un aplat à zéro qu'on pourrait prendre pour "pas de
+    # pertes". Le dire plutôt que de tracer du vide.
+    if float(np.max(np.abs(res["E_total_z"]))) == 0.0:
+        ax.text(0.5, 0.5, "E_total_z identiquement nul\n(npz produit par un solveur\n"
+                          "qui ne calcule pas les pertes)",
+                ha="center", va="center", fontsize=10, transform=ax.transAxes)
+        ax.set_axis_off()
+        print("/!\\ plot_fig12_energy_losses : E_total_z est nul partout -- ce npz ne "
+              "contient pas de pertes d'énergie (cf. NewSim3juillet.py).")
+        return
     tag = f"{label} -- " if label else ""
     ax.semilogy(z_um, np.clip(res["E_total_z"],  1e-6, None), "-",  color="black", lw=1.8, label=f"{tag}Plasma+Photo")
     ax.semilogy(z_um, np.clip(res["E_plasma_z"], 1e-6, None), "--", color="black", lw=1.4, label=f"{tag}Plasma")
@@ -386,7 +398,8 @@ def plot_fig12_energy_losses(res, label="", save=None, z_shift_um=0.0,
     """Pertes d'énergie cumulées (Plasma/Photo/combiné) vs z."""
     fig, ax = plt.subplots(figsize=(7.5, 5))
     _plot_energy_losses_ax(ax, res, label=label, z_shift_um=z_shift_um, xlim=xlim, ylim=ylim)
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:   # rien à légender si le npz n'a pas de pertes
+        ax.legend(fontsize=8)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=150)
     return fig
@@ -481,3 +494,116 @@ def run_health_check(res, out_dir=None, label="", I_band=(4.5e13, 5.5e13),
                 print(f"  {key:32s} = {val}")
         else:
             print(f"  (params.json introuvable dans {out_dir})")
+
+
+# ================================================================================
+#  Déphasage sonde : décomposition en canaux
+# ================================================================================
+def build_abel_matrix(r_um, x_um):
+    """Matrice Abel forward, coquilles sur grille r non uniforme :
+        phi(x_i) = sum_j A[i,j] f_j  ~=  2 int_|x_i|^inf f(r) r/sqrt(r^2-x^2) dr.
+    Identique à celle de unified_filament_slider_v3.py."""
+    r_um = np.asarray(r_um, float); x_um = np.asarray(x_um, float)
+    r_mid = 0.5 * (r_um[:-1] + r_um[1:])
+    r_lo = np.concatenate(([0.0], r_mid))
+    r_hi = np.concatenate((r_mid, [r_um[-1] + (r_um[-1] - r_mid[-1])]))
+    A = np.zeros((len(x_um), len(r_um)))
+    ax = np.abs(x_um)[:, None]
+    valid = r_hi[None, :] >= ax
+    upper = r_hi[None, :]**2 - ax**2
+    lower = np.maximum(r_lo[None, :], ax)**2 - ax**2
+    A[valid] = 2.0 * (np.sqrt(np.maximum(upper[valid], 0.0))
+                      - np.sqrt(np.maximum(lower[valid], 0.0)))
+    return A
+
+
+def decompose_probe_phase(res, lambda_probe_m=490e-9, E_tr_eV=4.2, n2=3.54e-20,
+                          rho_max_cm3=2.1e22, x_half_um=50.0, dx_um=0.1,
+                          verbose=True):
+    """Borne SUPÉRIEURE du déphasage sonde, canal par canal.
+
+    Utilise les cartes 2D du npz (`rho_rz`, `rho_s_rz`, `Ipeak_rz`), qui sont
+    des MAXIMA sur le temps : le résultat majore donc ce que verrait une sonde
+    à un délai donné, et les canaux ne culminent pas tous au même instant
+    (le Kerr n'existe que pendant l'impulsion, le STE monte après). C'est
+    voulu -- le but est de répondre à « quel canal peut produire plusieurs
+    radians », pas de reproduire un délai précis.
+
+    Renvoie un dict {canal: (dn_max, phi_max_rad)} plus 'x_um'/'phi_xz'.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    from keldysh import n_sellmeier as _ns
+
+    n0p = _ns(lambda_probe_m)
+    nc = epsilon_0 * m_e * (2 * np.pi * c_ / lambda_probe_m)**2 / qe_**2 * 1e-6
+    E_probe = 1239.84193 / (lambda_probe_m * 1e9)
+    f_ste = E_probe**2 / (E_tr_eV**2 - E_probe**2)
+    lam_um = lambda_probe_m * 1e6
+
+    r_full = r_um_of(res)
+    half = len(r_full) // 2
+    r_pos = r_full[half:]                     # moitié r >= 0
+    den = 2.0 * n0p * nc
+
+    chans = {}
+    missing = []
+    chans["Drude (rho_e)"] = -np.asarray(res["rho_rz"])[:, half:] / den
+
+    if "rho_s_rz" in res and np.asarray(res["rho_s_rz"]).shape != ():
+        chans[f"STE (rho_s, E_tr={E_tr_eV} eV)"] = f_ste * np.asarray(res["rho_s_rz"])[:, half:] / den
+    else:
+        missing.append("STE : 'rho_s_rz' absent du npz")
+
+    # Kerr : Ipeak_rz (max sur t) si présent, sinon reconstruit depuis le cube
+    # I_rzt. Ce canal ne doit JAMAIS être sauté en silence : à l'intensité de
+    # clampage il vaut à lui seul ~1.4 rad sur 6 µm, donc l'omettre ferait
+    # conclure à tort que le STE est seul responsable d'un déphasage trop fort.
+    Ipk = None
+    if "Ipeak_rz" in res and np.asarray(res["Ipeak_rz"]).shape != ():
+        Ipk = np.asarray(res["Ipeak_rz"])[:, half:]
+    elif "I_rzt" in res and np.asarray(res["I_rzt"]).shape != ():
+        cube = np.asarray(res["I_rzt"])
+        if cube.shape[1] == len(r_full):
+            Ipk = cube.max(axis=2)[:, half:]
+            missing.append("Kerr : 'Ipeak_rz' absent -> reconstruit par max(I_rzt) sur t "
+                           "(sous-échantillonné en t, donc légèrement sous-estimé)")
+        else:
+            missing.append(f"Kerr : 'Ipeak_rz' absent et I_rzt a un axe radial "
+                           f"({cube.shape[1]}) != r ({len(r_full)}) -> CANAL KERR NON CALCULE")
+    else:
+        missing.append("Kerr : ni 'Ipeak_rz' ni 'I_rzt' -> CANAL KERR NON CALCULE")
+    if Ipk is not None:
+        chans["Kerr (n2*I)"] = n2 * Ipk * 1e4
+
+    x_max = float(min(x_half_um, r_pos[-1]))
+    x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
+    A = build_abel_matrix(r_pos, x_um)
+
+    out = {}
+    for name, dn in chans.items():
+        phi = (2.0 * np.pi / lam_um) * (dn @ A.T)
+        out[name] = (float(np.abs(dn).max()), float(np.abs(phi).max()))
+    total = sum(chans.values())
+    phi_tot = (2.0 * np.pi / lam_um) * (total @ A.T)
+    out["TOTAL (somme des canaux)"] = (float(np.abs(total).max()), float(np.abs(phi_tot).max()))
+
+    if verbose:
+        print(f"Sonde {lambda_probe_m*1e9:.0f} nm : n0'={n0p:.4f}, n_c={nc:.3e} cm-3, "
+              f"E_probe={E_probe:.3f} eV, f_STE={f_ste:.4f}")
+        for m in missing:
+            print(f"  /!\\ {m}")
+        print(f"{'canal':34s} {'|dn|max':>11s} {'|phi|max (rad)':>15s}")
+        for name, (dn_m, phi_m) in out.items():
+            print(f"  {name:32s} {dn_m:11.3e} {phi_m:15.2f}")
+        rho_e_max = float(np.max(res["rho_rz"]))
+        frac = rho_e_max / rho_max_cm3
+        print(f"\nrho_e max = {rho_e_max:.3e} cm-3 = {frac*100:.1f} % de rho_max={rho_max_cm3:.1e}")
+        if frac > 0.5:
+            print("  /!\\ EMBALLEMENT : rho_e approche la densite d'atomes. Ce n'est plus")
+            print("      du clampage physique -- tout dephasage calcule la-dessus est faux.")
+        elif frac > 0.1:
+            print("  (!) rho_e depasse 10 % de rho_max : a surveiller.")
+
+    out["x_um"] = x_um
+    out["phi_xz"] = phi_tot
+    return out
