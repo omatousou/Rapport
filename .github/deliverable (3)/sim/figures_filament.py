@@ -736,9 +736,16 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
     axes = np.atleast_2d(axes)
     maps = [probe_phase_map(res, d, x_half_um=x_half_um, **kw) for d in delays_fs]
     if clip_rad is None:
-        clip_rad = max(float(np.nanmax(np.abs(p))) for _, _, p in maps) or 1.0
+        # Percentile 99.5 et non le maximum : un run ou le milieu s'ionise
+        # totalement produit quelques pixels a des centaines de radians, qui
+        # ecrasent toute l'echelle et rendent la planche uniformement blanche.
+        allv = np.concatenate([np.abs(p).ravel() for _, _, p in maps])
+        clip_rad = float(np.percentile(allv, 99.5)) or 1.0
 
     for j, (d, (x_um, z_um, phi)) in enumerate(zip(delays_fs, maps)):
+        # Par defaut le plan ou le signal est maximum. Imposer z_face_um a une
+        # valeur theorique (L_c par exemple) donne une vignette vide des que le
+        # run ne se comporte pas comme prevu -- exactement le cas a debugger.
         iz = (int(np.argmin(np.abs(z_um - z_face_um))) if z_face_um is not None
               else int(np.argmax(np.abs(phi).max(axis=1))))
         prof = phi[iz]
@@ -764,3 +771,38 @@ def plot_delay_series(res, delays_fs, save=None, clip_rad=None, z_face_um=None,
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
     return fig
+
+
+def check_entrance_intensity(energy_uJ, w0_m, delta_t_s, begin_m, wavelength_m, n0,
+                             I_clamp_Wcm2=5e13, verbose=True):
+    """Intensité crête au plan d'ENTRÉE, comparée au clampage.
+
+    À écrire avant tout `run()`. Le solveur pose I0 = 2P/(pi w0^2) au waist ;
+    si le plan de départ est proche du waist et que l'énergie est grande, on
+    démarre au-dessus du seuil d'ionisation, le milieu s'ionise dès le premier
+    micron (rho_e -> rho_max), l'énergie est absorbée et il ne reste rien à
+    propager. Le run se termine normalement, sans erreur : c'est pour ça que
+    ce contrôle doit être explicite.
+
+    Renvoie (I_entree, w_entree, z_min_safe) où z_min_safe est la distance
+    minimale au waist pour rester sous I_clamp.
+    """
+    tp = delta_t_s / np.sqrt(2 * np.log(2))
+    P = energy_uJ * 1e-6 / (tp * np.sqrt(np.pi / 2))
+    I0 = 2 * P / (np.pi * w0_m**2) * 1e-4                 # W/cm^2, au waist
+    z_R = 2 * np.pi * n0 / wavelength_m * w0_m**2 / 2
+    w_in = w0_m * np.sqrt(1 + (begin_m / z_R)**2)
+    I_in = I0 * (w0_m / w_in)**2
+    z_safe = z_R * np.sqrt(max(I0 / I_clamp_Wcm2 - 1, 0.0))
+    if verbose:
+        print(f"  P_crete   = {P*1e-6:.1f} MW")
+        print(f"  I au waist= {I0:.2e} W/cm2   ({I0/I_clamp_Wcm2:.1f} x I_clamp)")
+        print(f"  w(entree) = {w_in*1e6:.1f} um  ->  I(entree) = {I_in:.2e} W/cm2")
+        if I_in > I_clamp_Wcm2:
+            print(f"  /!\\ ENTREE AU-DESSUS DU CLAMPAGE : le milieu va s'ioniser des le")
+            print(f"       premier micron et absorber l'impulsion. Demarrer a |z| > "
+                  f"{z_safe*1e6:.0f} um du waist, ou baisser l'energie a "
+                  f"{energy_uJ*I_clamp_Wcm2/I0:.2f} uJ.")
+        else:
+            print(f"  OK : {I_clamp_Wcm2/I_in:.1f} x sous le clampage a l'entree.")
+    return I_in, w_in, z_safe
