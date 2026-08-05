@@ -183,29 +183,48 @@ def calibration_table(fit, wavelength_um=1.030, pixel_candidates=(0.345, 1.0, 3.
     print("\nM2 < 1 impossible -> ces cases excluent la combinaison (p, s).")
 
 
-def plot_caustic(caus, fit=None, pixel_um=None, s_um_per_unit=None, save=None):
-    """w(z) mesurée + ajustement. Si pixel_um et s_um_per_unit sont fournis,
-    les axes passent en µm."""
+def plot_caustic(caus, fit=None, valid=None, pixel_um=None, s_um_per_unit=None,
+                 fit_window=None, save=None):
+    """w(z) mesurée + ajustement, en distinguant les trois catégories d'images.
+
+    `valid` (sortie de power_consistency) sépare les images du plateau de
+    celles écartées pour cause de changement de densité optique : les tracer
+    du même symbole donnerait à croire que l'ajustement ignore des points
+    valables, alors qu'ils sont rejetés pour une raison mesurée.
+    """
     import matplotlib.pyplot as plt
     p = pixel_um or 1.0
     s = s_um_per_unit or 1.0
-    ok = caus["sat"] == 0
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(caus["z"][ok] * s, caus["w"][ok] * p, "o", color="tab:blue", label="mesure (fit gaussien 2D)")
-    bad = ~ok
-    if bad.any():
-        ax.plot(caus["z"][bad] * s, caus["w"][bad] * p, "x", color="crimson",
-                ms=9, label="saturee (exclue)")
+    sat = caus["sat"] > 0
+    good = (~sat) if valid is None else valid
+    rejected = (~sat) & (~good)
+
+    fig, ax = plt.subplots(figsize=(9.5, 5.5))
+    ax.plot(caus["z"][good] * s, caus["w"][good] * p, "o", color="tab:blue", ms=7,
+            label=f"retenues ({good.sum()}) -- puissance coherente")
+    if rejected.any():
+        ax.plot(caus["z"][rejected] * s, caus["w"][rejected] * p, "s", mfc="none",
+                mec="darkorange", ms=8, mew=1.6,
+                label=f"ecartees ({rejected.sum()}) -- densite optique differente")
+    if sat.any():
+        ax.plot(caus["z"][sat] * s, caus["w"][sat] * p, "x", color="crimson", ms=10, mew=2,
+                label="saturee")
     if fit:
         zz = np.linspace(caus["z"].min(), caus["z"].max(), 400)
         ax.plot(zz * s, _caustic(zz, fit["w0_px"], fit["z0"], fit["zR"]) * p, "-",
-                color="black", lw=1.4,
-                label=f"caustique gaussienne (w0={fit['w0_px']*p:.2f}, zR={fit['zR']*s:.0f})")
+                color="black", lw=1.5,
+                label=(f"gaussienne : w0={fit['w0_px']*p:.2f}"
+                       f"{' µm' if pixel_um else ' px'}, zR={fit['zR']*s:.0f}"))
         ax.axvline(fit["z0"] * s, ls=":", color="gray", lw=1)
-    unit = "µm" if (pixel_um and s_um_per_unit) else "unités brutes"
-    ax.set_xlabel(f"z ({unit})"); ax.set_ylabel(f"w, rayon 1/e² ({'µm' if pixel_um else 'px'})")
-    ax.set_title("Caustique mesurée vs modèle gaussien")
-    ax.legend(fontsize=8); fig.tight_layout()
+        if fit_window:
+            ax.axvspan((fit["z0"] - fit_window) * s, (fit["z0"] + fit_window) * s,
+                       color="tab:blue", alpha=0.07, label="zone d'ajustement")
+    unit = "µm" if (pixel_um and s_um_per_unit) else "unites brutes"
+    ax.set_xlabel(f"z ({unit})")
+    ax.set_ylabel(f"w, rayon 1/e2 ({'µm' if pixel_um else 'px'})")
+    ax.set_title("Caustique mesuree vs modele gaussien")
+    ax.legend(fontsize=8, loc="upper center")
+    fig.tight_layout()
     if save:
         fig.savefig(save, dpi=150)
     return fig
