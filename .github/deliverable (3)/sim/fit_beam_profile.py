@@ -30,7 +30,7 @@ from scipy.ndimage import gaussian_filter
 
 __all__ = ["load_profiles", "fit_gaussian_2d", "measure_caustic",
            "fit_caustic", "caustic_asymmetry", "calibration_table", "plot_caustic",
-           "peak_intensity_ratio"]
+           "peak_intensity_ratio", "power_consistency"]
 
 SAT_LEVEL = 1023.0          # caméra 10 bits
 
@@ -101,12 +101,12 @@ def measure_caustic(folder, verbose=True):
                 print(f"{z:8d}  ECHEC {type(exc).__name__}: {exc}")
             continue
         note = "SATUREE -> a exclure" if f["sat"] else ("anneaux (R2 bas)" if f["r2"] < 0.85 else "")
-        rows.append((z, f["wx"], f["wy"], f["w"], f["r2"], f["sat"]))
+        rows.append((z, f["wx"], f["wy"], f["w"], f["A"], f["r2"], f["sat"]))
         if verbose:
             print(f"{z:8d} {f['wx']:7.2f} {f['wy']:7.2f} {f['w']:7.2f} "
                   f"{f['r2']:6.3f} {f['sat']:5d}  {note}")
     return np.array(rows, dtype=[("z", "f8"), ("wx", "f8"), ("wy", "f8"),
-                                 ("w", "f8"), ("r2", "f8"), ("sat", "f8")])
+                                 ("w", "f8"), ("A", "f8"), ("r2", "f8"), ("sat", "f8")])
 
 
 def _caustic(z, w0, z0, zR):
@@ -142,10 +142,10 @@ def fit_caustic(caus, exclude_saturated=True, z_window=None, mask=None, verbose=
     return out
 
 
-def caustic_asymmetry(caus, offsets=(300, 400, 500, 600, 800), verbose=True):
+def caustic_asymmetry(caus, offsets=(300, 400, 500, 600, 800), valid=None, verbose=True):
     """Compare w²-w0² à ±dz du minimum. Une caustique gaussienne donne 1.00.
     C'est le test qui dit si un modèle gaussien unique est légitime."""
-    ok = caus["sat"] == 0
+    ok = caus["sat"] == 0 if valid is None else valid
     z, w = caus["z"][ok], caus["w"][ok]
     i = int(np.argmin(w))
     out = {}
@@ -263,3 +263,40 @@ def peak_intensity_ratio(folder, z_values, radii=(30, 40, 50, 60, 70),
         print("   ATTENTION : gonfler w0 corrige l'intensite mais degrade la caustique")
         print("   (zR ~ w0^2). Une seule gaussienne ne peut pas faire les deux.")
     return means
+
+
+def power_consistency(caus, folder, plateau=None, tol=0.20, verbose=True):
+    """Contrôle qualité : A*w² (puissance totale de la gaussienne ajustée) doit
+    être constant d'une image à l'autre SI la densité optique et le temps
+    d'exposition n'ont pas changé.
+
+    Indispensable ici : ces caustiques ont été prises avec un filtre de densité
+    ajusté « plus ou moins » pour éviter la saturation, donc l'atténuation n'est
+    pas la même partout. Une frame sous-atténuée ou bruitée gonfle à la fois sa
+    largeur ajustée et sa puissance apparente -- et fausse alors le test de
+    symétrie, qui compare justement des largeurs de part et d'autre du foyer.
+
+    Une atténuation uniforme ne change NI la largeur ajustée NI le rapport
+    A_eff/A_gauss (les deux sont invariants d'échelle) : seul un CHANGEMENT
+    d'atténuation entre images pose problème.
+
+    Renvoie un masque booléen des images cohérentes avec le plateau.
+    """
+    P = caus["A"] * caus["w"]**2 if "A" in caus.dtype.names else None
+    if P is None:
+        raise ValueError("caus doit contenir la colonne 'A' (voir measure_caustic)")
+    if plateau is None:
+        ref = float(np.median(P[caus["sat"] == 0]))
+    else:
+        m = (caus["z"] >= plateau[0]) & (caus["z"] <= plateau[1])
+        ref = float(np.median(P[m]))
+    rel = P / ref
+    good = (np.abs(rel - 1) <= tol) & (caus["sat"] == 0)
+    if verbose:
+        print(f"reference A*w^2 = {ref:.3e}")
+        print(f"{'z':>8s} {'A*w^2/ref':>10s}  verdict")
+        for z, r, g, s in zip(caus["z"], rel, good, caus["sat"]):
+            v = "SATUREE" if s else ("ok" if g else f"ECARTEE ({(r-1)*100:+.0f} %)")
+            print(f"{z:8.0f} {r:10.2f}  {v}")
+        print(f"\n{good.sum()}/{len(good)} images cohérentes a +/-{tol*100:.0f} %")
+    return good
