@@ -273,6 +273,17 @@ def _plot_energy_losses_ax(ax, res, label="", z_shift_um=0.0, xlim=(0, 150), yli
     """Pertes d'énergie cumulées (fraction de U0) vs z, styles de la Fig. 12
     de Couairon 2005."""
     z_um = z_um_of(res, z_shift_um)
+    # NewSim3juillet.py alloue E_plasma_z/E_MPI_z mais ne les remplit jamais :
+    # le tracé serait un aplat à zéro qu'on pourrait prendre pour "pas de
+    # pertes". Le dire plutôt que de tracer du vide.
+    if float(np.max(np.abs(res["E_total_z"]))) == 0.0:
+        ax.text(0.5, 0.5, "E_total_z identiquement nul\n(npz produit par un solveur\n"
+                          "qui ne calcule pas les pertes)",
+                ha="center", va="center", fontsize=10, transform=ax.transAxes)
+        ax.set_axis_off()
+        print("/!\\ plot_fig12_energy_losses : E_total_z est nul partout -- ce npz ne "
+              "contient pas de pertes d'énergie (cf. NewSim3juillet.py).")
+        return
     tag = f"{label} -- " if label else ""
     ax.semilogy(z_um, np.clip(res["E_total_z"],  1e-6, None), "-",  color="black", lw=1.8, label=f"{tag}Plasma+Photo")
     ax.semilogy(z_um, np.clip(res["E_plasma_z"], 1e-6, None), "--", color="black", lw=1.4, label=f"{tag}Plasma")
@@ -387,7 +398,8 @@ def plot_fig12_energy_losses(res, label="", save=None, z_shift_um=0.0,
     """Pertes d'énergie cumulées (Plasma/Photo/combiné) vs z."""
     fig, ax = plt.subplots(figsize=(7.5, 5))
     _plot_energy_losses_ax(ax, res, label=label, z_shift_um=z_shift_um, xlim=xlim, ylim=ylim)
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:   # rien à légender si le npz n'a pas de pertes
+        ax.legend(fontsize=8)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=150)
     return fig
@@ -534,11 +546,34 @@ def decompose_probe_phase(res, lambda_probe_m=490e-9, E_tr_eV=4.2, n2=3.54e-20,
     den = 2.0 * n0p * nc
 
     chans = {}
+    missing = []
     chans["Drude (rho_e)"] = -np.asarray(res["rho_rz"])[:, half:] / den
-    if "rho_s_rz" in res:
+
+    if "rho_s_rz" in res and np.asarray(res["rho_s_rz"]).shape != ():
         chans[f"STE (rho_s, E_tr={E_tr_eV} eV)"] = f_ste * np.asarray(res["rho_s_rz"])[:, half:] / den
+    else:
+        missing.append("STE : 'rho_s_rz' absent du npz")
+
+    # Kerr : Ipeak_rz (max sur t) si présent, sinon reconstruit depuis le cube
+    # I_rzt. Ce canal ne doit JAMAIS être sauté en silence : à l'intensité de
+    # clampage il vaut à lui seul ~1.4 rad sur 6 µm, donc l'omettre ferait
+    # conclure à tort que le STE est seul responsable d'un déphasage trop fort.
+    Ipk = None
     if "Ipeak_rz" in res and np.asarray(res["Ipeak_rz"]).shape != ():
-        chans["Kerr (n2*I)"] = n2 * np.asarray(res["Ipeak_rz"])[:, half:] * 1e4
+        Ipk = np.asarray(res["Ipeak_rz"])[:, half:]
+    elif "I_rzt" in res and np.asarray(res["I_rzt"]).shape != ():
+        cube = np.asarray(res["I_rzt"])
+        if cube.shape[1] == len(r_full):
+            Ipk = cube.max(axis=2)[:, half:]
+            missing.append("Kerr : 'Ipeak_rz' absent -> reconstruit par max(I_rzt) sur t "
+                           "(sous-échantillonné en t, donc légèrement sous-estimé)")
+        else:
+            missing.append(f"Kerr : 'Ipeak_rz' absent et I_rzt a un axe radial "
+                           f"({cube.shape[1]}) != r ({len(r_full)}) -> CANAL KERR NON CALCULE")
+    else:
+        missing.append("Kerr : ni 'Ipeak_rz' ni 'I_rzt' -> CANAL KERR NON CALCULE")
+    if Ipk is not None:
+        chans["Kerr (n2*I)"] = n2 * Ipk * 1e4
 
     x_max = float(min(x_half_um, r_pos[-1]))
     x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
@@ -555,6 +590,8 @@ def decompose_probe_phase(res, lambda_probe_m=490e-9, E_tr_eV=4.2, n2=3.54e-20,
     if verbose:
         print(f"Sonde {lambda_probe_m*1e9:.0f} nm : n0'={n0p:.4f}, n_c={nc:.3e} cm-3, "
               f"E_probe={E_probe:.3f} eV, f_STE={f_ste:.4f}")
+        for m in missing:
+            print(f"  /!\\ {m}")
         print(f"{'canal':34s} {'|dn|max':>11s} {'|phi|max (rad)':>15s}")
         for name, (dn_m, phi_m) in out.items():
             print(f"  {name:32s} {dn_m:11.3e} {phi_m:15.2f}")
