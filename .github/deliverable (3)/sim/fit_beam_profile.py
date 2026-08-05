@@ -29,7 +29,8 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter
 
 __all__ = ["load_profiles", "fit_gaussian_2d", "measure_caustic",
-           "fit_caustic", "calibration_table", "plot_caustic"]
+           "fit_caustic", "caustic_asymmetry", "calibration_table", "plot_caustic",
+           "peak_intensity_ratio"]
 
 SAT_LEVEL = 1023.0          # caméra 10 bits
 
@@ -208,3 +209,57 @@ def plot_caustic(caus, fit=None, pixel_um=None, s_um_per_unit=None, save=None):
     if save:
         fig.savefig(save, dpi=150)
     return fig
+
+
+def peak_intensity_ratio(folder, z_values, radii=(30, 40, 50, 60, 70),
+                         bg_radius=60, verbose=True):
+    """Rapport A_eff/A_gauss = (P/I_pic) / (pi w^2/2) près du foyer.
+
+    SANS DIMENSION : ne demande ni taille de pixel ni échelle en z. C'est le
+    facteur par lequel le solveur SURESTIME l'intensité crête, puisqu'il pose
+    I0 = 2P/(pi w0^2), c'est-à-dire A_eff = pi w0^2/2 exactement.
+
+    Le fond est un PLAN ajusté hors du faisceau (r > bg_radius), pas une
+    médiane locale : ces images ont un gradient et un banding qui font diverger
+    l'intégrale avec le rayon d'ouverture si on les ignore (le rapport passait
+    de 1.29 à 2.27 entre r<30 et r<50 ; avec le plan, 1.58 à 2.07).
+
+    La dépendance résiduelle au rayon est réelle (ailes/anneaux) et doit être
+    rapportée comme une plage, pas comme un nombre unique.
+    """
+    out = {R: [] for R in radii}
+    for z in z_values:
+        a = np.load(os.path.join(folder, f"beamprofile_{z}.npy")).astype(float)
+        sm = gaussian_filter(a, 2.0)
+        iy, ix = np.unravel_index(np.argmax(sm), sm.shape)
+        yy, xx = np.indices(a.shape)
+        rr = np.hypot(xx - ix, yy - iy)
+        m = rr > bg_radius
+        M = np.c_[xx[m].ravel(), yy[m].ravel(), np.ones(m.sum())]
+        coef, *_ = np.linalg.lstsq(M, a[m].ravel(), rcond=None)
+        b = a - (coef[0] * xx + coef[1] * yy + coef[2])
+
+        h = 45
+        sub = b[iy - h:iy + h, ix - h:ix + h]
+        ys, xs = np.indices(sub.shape)
+        p, _ = curve_fit(_g2, (xs, ys), sub.ravel(),
+                         p0=(sub.max(), h, h, 8, 8, 0),
+                         bounds=([0, 0, 0, 1, 1, -500], [3000, 2 * h, 2 * h, 80, 80, 500]),
+                         maxfev=40000)
+        w2 = abs(p[3]) * abs(p[4])
+        Ipk = gaussian_filter(b, 1.0).max()
+        for R in radii:
+            out[R].append((b[rr < R].sum() / Ipk) / (np.pi * w2 / 2))
+
+    means = {R: float(np.mean(v)) for R, v in out.items()}
+    lo, hi = min(means.values()), max(means.values())
+    if verbose:
+        print(f"{'rayon':>8s} {'A_eff/A_gauss':>14s} {'I_pic/I_gauss':>14s}")
+        for R in radii:
+            print(f"  r<{R:3d} {means[R]:12.2f} +/-{np.std(out[R]):.2f} {1/means[R]:14.2f}")
+        print(f"\n-> le solveur surestime l'intensite crete d'un facteur {lo:.1f} a {hi:.1f}")
+        print(f"   w0 effectif qui reproduirait la vraie intensite crete :")
+        print(f"     w0_eff = w0_nominal x {np.sqrt(lo):.2f} a {np.sqrt(hi):.2f}")
+        print("   ATTENTION : gonfler w0 corrige l'intensite mais degrade la caustique")
+        print("   (zR ~ w0^2). Une seule gaussienne ne peut pas faire les deux.")
+    return means
