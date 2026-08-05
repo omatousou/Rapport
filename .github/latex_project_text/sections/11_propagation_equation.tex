@@ -1,10 +1,6 @@
 \section{Propagation Equation and Population Rate Equations}
 
-Before describing how the simulation code is built, we assemble the full envelope propagation equation and the carrier density rate equations exactly as they are implemented in \texttt{NewSim3juillet.py}. The physical building blocks were derived separately in the previous sections. Kerr self-focusing and self-steepening in Section~6, plasma defocusing and absorption in Section~7, photoionization in Section~3, and avalanche and self-trapping in Section~5. Here we put them together into the single equation that the code actually integrates, and we label every term so that the correspondence with the source code is explicit.
-
-\subsection{Slowly Varying Envelope Equation}
-
-Following the same derivation as in Section~6, the electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the resulting propagation equation used in the code reads:
+The electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the resulting propagation equation used in the code reads:
 \begin{align}
 \label{eq:master_propagation}
 \hat{U}\,\frac{\partial u}{\partial z} =\;
@@ -30,9 +26,7 @@ with, in the retarded frame $t\to t-z/v_g$ and writing $\Omega=\omega-\omega_0$,
 \end{equation}
 where $k(\omega)$ is evaluated from the Sellmeier relation rather than truncated at any order.
 
-Three points in this equation deserve to be stated explicitly, because each of them is a place where a plausible-looking alternative would be wrong.
-
-First, $\hat{U}$ sits in front of $\partial/\partial z$, and the transverse Laplacian is bare. This is the form used by Couairon et al.~\cite{PhysRevB.71.125435}, whose Eq.~(2) is introduced with exactly that wording: the equation accounts for space-time focusing \emph{due to the presence of the operator $\hat{U}$ in front of $\partial/\partial z$}. The reason to prefer it over the algebraically equivalent form obtained by dividing through by $\hat{U}$ is that it contains no inverse operator, so there is no ambiguity about which terms $\hat{U}$ acts on. If one does divide by $\hat{U}$, it must be applied to \emph{every} term on the right-hand side, giving
+This is the form used by Couairon et al.~\cite{PhysRevB.71.125435}, whose Eq.~(2) is introduced with exactly that wording: the equation accounts for space-time focusing \emph{due to the presence of the operator $\hat{U}$ in front of $\partial/\partial z$}. The reason to prefer it over the algebraically equivalent form obtained by dividing through by $\hat{U}$ is that it contains no inverse operator, so there is no ambiguity about which terms $\hat{U}$ acts on. If one does divide by $\hat{U}$, it must be applied to \emph{every} term on the right-hand side, giving
 \begin{equation}
 \label{eq:master_divided}
 \frac{\partial u}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 u + i\hat{D}u
