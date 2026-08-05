@@ -473,10 +473,35 @@ def fluence_level_extent(res, levels=(1.0, 2.0, 3.0), z_shift_um=0.0, label=""):
     return out
 
 
+def clamping_density(n2, I_clamp_Wcm2, wavelength_m, peak_factor=6.0):
+    """Densité électronique attendue au clampage : rho = 2 rho_c n2 I_clamp.
+
+    C'est l'égalité des deux termes d'indice, n2*I = rho/(2 rho_c), qui EST la
+    définition du clampage. `peak_factor` traduit que le pic dépasse
+    transitoirement l'équilibre : Couairon 2005 rapporte 2-4e20 là où ce bilan
+    donne 6.2e19, soit un facteur ~6.
+
+    Important : rho_c décroît quand lambda augmente, donc la densité attendue à
+    1030 nm est PLUS BASSE qu'à 800 nm. Comparer un run à 1030 nm à la bande
+    2-4e20 de Couairon, mesurée à 800 nm et à ses w0/énergie, n'a pas de sens.
+    """
+    from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
+    rho_c = epsilon_0 * m_e * (2 * np.pi * c_ / wavelength_m)**2 / qe_**2 * 1e-6
+    return 2 * rho_c * n2 * I_clamp_Wcm2 * 1e4 * peak_factor
+
+
 def run_health_check(res, out_dir=None, label="", I_band=(4.5e13, 5.5e13),
-                     rho_band=(2e20, 4e20), rho_max=2.1e22):
-    """Confronte un run aux valeurs chiffrées de Couairon 2005 et rappelle
-    quels interrupteurs ont RÉELLEMENT servi (lus dans params.json)."""
+                     rho_band=(2e20, 4e20), rho_max=2.1e22,
+                     rho_band_source="Couairon 2005 @800nm, 1.1uJ, w0=1um"):
+    """Confronte un run à des valeurs de référence et rappelle quels
+    interrupteurs ont RÉELLEMENT servi (lus dans params.json).
+
+    `rho_band` par défaut est celle de Couairon 2005 à SES paramètres. Elle
+    n'est pas universelle : la densité de clampage vaut 2 rho_c n2 I, donc elle
+    dépend de lambda (via rho_c), de n2 et de I_clamp. Pour un run à d'autres
+    paramètres, passer `rho_band` calculée avec `clamping_density()`, sinon le
+    verdict HORS BANDE compare des choses différentes.
+    """
     print(f"=== {label} ===")
     I_pk = float(np.max(res["Imax_z"]))
     z_pk = z_um_of(res)[int(np.argmax(res["Imax_z"]))]
@@ -485,7 +510,8 @@ def run_health_check(res, out_dir=None, label="", I_band=(4.5e13, 5.5e13),
 
     rho_pk = float(np.max(res["rho_rz"]))
     flag = "OK" if rho_band[0] <= rho_pk <= rho_band[1] else "HORS BANDE"
-    print(f"  rho_e max        = {rho_pk:.3e} cm-3   [attendu {rho_band[0]:.0e}-{rho_band[1]:.0e} -> {flag}]")
+    print(f"  rho_e max        = {rho_pk:.3e} cm-3   [ref {rho_band[0]:.0e}-{rho_band[1]:.0e} "
+          f"({rho_band_source}) -> {flag}]")
     if rho_pk > 0.5 * rho_max:
         print(f"    /!\\ rho_e s'approche de rho_max={rho_max:.1e} : emballement, pas un clampage physique")
 
