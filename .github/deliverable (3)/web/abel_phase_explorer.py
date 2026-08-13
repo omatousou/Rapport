@@ -44,6 +44,14 @@ try:
 except ImportError:  # experiment panel becomes unavailable, sim panel still works
     rotate = None
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sim"))
+try:
+    from permittivity import MaterialResponse, SIO2_MARTIN1997, XPM
+except ImportError:      # module absent -> on retombe sur le calcul a la main
+    MaterialResponse = SIO2_MARTIN1997 = None
+    XPM = 2.0
+
 
 # =============================================================================
 # == CONFIG (experiment preprocessing -- identical to unified_filament_slider_v3) =
@@ -63,8 +71,17 @@ SIDE_BASELINE_RECTS = (
     ((600, 500), (700, 530)),
 )
 
-# --- Canal STE (Lorentz). Probe a 490 nm = 2.53 eV. Doit rester > E_probe. ---
-STE_LEVEL_EV = 5.8
+# --- Canal STE (Lorentz) ---------------------------------------------------
+# ANCIENNE VALEUR : une bande unique a 5.8 eV avec une force d'oscillateur
+# implicite de 1. Elle ne correspondait ni au solveur (Config.E_tr_eV = 4.2)
+# ni a la litterature. Martin, Guizard, Daguzan, Petite et al., PRB 55, 5799
+# (1997), Table II, donnent pour SiO2 DEUX bandes STE :
+#     5.2 eV, f = 0.40, largeur 1.5 eV
+#     4.2 eV, f = 0.15, largeur 1.0 eV
+# soit, a 515 nm, un facteur effectif 0.177 la ou une bande unique f=1 a 4.2 eV
+# donnait 0.489 : le canal STE etait 2.8 fois trop fort.
+STE_LEVEL_EV = 4.2          # conserve pour le chemin historique uniquement
+USE_PERMITTIVITY_MODEL = True   # False -> ancien calcul a la main
 
 # --- Canal thermique (chaleur deposee au piegeage STE) ----------------------
 DN_DT_K         = 1.1e-5     # dn/dT silice [K^-1]
@@ -334,14 +351,46 @@ def channel_phases_2d(sim, t_exp_fs, *,
     rho_s_rz = sim["rho_s_rzt"][iz, :, k_t].astype(np.float64) if has_ste else np.zeros_like(rho_e_rz)
     I_rz     = sim["I_rzt"][iz, :, k_t].astype(np.float64)
 
-    E_probe = 1240.0 / lmd_probe_nm
-    f_STE = E_probe**2 / (STE_LEVEL_EV**2 - E_probe**2)
+    lmd_probe_m = lmd_probe_nm * 1e-9
+    alpha_cm_rz = None
+    if USE_PERMITTIVITY_MODEL and SIO2_MARTIN1997 is not None:
+        # Martin et al. 1997 Eq. (2) : deux bandes STE avec leurs forces
+        # d'oscillateur et leurs largeurs, masse effective 0.5 m_e dans le
+        # terme Drude, deplation de la bande de valence, et n = sqrt(eps) au
+        # lieu du developpement au premier ordre. Chaque canal est evalue seul
+        # (les autres densites mises a zero) pour rester sommable cote
+        # navigateur ; c'est exact tant qu'on reste dans le regime lineaire et
+        # `overdense` signale ou ce n'est plus le cas.
+        mat = MaterialResponse(n2_m2W=n2_m2W)
+        z0 = np.zeros_like(rho_e_rz)
 
-    dn_channels = {
-        "drude":   -rho_e_rz / (2.0 * n0_probe * nc_probe_cm3),
-        "ste":     (f_STE * rho_s_rz / (2.0 * n0_probe * nc_probe_cm3)) if has_ste else np.zeros_like(rho_e_rz),
-        "kerr":    n2_m2W * I_rz * 1.0e4,
-    }
+        def _dn(rho_e=z0, rho_s=z0, I=z0, inc=()):
+            return mat.response(lmd_probe_m, n0_probe, rho_e_cm3=rho_e,
+                                rho_s_cm3=rho_s, I_Wcm2=I, xpm_factor=XPM,
+                                include=inc)
+
+        r_drude = _dn(rho_e=rho_e_rz, inc=("drude",))
+        r_depl = _dn(rho_e=rho_e_rz + (rho_s_rz if has_ste else z0),
+                     inc=("depletion",))
+        r_ste = _dn(rho_s=rho_s_rz, inc=("ste",)) if has_ste else None
+        r_kerr = _dn(I=I_rz, inc=("kerr",))
+
+        dn_channels = {
+            "drude": np.asarray(r_drude["dn"]) + np.asarray(r_depl["dn"]),
+            "ste": (np.asarray(r_ste["dn"]) if has_ste else z0),
+            "kerr": np.asarray(r_kerr["dn"]),
+        }
+        alpha_cm_rz = (np.asarray(r_drude["alpha_cm"])
+                       + (np.asarray(r_ste["alpha_cm"]) if has_ste else 0.0))
+        f_STE = mat.f_ste_effective(lmd_probe_m)
+    else:
+        E_probe = 1240.0 / lmd_probe_nm
+        f_STE = E_probe**2 / (STE_LEVEL_EV**2 - E_probe**2)
+        dn_channels = {
+            "drude":   -rho_e_rz / (2.0 * n0_probe * nc_probe_cm3),
+            "ste":     (f_STE * rho_s_rz / (2.0 * n0_probe * nc_probe_cm3)) if has_ste else np.zeros_like(rho_e_rz),
+            "kerr":    n2_m2W * I_rz * 1.0e4,
+        }
     has_thermal = include_thermal and sim.get("dn_th_rzt") is not None
     dn_channels["thermal"] = (sim["dn_th_rzt"][iz, :, k_t].astype(np.float64)
                               if has_thermal else np.zeros_like(rho_e_rz))
@@ -367,6 +416,18 @@ def channel_phases_2d(sim, t_exp_fs, *,
             phi = lowpass_NA_2d(phi, dz_sim, dx_sim, NA_eff, lmd_um)
         phi[air, :] = np.nan
         phases[name] = phi if (name != "thermal" or has_thermal) else None
+
+    # L'experience mesure la partie REELLE et la partie IMAGINAIRE de l'indice
+    # (dephasage et contraste de frange). Jusqu'ici cette page ne calculait que
+    # la premiere. La transmittance vient du meme eps que la phase, donc les
+    # deux ne peuvent plus se contredire.
+    if alpha_cm_rz is not None:
+        tau = (alpha_cm_rz @ A.T) * 1e-4            # cm^-1 integre sur des µm
+        T = np.exp(-np.clip(tau, 0.0, None))
+        if apply_na_filter:
+            T = lowpass_NA_2d(T, dz_sim, dx_sim, NA_eff, lmd_um)
+        T[air, :] = np.nan
+        phases["transmittance"] = T
 
     return z_lab_um, x_um, phases
 
@@ -452,6 +513,8 @@ function sumChannels(pulse) {
   if (document.getElementById('ch_kerr').checked && pulse.channels.kerr) chosen.push(pulse.channels.kerr);
   if (document.getElementById('ch_ste').checked && pulse.channels.ste) chosen.push(pulse.channels.ste);
   if (document.getElementById('ch_thermal').checked && pulse.channels.thermal) chosen.push(pulse.channels.thermal);
+  // `transmittance` n'est PAS un canal de Delta n : c'est la partie imaginaire
+  // de l'indice, tracee dans son propre panneau. Ne jamais l'ajouter ici.
   if (chosen.length === 0) return null;
   const n0 = chosen[0].length, n1 = chosen[0][0].length;
   const out = new Array(n0);
@@ -510,6 +573,16 @@ function buildTraces() {
       xaxis: 'x2', yaxis: 'y2',
       hovertemplate: 'z=%{x:.0f} µm<br>δφ on-axis=%{y:.3f} rad<extra></extra>' },
   ];
+  if (pulse.channels.transmittance) {
+    const T = pulse.channels.transmittance;
+    const nxT = T[0].length;
+    const TT = Array.from({length: nxT}, (_, j) => T.map(row => row[j]));
+    traces.push({ type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: TT,
+      colorscale: 'Greys', reversescale: true, zmin: META.tmin, zmax: 1.0,
+      colorbar: { title: 'T', len: 0.28, y: 0.14 },
+      hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>T=%{z:.3f}<extra></extra>',
+      xaxis: 'x3', yaxis: 'y3' });
+  }
   return traces;
 }
 
@@ -541,16 +614,33 @@ render();
 """
 
 
-def build_layout(xlim, ylim):
+def build_layout(xlim, ylim, with_transmittance=True):
+    """Trois lignes quand la transmittance est disponible : carte de phase,
+    coupe on-axis, carte de transmittance. L'experience mesure les deux parties
+    de l'indice, la page doit montrer les deux."""
+    if not with_transmittance:
+        return {
+            "template": "plotly_white",
+            "margin": {"l": 70, "r": 30, "t": 20, "b": 50},
+            "height": 700,
+            "xaxis":  {"domain": [0.0, 1.0], "anchor": "y", "range": xlim, "matches": "x2"},
+            "yaxis":  {"domain": [0.42, 1.0], "anchor": "x", "range": list(ylim), "title": "x (µm)"},
+            "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim,
+                       "title": "Propagation z (µm) — lab frame (0 = interface)"},
+            "yaxis2": {"domain": [0.0, 0.38], "anchor": "x2", "title": "δφ on-axis (rad)"},
+        }
     return {
         "template": "plotly_white",
         "margin": {"l": 70, "r": 30, "t": 20, "b": 50},
-        "height": 700,
-        "xaxis":  {"domain": [0.0, 1.0], "anchor": "y", "range": xlim, "matches": "x2"},
-        "yaxis":  {"domain": [0.42, 1.0], "anchor": "x", "range": list(ylim), "title": "x (µm)"},
-        "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim,
+        "height": 900,
+        "xaxis":  {"domain": [0.0, 1.0], "anchor": "y", "range": xlim, "matches": "x3"},
+        "yaxis":  {"domain": [0.62, 1.0], "anchor": "x", "range": list(ylim), "title": "x (µm) — δφ"},
+        "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim, "matches": "x3"},
+        "yaxis2": {"domain": [0.34, 0.56], "anchor": "x2", "title": "δφ on-axis (rad)"},
+        "xaxis3": {"domain": [0.0, 1.0], "anchor": "y3", "range": xlim,
                    "title": "Propagation z (µm) — lab frame (0 = interface)"},
-        "yaxis2": {"domain": [0.0, 0.38], "anchor": "x2", "title": "δφ on-axis (rad)"},
+        "yaxis3": {"domain": [0.0, 0.28], "anchor": "x3", "range": list(ylim),
+                   "title": "x (µm) — T"},
     }
 
 
@@ -593,7 +683,7 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          raw_dir=None, energy_uJ=13.0, pmin=-20, pmax=19,
                          fs_per_pulse=67.0, lmd_nm=490.0,
                          include_thermal=True, apply_na_filter=True,
-                         phase_clip=0.2, xlim=None, ylim=(-50.0, 50.0),
+                         phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
                          coarsen_z=1):
     """
     sim_dirs : dict {scenario_name: path_to_dir_containing_result.npz+params.json}
@@ -627,8 +717,11 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     xlim_eff = list(xlim) if xlim is not None else [-50.0, xlim_max]
 
     data_obj = dict(scenarios=scenarios)
-    meta = dict(clip=float(phase_clip), z_focus=z_focus_by_scenario)
-    layout = build_layout(xlim_eff, ylim)
+    has_T = any(p["channels"].get("transmittance") is not None
+                for sc in scenarios.values() for p in sc["pulses"])
+    meta = dict(clip=float(phase_clip), z_focus=z_focus_by_scenario,
+                tmin=float(t_min))
+    layout = build_layout(xlim_eff, ylim, with_transmittance=has_T)
 
     first = next(iter(scenarios.values()))
     p0 = first["pulses"][0]

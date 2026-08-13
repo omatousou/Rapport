@@ -889,17 +889,33 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
                             n2=3.54e-20, tau_c_s=1.7e-15, meff_drude_rel=1.0,
                             tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
                             include=("drude", "ste", "kerr"),
-                            x_half_um=70.0, dx_um=0.25):
+                            x_half_um=70.0, dx_um=0.25,
+                            material=None, linearize=False, xpm_factor=None):
     """OPL [nm] et transmittance le long de la ligne de visée, au délai donné.
 
     OPL = integrale de Delta_n sur la corde, en nanomètres -- c'est la
     grandeur que trace l'expérience, reliée à la phase par
     phi = 2 pi OPL / lambda (soit 1 rad = 82 nm à 515 nm).
 
-    Transmittance = exp(-sigma_sonde * integrale de rho_e), l'absorption par
-    porteurs libres. Les STE n'y contribuent pas ici : leur bande d'absorption
-    est à 5.2 eV et la sonde à 515 nm ne fait que 2.41 eV, donc l'oscillateur
-    de Lorentz y est purement dispersif.
+    Deux modeles de reponse coexistent :
+
+    - `material=None` (defaut, comportement historique) : Delta n est la somme
+      de trois termes ecrits a la main -- Drude -rho/(2 n0 rho_c) avec la masse
+      NUE et sans correction de collision, une bande STE unique de force
+      d'oscillateur 1 a E_tr_eV, et n2*I sans facteur de phase croisee. La
+      transmittance vient d'un sigma calcule separement, donc rien ne garantit
+      qu'elle soit coherente avec la phase.
+    - `material=<MaterialResponse>` (voir sim/permittivity.py) : phase ET
+      absorption sortent de la MEME permittivite complexe, suivant Martin et
+      al., PRB 55, 5799 (1997), Eq. (2) -- deux bandes STE avec leurs forces
+      d'oscillateur et leurs largeurs, masse effective 0.5 m_e, deplation de la
+      bande de valence, et n = sqrt(eps) au lieu du developpement au premier
+      ordre. A 515 nm cela divise le canal STE par 2.8 et multiplie le canal
+      Drude par 2 par rapport au chemin historique.
+
+    `xpm_factor` n'a d'effet que sur le chemin `material` : 2 pour une sonde
+    faible a une autre frequence avec un n2 d'auto-modulation, 1 si n2 est deja
+    un coefficient ajuste sur une mesure sonde. Defaut : 2.
     """
     from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
     from keldysh import n_sellmeier as _ns
@@ -921,27 +937,55 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
         r_pos = r_full[len(r_full) // 2:]
     r_pos = r_pos[:rho_e.shape[1]]
 
-    den = 2.0 * n0p * nc
-    dn = np.zeros_like(rho_e)
-    if "drude" in include:
-        dn -= rho_e / den
-    if "ste" in include:
-        dn += f_ste * rho_s / den
-    if "kerr" in include:
-        dn += n2 * I * 1e4
-
     x_max = float(min(x_half_um, r_pos[-1]))
     x_um = np.linspace(-x_max, x_max, int(2 * x_max / dx_um) + 1)
     A = build_abel_matrix(r_pos, x_um)
 
-    opl_nm = (dn @ A.T) * 1e3                       # µm -> nm
-    sigma = probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel)
-    tau_opt = sigma * (rho_e @ A.T) * 1e-4          # cm^-3 * µm * cm^2 -> sans dim
+    if material is None:
+        # ---- chemin historique : trois Delta n ecrits a la main -------------
+        den = 2.0 * n0p * nc
+        dn = np.zeros_like(rho_e)
+        if "drude" in include:
+            dn -= rho_e / den
+        if "ste" in include:
+            dn += f_ste * rho_s / den
+        if "kerr" in include:
+            dn += n2 * I * 1e4
+
+        opl_nm = (dn @ A.T) * 1e3                   # µm -> nm
+        sigma = probe_sigma(lambda_probe_m, tau_c_s, meff_drude_rel)
+        tau_opt = sigma * (rho_e @ A.T) * 1e-4      # cm^-3 * µm * cm^2 -> sans dim
+        alpha_cm = sigma * rho_e
+        f_ste_eff = f_ste
+    else:
+        # ---- chemin permittivite : phase et absorption depuis le meme eps ---
+        from permittivity import XPM
+        mat = material
+        if getattr(mat, "n2_m2W", 0.0) == 0.0 and n2:
+            import copy
+            mat = copy.copy(material)
+            mat.n2_m2W = n2
+        inc = tuple(include)
+        if "depletion" not in inc and mat.enable_valence_depletion:
+            inc = inc + ("depletion",)
+        resp = mat.response(lambda_probe_m, n0p,
+                            rho_e_cm3=rho_e, rho_s_cm3=rho_s, I_Wcm2=I,
+                            xpm_factor=(XPM if xpm_factor is None else xpm_factor),
+                            linearize=linearize, include=inc)
+        dn = np.asarray(resp["dn"], float)
+        alpha_cm = np.asarray(resp["alpha_cm"], float)
+        opl_nm = (dn @ A.T) * 1e3
+        # alpha en cm^-1 integre sur une corde en µm -> 1e-4 pour passer en cm
+        tau_opt = (alpha_cm @ A.T) * 1e-4
+        sigma = mat.sigma_fca_cm2(lambda_probe_m, n0p)
+        f_ste_eff = mat.f_ste_effective(lambda_probe_m)
+
     return dict(x_um=x_um, z_um=z_um, opl_nm=opl_nm,
                 transmittance=np.exp(-np.clip(tau_opt, 0, None)),
-                sigma_cm2=sigma, f_ste=f_ste,
+                sigma_cm2=sigma, f_ste=f_ste_eff,
                 # bruts (r, z), pour la vue de dessus qui integre le long de z
-                dn_rz=dn, rho_e_rz=rho_e, r_pos_um=r_pos)
+                dn_rz=dn, rho_e_rz=rho_e, r_pos_um=r_pos,
+                alpha_cm_rz=alpha_cm)
 
 
 def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
@@ -965,7 +1009,10 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
     # np.trapz a disparu dans numpy 2, np.trapezoid n'existe pas avant
     _trapz = getattr(np, "trapezoid", None) or np.trapz
     opl_top_nm = _trapz(dn_rz, z_m, axis=0) * 1e9                  # m -> nm
-    tau_top = d["sigma_cm2"] * _trapz(rho_e_rz, z_m, axis=0) * 1e2  # cm^-3 * m * cm^2
+    # alpha_cm_rz est deja une absorption locale en cm^-1 (chemin permittivite) ;
+    # sur le chemin historique elle vaut sigma*rho_e, donc la meme expression
+    # marche pour les deux et on n'a plus a re-multiplier par sigma ici.
+    tau_top = _trapz(d["alpha_cm_rz"], z_m, axis=0) * 1e2           # cm^-1 * m -> cm
     T_top = np.exp(-np.clip(tau_top, 0, None))
 
     X, Y = np.meshgrid(x, x)
@@ -1056,3 +1103,46 @@ def max_energy_for_clamping(w0_m, delta_t_s, I_clamp_Wcm2=5e13, fraction=1.0):
     tp = delta_t_s / np.sqrt(2 * np.log(2))
     P = fraction * I_clamp_Wcm2 * 1e4 * np.pi * w0_m**2 / 2
     return P * tp * np.sqrt(np.pi / 2)
+
+
+def compare_probe_models(res, delay_fs=0.0, lambda_probe_m=515e-9,
+                         material=None, x_half_um=70.0, **kw):
+    """Confronte le post-traitement historique au modele de permittivite.
+
+    Imprime, au delai donne, le max de |OPL|, la phase correspondante et la
+    transmittance minimale pour les deux chemins, canal par canal quand c'est
+    possible. Sert a chiffrer ce que change le passage a Martin et al. (1997)
+    avant de regenerer quoi que ce soit.
+    """
+    from permittivity import SIO2_MARTIN1997
+    mat = SIO2_MARTIN1997 if material is None else material
+    lam_nm = lambda_probe_m * 1e9
+
+    old = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
+                                  x_half_um=x_half_um, **kw)
+    new = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
+                                  x_half_um=x_half_um, material=mat, **kw)
+    lin = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
+                                  x_half_um=x_half_um, material=mat,
+                                  linearize=True, **kw)
+
+    def _row(name, d):
+        opl = float(np.abs(d["opl_nm"]).max())
+        return (f"  {name:26s} |OPL|max = {opl:9.2f} nm = {opl/lam_nm*2*np.pi:7.3f} rad"
+                f"   T min = {d['transmittance'].min():.4f}")
+
+    print(f"Sonde {lam_nm:.0f} nm, delai {delay_fs:+.0f} fs")
+    print(_row("historique", old))
+    print(_row("Martin 1997 (sqrt eps)", new))
+    print(_row("Martin 1997 (linearise)", lin))
+    print(f"  f_STE   : historique {old['f_ste']:.4f}  ->  Martin {new['f_ste']:.4f}"
+          f"   (x{new['f_ste']/old['f_ste']:.2f})")
+    print(f"  sigma_FCA : historique {old['sigma_cm2']:.3e} cm2  ->  "
+          f"Martin {new['sigma_cm2']:.3e} cm2   (x{new['sigma_cm2']/old['sigma_cm2']:.2f})")
+    ovd = np.asarray(mat.response(lambda_probe_m, 1.4615,
+                                  rho_e_cm3=np.asarray(new["rho_e_rz"]))["overdense"])
+    if ovd.any():
+        print(f"  /!\\ {100*ovd.mean():.1f} % des mailles sont SURDENSES "
+              f"(Re(eps) <= 0) : le milieu y reflechit, aucun des deux modeles "
+              f"de dephasage n'y a de sens.")
+    return dict(legacy=old, martin=new, martin_linear=lin)
