@@ -385,7 +385,7 @@ def plot_trapping_sequence(res, tau_r_s=330e-15, tau_ste_s=1e-12,
 def plot_index_channels(res, delay_fs=None, lambda_probe_m=515e-9, E_tr_eV=4.2,
                         n2=3.54e-20, tau_r_s=330e-15, tau_ste_s=1e-12,
                         n_g=1.4627, r_max_um=30.0, z_target_um=None,
-                        yscale="symlog", label="", save=None):
+                        yscale="symlog", material="martin", label="", save=None):
     """Profil radial de Delta n, canal par canal, a un plan et un delai donnes.
 
 `delay_fs=None` (defaut) choisit le delai pour lequel la pompe arrive
@@ -436,12 +436,33 @@ def plot_index_channels(res, delay_fs=None, lambda_probe_m=515e-9, E_tr_eV=4.2,
         r_pos = r_full[len(r_full) // 2:]
     r_pos = r_pos[:rho_e.shape[1]]
 
-    den = 2.0 * n0p * nc
+    # Les canaux viennent du MEME modele de permittivite que les cartes de
+    # sonde (Martin et al. 1997), pour que la figure et les planches ne
+    # racontent pas deux physiques differentes. `material="legacy"` retrouve
+    # les trois Delta n ecrits a la main.
+    if isinstance(material, str) and material.lower() in ("legacy", "old"):
+        den = 2.0 * n0p * nc
+        dn_drude = -rho_e[iz] / den
+        dn_ste = f_ste * rho_s[iz] / den
+        dn_kerr = n2 * I[iz] * 1e4
+        dn_depl = np.zeros_like(dn_drude)
+    else:
+        import copy as _copy
+        from permittivity import SIO2_MARTIN1997, XPM
+        mat = material if not isinstance(material, str) else SIO2_MARTIN1997
+        mat = _copy.copy(mat)
+        mat.n2_m2W = n2
+        z0 = np.zeros_like(rho_e[iz])
 
-    dn_drude = -rho_e[iz] / den
-    dn_ste = f_ste * rho_s[iz] / den
-    dn_kerr = n2 * I[iz] * 1e4
-    dn_tot = dn_drude + dn_ste + dn_kerr
+        def _ch(inc, **kk):
+            return np.asarray(mat.response(lambda_probe_m, n0p, xpm_factor=XPM,
+                                           include=inc, **kk)["dn"], float)
+        dn_drude = _ch(("drude",), rho_e_cm3=rho_e[iz])
+        dn_ste = _ch(("ste",), rho_s_cm3=rho_s[iz])
+        dn_kerr = _ch(("kerr",), I_Wcm2=I[iz])
+        dn_depl = _ch(("depletion",), rho_e_cm3=rho_e[iz] + rho_s[iz])
+        f_ste = mat.f_ste_effective(lambda_probe_m)
+    dn_tot = dn_drude + dn_ste + dn_kerr + dn_depl
 
     m = r_pos <= r_max_um
     fig, ax = plt.subplots(figsize=(9, 5.5))
@@ -450,6 +471,9 @@ def plot_index_channels(res, delay_fs=None, lambda_probe_m=515e-9, E_tr_eV=4.2,
             label=r"Drude  $-\rho_e/2n_0\rho_c$")
     ax.plot(r_pos[m], dn_ste[m], color="darkgreen", lw=2,
             label=rf"STE  $+f\,\rho_{{STE}}/2n_0\rho_c$  ($f$ = {f_ste:.3f})")
+    if np.any(dn_depl != 0.0):
+        ax.plot(r_pos[m], dn_depl[m], color="darkorange", lw=1.6,
+                label=r"valence depletion  $-(\rho_e+\rho_{STE})/N_0$")
     ax.plot(r_pos[m], dn_tot[m], color="k", lw=2.2, ls="--", label="sum")
     ax.axhline(0.0, color="0.5", lw=1)
     if yscale == "symlog":
@@ -470,7 +494,7 @@ def plot_index_channels(res, delay_fs=None, lambda_probe_m=515e-9, E_tr_eV=4.2,
         fig.savefig(save, dpi=160, bbox_inches="tight")
     return fig, dict(z_um=float(z_um[iz]), r_um=r_pos, f_ste=f_ste,
                      dn_kerr=dn_kerr, dn_drude=dn_drude, dn_ste=dn_ste,
-                     dn_total=dn_tot)
+                     dn_depletion=dn_depl, dn_total=dn_tot)
 
 
 # ================================================================================
@@ -635,7 +659,9 @@ def export_report_figures(res, out_dir, wavelength_m, n0, n2, w0_m, energy_uJ,
         print(f"canaux a z = {d['channels']['z_um']:.0f} um : "
               f"Kerr {d['channels']['dn_kerr'].max():+.3e}, "
               f"Drude {d['channels']['dn_drude'].min():+.3e}, "
-              f"STE {d['channels']['dn_ste'].max():+.3e}")
+              f"STE {d['channels']['dn_ste'].max():+.3e}, "
+              f"deplation {d['channels']['dn_depletion'].min():+.3e}  "
+              f"(f_STE eff. {d['channels']['f_ste']:.4f})")
         print(f"OPL projete max = {np.abs(d['abel']['opl_nm']).max():.2f} nm "
               f"= {np.abs(d['abel']['phi_rad']).max():.3f} rad")
         print(f"pertes totales = {d['energy']['total_final']*100:.1f} % de U0")

@@ -890,22 +890,25 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
                             tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
                             include=("drude", "ste", "kerr"),
                             x_half_um=70.0, dx_um=0.25,
-                            material=None, linearize=False, xpm_factor=None):
+                            material="martin", linearize=False, xpm_factor=None):
     """OPL [nm] et transmittance le long de la ligne de visée, au délai donné.
 
     OPL = integrale de Delta_n sur la corde, en nanomètres -- c'est la
     grandeur que trace l'expérience, reliée à la phase par
     phi = 2 pi OPL / lambda (soit 1 rad = 82 nm à 515 nm).
 
-    Deux modeles de reponse coexistent :
+    Deux modeles de reponse coexistent. Le DEFAUT est desormais celui de
+    Martin et al. ; passer `material="legacy"` (ou False) pour retrouver
+    l'ancien.
 
-    - `material=None` (defaut, comportement historique) : Delta n est la somme
+    - `material="legacy"` (ancien comportement) : Delta n est la somme
       de trois termes ecrits a la main -- Drude -rho/(2 n0 rho_c) avec la masse
       NUE et sans correction de collision, une bande STE unique de force
       d'oscillateur 1 a E_tr_eV, et n2*I sans facteur de phase croisee. La
       transmittance vient d'un sigma calcule separement, donc rien ne garantit
       qu'elle soit coherente avec la phase.
-    - `material=<MaterialResponse>` (voir sim/permittivity.py) : phase ET
+    - `material="martin"` (DEFAUT) ou un `MaterialResponse` explicite
+      (voir sim/permittivity.py) : phase ET
       absorption sortent de la MEME permittivite complexe, suivant Martin et
       al., PRB 55, 5799 (1997), Eq. (2) -- deux bandes STE avec leurs forces
       d'oscillateur et leurs largeurs, masse effective 0.5 m_e, deplation de la
@@ -916,7 +919,23 @@ def probe_opl_transmittance(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
     `xpm_factor` n'a d'effet que sur le chemin `material` : 2 pour une sonde
     faible a une autre frequence avec un n2 d'auto-modulation, 1 si n2 est deja
     un coefficient ajuste sur une mesure sonde. Defaut : 2.
+
+    Sur le chemin `material`, `E_tr_eV` est IGNORE : les resonances STE
+    viennent du jeu de bandes du materiau (0.40 a 5.2 eV et 0.15 a 4.2 eV pour
+    SIO2_MARTIN1997), pas d'une bande unique.
     """
+    # resolution du sentinel
+    if isinstance(material, str):
+        key = material.lower()
+        if key in ("legacy", "old", "historique"):
+            material = None
+        elif key in ("martin", "martin1997", "default"):
+            from permittivity import SIO2_MARTIN1997
+            material = SIO2_MARTIN1997
+        else:
+            raise ValueError(f"material inconnu : {material!r}")
+    elif material is False:
+        material = None
     from scipy.constants import epsilon_0, m_e, c as c_, elementary_charge as qe_
     from keldysh import n_sellmeier as _ns
 
@@ -1119,7 +1138,7 @@ def compare_probe_models(res, delay_fs=0.0, lambda_probe_m=515e-9,
     lam_nm = lambda_probe_m * 1e9
 
     old = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
-                                  x_half_um=x_half_um, **kw)
+                                  x_half_um=x_half_um, material="legacy", **kw)
     new = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
                                   x_half_um=x_half_um, material=mat, **kw)
     lin = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
