@@ -93,15 +93,19 @@ def lowpass_NA(field, d0_um, d1_um, NA, lambda_um):
 def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
                          z_um=None, x_um=0.0, average_x_um=None,
                          average_z_um=None, apply_na=True, add_noise=True,
-                         seed=0, oversample=5, x_half_um=70.0, **probe_kw):
+                         seed=0, convolve_probe=True, x_half_um=70.0,
+                         oversample=None, **probe_kw):
     """Renvoie un jeu de points (delai, dephasage, transmittance) simule.
 
     `z_um`   plan de lecture ; None = le plan ou |OPL| est maximal.
     `x_um`   position transverse ; 0 = sur l'axe.
     `average_x_um` / `average_z_um` : demi-largeurs de la fenetre sur laquelle
              moyenner, pour imiter une lecture integree plutot que ponctuelle.
-    `oversample` : nombre de sous-delais par point, pour la convolution
-             temporelle par l'enveloppe de la sonde.
+    `convolve_probe` : convoluer par l'enveloppe temporelle de la sonde.
+             Le pas de la grille interne est choisi automatiquement (tp/8),
+             il n'y a plus de nombre de sous-echantillons a regler.
+             `oversample` est conserve pour compatibilite : toute valeur <= 1
+             desactive la convolution.
 
     Les grandeurs renvoyees ont le statut d'une MESURE : projetees, lissees par
     l'optique, moyennees par la duree de sonde, echantillonnees et bruitees.
@@ -121,18 +125,22 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
               f"l'instrument est a {inst.lambda_probe_m*1e9:.0f} nm : "
               f"c'est celle de l'instrument qui est utilisee.")
 
-    # --- sous-grille pour la convolution temporelle ---
+    # --- convolution par l'enveloppe de la sonde ------------------------
+    # ANCIENNE VERSION, FAUSSE : pour chaque delai demande on evaluait
+    # `oversample` sous-delais repartis sur +/-1.5 tp et on en faisait la
+    # moyenne ponderee. Avec oversample=5 et tp=223 fs, les sous-delais sont
+    # espaces de 168 fs : ce n'est pas un noyau gaussien, c'est un PEIGNE de
+    # cinq dents. Chaque dent balaie le pic de Kerr et en produit une replique,
+    # d'ou les bosses parasites espacees de ~170 fs sur le front montant.
+    #
+    # VERSION CORRECTE : on evalue la reponse BRUTE une seule fois sur une
+    # grille interne fine et REGULIERE, on convolue proprement, puis on
+    # interpole aux delais demandes. C'est aussi moins cher : le nombre
+    # d'evaluations ne depend plus du nombre de points demandes.
     tp = inst.probe_fwhm_fs / np.sqrt(2.0 * np.log(2.0))
-    if oversample and oversample > 1:
-        off = np.linspace(-1.5 * tp, 1.5 * tp, int(oversample))
-        w = np.exp(-(off / tp) ** 2)
-        w /= w.sum()
-    else:
-        off, w = np.array([0.0]), np.array([1.0])
+    convolve = bool(convolve_probe) and not (oversample is not None
+                                             and oversample <= 1)
 
-    # Le cube (z, r, t) est sous-echantillonne en temps par rho_t_stride :
-    # aucun balayage de delai plus fin que son pas ne porte d'information, la
-    # courbe y devient une escalier d'interpolation au plus proche voisin.
     t_sub = np.asarray(res["t_sub_fs"], float)
     dt_cube = float(np.mean(np.diff(t_sub))) if len(t_sub) > 1 else np.inf
     dt_scan = float(np.min(np.diff(delays_fs))) if len(delays_fs) > 1 else np.inf
@@ -142,18 +150,25 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
               f"les points intermediaires n'apportent rien. Relancer avec un "
               f"rho_t_stride plus petit pour un vrai balayage fin.")
 
-    rng = np.random.default_rng(seed)
-    opl_pts, tr_pts, z_used = [], [], None
+    if convolve:
+        # pas interne : assez fin pour echantillonner le noyau ET le cube
+        dt_fine = min(tp / 8.0, max(dt_cube, 1.0), dt_scan)
+        pad = 3.0 * tp
+        t_eval = np.arange(delays_fs[0] - pad, delays_fs[-1] + pad + dt_fine,
+                           dt_fine)
+    else:
+        dt_fine = dt_scan
+        t_eval = delays_fs
 
-    for tau in delays_fs:
-        acc_opl = acc_tr = None
-        for dt, wt in zip(off, w):
-            d = probe_opl_transmittance(res, float(tau + dt),
-                                        lambda_probe_m=inst.lambda_probe_m,
-                                        x_half_um=x_half_um, **probe_kw)
-            o, t = np.asarray(d["opl_nm"], float), np.asarray(d["transmittance"], float)
-            acc_opl = o * wt if acc_opl is None else acc_opl + o * wt
-            acc_tr = t * wt if acc_tr is None else acc_tr + t * wt
+    rng = np.random.default_rng(seed)
+    raw_opl, raw_tr, z_used = [], [], None
+
+    for tau in t_eval:
+        d = probe_opl_transmittance(res, float(tau),
+                                    lambda_probe_m=inst.lambda_probe_m,
+                                    x_half_um=x_half_um, **probe_kw)
+        acc_opl = np.asarray(d["opl_nm"], float)
+        acc_tr = np.asarray(d["transmittance"], float)
         x, z = d["x_um"], d["z_um"]
 
         if apply_na:
@@ -170,8 +185,28 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
              (np.arange(len(z)) == int(np.argmin(np.abs(z - z_used))))
         mx = (np.abs(x - x_um) <= average_x_um) if average_x_um else \
              (np.arange(len(x)) == int(np.argmin(np.abs(x - x_um))))
-        opl_pts.append(float(np.nanmean(acc_opl[np.ix_(mz, mx)])))
-        tr_pts.append(float(np.nanmean(acc_tr[np.ix_(mz, mx)])))
+        raw_opl.append(float(np.nanmean(acc_opl[np.ix_(mz, mx)])))
+        raw_tr.append(float(np.nanmean(acc_tr[np.ix_(mz, mx)])))
+
+    raw_opl = np.array(raw_opl)
+    raw_tr = np.array(raw_tr)
+
+    if convolve:
+        half = np.arange(0.0, 3.0 * tp + dt_fine, dt_fine)
+        k_t = np.concatenate((-half[:0:-1], half))
+        kern = np.exp(-(k_t / tp) ** 2)
+        kern /= kern.sum()
+        # bords : on prolonge par la valeur extreme, le padding de 3 tp garantit
+        # que la zone utile n'est pas touchee
+        m = len(kern) // 2
+        def _conv(y):
+            yp = np.concatenate((np.full(m, y[0]), y, np.full(m, y[-1])))
+            return np.convolve(yp, kern, mode="same")[m:m + len(y)]
+        raw_opl, raw_tr = _conv(raw_opl), _conv(raw_tr)
+        opl_pts = np.interp(delays_fs, t_eval, raw_opl)
+        tr_pts = np.interp(delays_fs, t_eval, raw_tr)
+    else:
+        opl_pts, tr_pts = raw_opl, raw_tr
 
     opl = np.array(opl_pts)
     tr = np.array(tr_pts)
