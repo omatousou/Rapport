@@ -99,7 +99,8 @@ def export_probe_curve(res, out_path, delays_fs=None, inst=None, **kw):
     C'est le format a envoyer quand meme un npz reduit est de trop.
     """
     from virtual_experiment import sample_as_experiment, NOMARSKI_515
-    pts = sample_as_experiment(res, delays_fs, inst or NOMARSKI_515, **kw)
+    inst = inst or NOMARSKI_515
+    pts = sample_as_experiment(res, delays_fs, inst, **kw)
     out = Path(out_path)
     np.savez_compressed(out,
                         delays_fs=pts["delays_fs"],

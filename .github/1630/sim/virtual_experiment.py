@@ -112,6 +112,15 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
         delays_fs = experimental_delay_grid()
     delays_fs = np.atleast_1d(np.asarray(delays_fs, float))
 
+    # PROBE_KW du notebook contient deja lambda_probe_m ; l'instrument aussi.
+    # On garde celui de l'instrument et on signale un desaccord plutot que de
+    # lever "multiple values for keyword argument".
+    lam_kw = probe_kw.pop("lambda_probe_m", None)
+    if lam_kw is not None and abs(lam_kw - inst.lambda_probe_m) > 1e-12:
+        print(f"  (!) lambda_probe_m={lam_kw*1e9:.0f} nm passe en argument, mais "
+              f"l'instrument est a {inst.lambda_probe_m*1e9:.0f} nm : "
+              f"c'est celle de l'instrument qui est utilisee.")
+
     # --- sous-grille pour la convolution temporelle ---
     tp = inst.probe_fwhm_fs / np.sqrt(2.0 * np.log(2.0))
     if oversample and oversample > 1:
