@@ -56,6 +56,11 @@ def avalanche_beta(wavelength_m, tau_c_s, Ui_eV, meff_rel=1.0, n0=1.45):
     dependance de sigma en tau_c est non monotone -- sigma ~ tau_c / (1 +
     omega^2 tau_c^2) passe par un maximum en omega tau_c = 1 -- donc changer
     tau_c d'un facteur 6 ne change PAS beta d'un facteur 6.
+
+    ATTENTION a la masse : le solveur a DEUX masses effectives. `meff_rel`
+    (0.64) sert a la masse reduite du taux de Keldysh, `meff_drude_rel` (1.0)
+    au terme de Drude, donc a sigma. C'est la SECONDE qu'il faut passer ici :
+    utiliser 0.64 surestime beta d'un facteur 1.56.
     """
     w = 2.0 * np.pi * c_SI / wavelength_m
     k = w * n0 / c_SI
@@ -63,6 +68,27 @@ def avalanche_beta(wavelength_m, tau_c_s, Ui_eV, meff_rel=1.0, n0=1.45):
     sigma = (k * q_e**2 * tau_c_s) / (n0**2 * m * epsilon_0 * w
                                       * (1.0 + (w * tau_c_s)**2)) * 1e4   # cm2
     return sigma / (Ui_eV * q_e), sigma
+
+
+def solver_plasma_dn_per_rho(wavelength_m, tau_c_s, n0, meff_drude_rel=1.0):
+    """Delta n plasma par unite de densite (cm^-3), tel que le solveur l'integre.
+
+    operators.NonlinearOperator.split() applique -(sigma/2)(1 + i w0 tau_c) rho u
+    avec le sigma de Couairon 2005 Eq. (5). Le taux de phase vaut donc
+    -sigma w0 tau_c rho / 2, et comme un taux de phase est k_vide * Delta n
+    (et NON k0 * Delta n : k0 = n0 k_vide porte deja l'indice du milieu),
+
+        Delta n = - rho / (2 n0 rho_c) * w0^2 tau_c^2 / (1 + w0^2 tau_c^2)
+
+    avec rho_c evalue a la masse de DRUDE. Deux differences avec la forme
+    -rho/(2 rho_c) ecrite naivement : le n0 au denominateur et le facteur de
+    collision (0.906 a 1030 nm avec tau_c = 1.7 fs). Ensemble ils font un
+    facteur 2.5 si on se trompe aussi de masse effective.
+    """
+    w0 = 2.0 * np.pi * c_SI / wavelength_m
+    rho_c = epsilon_0 * meff_drude_rel * m_e * w0**2 / q_e**2 * 1e-6   # cm^-3
+    coll = (w0 * tau_c_s)**2 / (1.0 + (w0 * tau_c_s)**2)
+    return -coll / (2.0 * n0 * rho_c), rho_c, coll
 
 
 def _peak_plane(res, z_target_um=None):
@@ -75,8 +101,8 @@ def _peak_plane(res, z_target_um=None):
 # ================================================================================
 #  sec:filamentation -- le clampage est un equilibre, pas un plafond
 # ================================================================================
-def plot_clamping_equilibrium(res, n2, wavelength_m, meff_rel=1.0,
-                              label="", save=None):
+def plot_clamping_equilibrium(res, n2, wavelength_m, meff_drude_rel=1.0,
+                              tau_c_s=1.7e-15, n0=1.45, label="", save=None):
     """Confronte les deux termes d'indice sur l'axe, en fonction de z.
 
     La section ecrit le clampage comme l'egalite n2 I = rho / (2 rho_c) : le
@@ -90,10 +116,11 @@ def plot_clamping_equilibrium(res, n2, wavelength_m, meff_rel=1.0,
     I = np.asarray(res["Imax_z"], float)                    # W/cm2
     iax = len(r_um_of(res)) // 2
     rho = np.asarray(res["rho_rz"], float)[:, iax]          # cm-3, fin d'impulsion
-    rho_c = critical_density(wavelength_m, meff_rel)
 
-    dn_kerr = n2 * I * 1e4                                  # n2 en cm2/W -> SI
-    dn_plasma = -rho / (2.0 * rho_c)
+    dn_per_rho, rho_c, coll = solver_plasma_dn_per_rho(
+        wavelength_m, tau_c_s, n0, meff_drude_rel)
+    dn_kerr = n2 * I * 1e4                                  # n2 [m2/W] * I [W/m2]
+    dn_plasma = dn_per_rho * rho
     dn_net = dn_kerr + dn_plasma
 
     fig, ax = plt.subplots(2, 1, figsize=(9, 7), sharex=True,
@@ -102,7 +129,9 @@ def plot_clamping_equilibrium(res, n2, wavelength_m, meff_rel=1.0,
     ax[0].plot(z_um, dn_kerr, color="crimson", lw=2,
                label=r"Kerr  $n_2 I$")
     ax[0].plot(z_um, -dn_plasma, color="royalblue", lw=2,
-               label=r"plasma  $\rho_e / 2\rho_c$")
+               label=rf"plasma  $\rho_e\,\omega_0^2\tau_c^2 / "
+                     rf"2n_0\rho_c(1+\omega_0^2\tau_c^2)$  "
+                     rf"(coll. {coll:.3f})")
     ax[0].set_yscale("log")
     ax[0].set_ylabel(r"$|\Delta n|$")
     ax[0].legend(loc="upper left")
@@ -134,7 +163,8 @@ def plot_clamping_equilibrium(res, n2, wavelength_m, meff_rel=1.0,
     if save:
         fig.savefig(save, dpi=160, bbox_inches="tight")
     return fig, dict(z_um=z_um, dn_kerr=dn_kerr, dn_plasma=dn_plasma,
-                     dn_net=dn_net, rho_c_cm3=rho_c, z_crossings_um=z_cross)
+                     dn_net=dn_net, rho_c_cm3=rho_c, collision_factor=coll,
+                     dn_per_rho=dn_per_rho, z_crossings_um=z_cross)
 
 
 # ================================================================================
@@ -352,11 +382,20 @@ def plot_trapping_sequence(res, tau_r_s=330e-15, tau_ste_s=1e-12,
 # ================================================================================
 #  sec 6 / sec 7 -- competition des signes sur Delta n
 # ================================================================================
-def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
+def plot_index_channels(res, delay_fs=None, lambda_probe_m=515e-9, E_tr_eV=4.2,
                         n2=3.54e-20, tau_r_s=330e-15, tau_ste_s=1e-12,
                         n_g=1.4627, r_max_um=30.0, z_target_um=None,
                         yscale="symlog", label="", save=None):
     """Profil radial de Delta n, canal par canal, a un plan et un delai donnes.
+
+`delay_fs=None` (defaut) choisit le delai pour lequel la pompe arrive
+    JUSTE sur le plan trace, c'est a dire t_local = 0. C'est necessaire parce
+    que la sonde est TRANSVERSE : elle traverse tous les z au meme instant,
+    alors que la pompe met z/v_g a atteindre le plan z. A delai 0 la pompe
+    entre tout juste en z = 0, et le plan le plus intense (souvent en fin de
+    boite) n'a encore rien vu -- on tracait alors du bruit numerique a 1e-15.
+    Passer un delai explicite reste possible, un avertissement est imprime si
+    le plan demande tombe hors de la fenetre temporelle du solveur.
 
     Kerr et STE sont positifs, le plasma est negatif : c'est la lentille
     convergente contre la lentille divergente decrite dans les sections Kerr et
@@ -373,8 +412,21 @@ def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
     f_ste = E_probe**2 / (E_tr_eV**2 - E_probe**2)
 
     z_um = z_um_of(res)
-    v_g = 299.792458 / n_g
+    v_g = 299.792458 / n_g                       # µm/ps
+    iz = (int(np.argmax(np.asarray(res["Imax_z"]))) if z_target_um is None
+          else int(np.argmin(np.abs(z_um - z_target_um))))
+
+    if delay_fs is None:
+        delay_fs = z_um[iz] / (v_g * 1e-3)       # t_local(iz) = 0
     t_local = delay_fs - z_um / (v_g * 1e-3)
+
+    t_sub = np.asarray(res["t_sub_fs"], float)
+    if not (t_sub[0] <= t_local[iz] <= t_sub[-1]):
+        print(f"  (!) z = {z_um[iz]:.0f} um au delai {delay_fs:+.0f} fs donne "
+              f"t_local = {t_local[iz]:+.0f} fs, hors de la fenetre "
+              f"[{t_sub[0]:+.0f}, {t_sub[-1]:+.0f}] fs : la pompe n'a pas "
+              f"encore atteint ce plan, les canaux y sont nuls.")
+
     rho_e, rho_s, I = _populations_at(res, t_local, tau_r_s, tau_ste_s)
 
     if res.get("r_sub") is not None and np.asarray(res["r_sub"]).shape != ():
@@ -384,8 +436,6 @@ def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
         r_pos = r_full[len(r_full) // 2:]
     r_pos = r_pos[:rho_e.shape[1]]
 
-    iz = (int(np.argmax(np.asarray(res["Imax_z"]))) if z_target_um is None
-          else int(np.argmin(np.abs(z_um - z_target_um))))
     den = 2.0 * n0p * nc
 
     dn_drude = -rho_e[iz] / den
@@ -426,7 +476,7 @@ def plot_index_channels(res, delay_fs=0.0, lambda_probe_m=515e-9, E_tr_eV=4.2,
 # ================================================================================
 #  sec:interferometrie -- ce que la sonde integre reellement
 # ================================================================================
-def plot_abel_illustration(res, delay_fs=0.0, lambda_probe_m=515e-9,
+def plot_abel_illustration(res, delay_fs=None, lambda_probe_m=515e-9,
                            x_half_um=40.0, z_target_um=None, label="",
                            save=None, **probe_kw):
     """Delta n(r) local et sa projection le long de la corde OPL(x).
@@ -440,6 +490,11 @@ def plot_abel_illustration(res, delay_fs=0.0, lambda_probe_m=515e-9,
     qui est exactement la difficulte de l'inversion.
     """
     from figures_filament import probe_opl_transmittance
+    if delay_fs is None:
+        # meme raison que plot_index_channels : on se place au passage de la
+        # pompe sur le plan le plus intense, pas a delai 0.
+        z_pk = peak_z_um(res)
+        delay_fs = z_pk / (299.792458 / 1.4627 * 1e-3)
     d = probe_opl_transmittance(res, delay_fs, lambda_probe_m=lambda_probe_m,
                                 x_half_um=x_half_um, **probe_kw)
     z_um = d["z_um"]
@@ -516,6 +571,7 @@ def plot_energy_budget(res, label="", save=None):
 # ================================================================================
 def export_report_figures(res, out_dir, wavelength_m, n0, n2, w0_m, energy_uJ,
                           delta_t_s, tau_c_s, Ui_eV, meff_rel=1.0,
+                          meff_drude_rel=1.0,
                           begin_m=0.0, rho_max_cm3=2.1e22,
                           tau_r_s=330e-15, tau_ste_s=1e-12,
                           lambda_probe_m=515e-9, E_tr_eV=4.2, label="",
@@ -536,23 +592,23 @@ def export_report_figures(res, out_dir, wavelength_m, n0, n2, w0_m, energy_uJ,
     diag = {}
 
     _f, diag["clamping"] = plot_clamping_equilibrium(
-        res, n2, wavelength_m, meff_rel, label=label,
+        res, n2, wavelength_m, meff_drude_rel, tau_c_s, n0, label=label,
         save=str(out / "rep_clamping_equilibrium.png"))
     _f, diag["focusing"] = plot_selffocusing_vs_diffraction(
         res, w0_m, wavelength_m, n0, n2, energy_uJ, delta_t_s, begin_m,
         label=label, save=str(out / "rep_selffocusing.png"))
     _f, diag["avalanche"] = plot_avalanche_takeover(
-        res, wavelength_m, tau_c_s, Ui_eV, meff_rel, n0,
+        res, wavelength_m, tau_c_s, Ui_eV, meff_drude_rel, n0,
         rho_max_cm3=rho_max_cm3, label=label,
         save=str(out / "rep_avalanche_takeover.png"))
     _f, diag["trapping"] = plot_trapping_sequence(
         res, tau_r_s, tau_ste_s, label=label,
         save=str(out / "rep_trapping_sequence.png"))
     _f, diag["channels"] = plot_index_channels(
-        res, 0.0, lambda_probe_m, E_tr_eV, n2, tau_r_s, tau_ste_s,
+        res, None, lambda_probe_m, E_tr_eV, n2, tau_r_s, tau_ste_s,
         label=label, save=str(out / "rep_index_channels.png"))
     _f, diag["abel"] = plot_abel_illustration(
-        res, 0.0, lambda_probe_m, label=label,
+        res, None, lambda_probe_m, label=label,
         save=str(out / "rep_abel_illustration.png"),
         n2=n2, E_tr_eV=E_tr_eV, **pk)
     _f, diag["energy"] = plot_energy_budget(
@@ -561,8 +617,9 @@ def export_report_figures(res, out_dir, wavelength_m, n0, n2, w0_m, energy_uJ,
 
     if verbose:
         d = diag
-        print(f"rho_c (pompe {wavelength_m*1e9:.0f} nm, m*={meff_rel:g} m_e) = "
-              f"{d['clamping']['rho_c_cm3']:.3e} cm-3")
+        print(f"rho_c (pompe {wavelength_m*1e9:.0f} nm, m*_Drude="
+              f"{meff_drude_rel:g} m_e) = {d['clamping']['rho_c_cm3']:.3e} cm-3"
+              f"   facteur de collision {d['clamping']['collision_factor']:.3f}")
         nz = d["clamping"]["z_crossings_um"]
         print(f"passages Kerr/plasma a l'equilibre : "
               f"{len(nz)} ; premiers = {np.round(nz[:5], 1)}")
