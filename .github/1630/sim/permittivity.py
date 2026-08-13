@@ -205,6 +205,19 @@ class MaterialResponse:
         default_factory=lambda: ((5.2, 0.40, 1.5), (4.2, 0.15, 1.0)))
     n2_m2W: float = 0.0                   # a renseigner par l'appelant
     enable_valence_depletion: bool = True
+    # Nombre d'electrons de valence par unite de formule. N0 joue DEUX roles
+    # distincts dans l'article, sous le meme symbole :
+    #   (a) densite de centres ionisables, dans le terme source N0 sigma_K F^K
+    #       -> c'est la densite MOLECULAIRE, 2.2e22 cm^-3 pour SiO2 ;
+    #   (b) nombre d'oscillateurs de valence, dans le facteur de deplation
+    #       (N0 - N_CB - N_tr) -> c'est le nombre d'ELECTRONS qui portent la
+    #       polarisabilite, soit 8 par SiO2 (4 liaisons Si-O a 2 electrons).
+    # Retirer UN electron ote 1/N_oscillateurs de la polarisabilite totale,
+    # donc c'est bien (b) qui compte pour la deplation. Prendre (a) surestime
+    # ce terme d'un facteur 8 et fait basculer le plateau des delais longs du
+    # positif au negatif -- en contradiction avec la Fig. 6 de l'article
+    # elle-meme. Mettre a 1.0 pour retrouver le comportement precedent.
+    n_valence_per_unit: float = 8.0
 
     def response(self, lambda_m, n0_lin, rho_e_cm3=0.0, rho_s_cm3=0.0,
                  I_Wcm2=0.0, xpm_factor=SPM, linearize=False,
@@ -242,8 +255,9 @@ class MaterialResponse:
         d_kerr = (kerr_delta_eps(I_Wcm2, n0_lin, self.n2_m2W, xpm_factor)
                   if "kerr" in include else zero)
         if "depletion" in include and self.enable_valence_depletion:
-            d_depl = valence_depletion_delta_eps(rho_e + rho_s, w,
-                                                 self.N0_cm3, eps_valence)
+            d_depl = valence_depletion_delta_eps(
+                rho_e + rho_s, w,
+                self.N0_cm3 * self.n_valence_per_unit, eps_valence)
         else:
             d_depl = zero
 
@@ -281,6 +295,24 @@ class MaterialResponse:
         w = omega_of_wavelength(lambda_m)
         d = lorentz_delta_eps(np.array([1.0]), w, self.ste_bands)
         return float(np.real(d)[0] / (_wp2(1.0, 1.0) / w**2))
+
+    def plateau_threshold_f(self, lambda_m, n0_lin):
+        """Force d'oscillateur STE effective au-dela de laquelle le plateau des
+        delais longs est POSITIF.
+
+        Quand la pompe est partie et que les porteurs libres ont recombine, il
+        ne reste que deux termes de signes opposes : les STE (+) et le retrait
+        des oscillateurs de valence (-). Leur egalite donne
+
+            f_eff = (n0^2 - 1) rho_c / N_valence
+
+        Le SIGNE du plateau est donc un test tres sensible du couple
+        (forces d'oscillateur STE, densite d'oscillateurs de valence) -- et il
+        se lit directement sur une carte de phase a delai long.
+        """
+        return ((float(n0_lin)**2 - 1.0)
+                * critical_density(lambda_m, 1.0)
+                / (self.N0_cm3 * self.n_valence_per_unit))
 
     def sigma_fca_cm2(self, lambda_m, n0_lin):
         """Section efficace d'absorption par porteur libre, en cm^2."""
