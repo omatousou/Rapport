@@ -316,7 +316,7 @@ def plot_delay_scan(cfg: PumpProbe0D, intensities_Wcm2, labels=None,
                        color=col, alpha=0.85, label=name)
         f = d["features"]
         a.set_ylabel("phase shift (rad)")
-        a.set_title(f"{lab}   pic {f['peak_rad']:+.2f} / creux {f['dip_rad']:+.2f} "
+        a.set_title(f"{lab}   peak {f['peak_rad']:+.2f} / dip {f['dip_rad']:+.2f} "
                     f"/ plateau {f['plateau_rad']:+.2f} rad", fontsize=10)
         a.grid(alpha=0.3)
         if k == 0:

@@ -241,14 +241,14 @@ def plot_experiment_overlay(sampled, model=None, measured=None, xlim_ps=(-0.5, 2
     a.axhline(0.0, color="0.6", lw=1)
     if model is not None:
         a.plot(np.asarray(model["delays_fs"]) * 1e-3, model["phase_rad"],
-               color="k", lw=1.8, zorder=1, label="modele (continu)")
+               color="k", lw=1.8, zorder=1, label="model (continuous)")
     a.plot(sampled["delays_fs"] * 1e-3, sampled["phase_rad"], "o",
            ms=3.5, color="crimson", alpha=0.8, zorder=2,
-           label="simulation echantillonnee comme la mesure")
+           label="simulation sampled as the measurement")
     if measured is not None:
         a.plot(np.asarray(measured["delays_fs"]) * 1e-3, measured["phase_rad"],
                "s", ms=4, mfc="none", color="royalblue", zorder=3,
-               label="mesure")
+               label="measurement")
     a.set_ylabel(r"$\delta\varphi$ (rad)")
     a.legend(fontsize=9)
     a.grid(alpha=0.3)
@@ -264,7 +264,7 @@ def plot_experiment_overlay(sampled, model=None, measured=None, xlim_ps=(-0.5, 2
         if measured is not None and "transmittance" in measured:
             b.plot(np.asarray(measured["delays_fs"]) * 1e-3,
                    measured["transmittance"], "s", ms=4, mfc="none",
-                   color="royalblue", label="mesure")
+                   color="royalblue", label="measurement")
         b.set_ylabel("transmittance")
         b.legend(fontsize=9)
         b.grid(alpha=0.3)

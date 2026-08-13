@@ -16,7 +16,7 @@ fig, ax = plt.subplots(1, 2, figsize=(13, 5),
 a = ax[0]
 a.add_patch(Rectangle((z[0], t_sub[0]), z[-1]-z[0], t_sub[-1]-t_sub[0],
                       fc="0.90", ec="0.55", lw=1.2, zorder=0))
-a.text(0.5*(z[0]+z[-1]), t_sub[-1]-120, "fenetre temporelle du solveur",
+a.text(0.5*(z[0]+z[-1]), t_sub[-1]-120, "solver temporal window",
        ha="center", fontsize=9, color="0.35")
 cols = plt.cm.viridis(np.linspace(0.05, 0.85, 5))
 for tau, c in zip((0, 500, 1000, 1500, 2000), cols):
@@ -27,16 +27,16 @@ for tau, c in zip((0, 500, 1000, 1500, 2000), cols):
     j = np.argmin(np.abs(z - z[-1]*0.06))
     a.text(z[j], tl[j]+55, rf"$\tau$ = {tau} fs", color=c, fontsize=9,
            fontweight="bold")
-a.set_xlabel(r"$z$ [$\mu$m]"); a.set_ylabel(r"temps local de la pompe $t$ [fs]")
-a.set_title("Etape 1 : la sonde coupe le cube EN BIAIS\n"
+a.set_xlabel(r"$z$ [$\mu$m]"); a.set_ylabel(r"local pump time $t$ [fs]")
+a.set_title("Step 1 : the probe cuts the cube AT AN ANGLE\n"
             r"$t_{local}(z)=\tau - z/v_g$", fontsize=11)
 a.set_ylim(t_sub[0]-500, t_sub[-1]+400)
 a.grid(alpha=.3)
 a.annotate("", xy=(z[-1], -1500), xytext=(z[0], -1500),
            arrowprops=dict(arrowstyle="<->", color="crimson", lw=1.5))
-a.text(0.5*(z[0]+z[-1]), -1400, f"la pompe met {z[-1]/vg*1e3:.0f} fs\n"
-       f"pour traverser la boite", ha="center", fontsize=9, color="crimson")
-a.text(z[-1]*0.55, t_sub[0]-380, "pointille = hors fenetre,\nprolongement analytique",
+a.text(0.5*(z[0]+z[-1]), -1400, f"the pump needs {z[-1]/vg*1e3:.0f} fs\n"
+       f"to cross the box", ha="center", fontsize=9, color="crimson")
+a.text(z[-1]*0.55, t_sub[0]-380, "dotted = outside the window,\nanalytic continuation",
        fontsize=8.5, color="0.35")
 
 d = ff.probe_opl_transmittance(res, 1000.0, x_half_um=70.0, **PK)
@@ -44,7 +44,7 @@ rho = np.asarray(d["rho_e_rz"]); r = d["r_pos_um"]
 b = ax[1]
 im = b.pcolormesh(z, r[r<=30], rho[:, r<=30].T, cmap="magma", shading="auto")
 b.set_xlabel(r"$z$ [$\mu$m]"); b.set_ylabel(r"$r$ [$\mu$m]")
-b.set_title(r"ce que la coupe donne : $\rho_e(z,r)$ a $\tau$ = 1000 fs"
+b.set_title(r"what the cut yields : $\rho_e(z,r)$ at $\tau$ = 1000 fs"
             "\n" r"[451, 512, 256] $\rightarrow$ [451, 512]", fontsize=11)
 fig.colorbar(im, ax=b, label=r"$\rho_e$ [cm$^{-3}$]")
 fig.tight_layout(); fig.savefig("/tmp/pipeline_1.png", dpi=155, bbox_inches="tight")
@@ -65,22 +65,22 @@ for k in (0,1): ax[0,k].set_xlabel(r"$z$ [$\mu$m]"); ax[0,k].set_ylabel(r"$r$ [$
 
 iz = int(np.argmax(np.abs(d["opl_nm"]).max(axis=1)))
 c = ax[0,2]
-c.plot(r[mr], dn[iz][mr], color="crimson", lw=2, label=r"$\Delta n(r)$ local")
-c.set_xlabel(r"$r$ ou $x$ [$\mu$m]"); c.set_ylabel(r"$\Delta n$", color="crimson")
+c.plot(r[mr], dn[iz][mr], color="crimson", lw=2, label=r"local $\Delta n(r)$")
+c.set_xlabel(r"$r$ or $x$ [$\mu$m]"); c.set_ylabel(r"$\Delta n$", color="crimson")
 c.tick_params(axis="y", colors="crimson")
 c2 = c.twinx()
 xx = d["x_um"]; mx = np.abs(xx) <= 30
 c2.plot(xx[mx], d["opl_nm"][iz][mx], color="royalblue", lw=2)
-c2.set_ylabel("OPL [nm]  (projete)", color="royalblue")
+c2.set_ylabel("OPL [nm]  (projected)", color="royalblue")
 c2.tick_params(axis="y", colors="royalblue")
-c.set_title(f"3. Abel direct, a z = {z[iz]:.0f} " r"$\mu$m"
+c.set_title(f"3. forward Abel, at z = {z[iz]:.0f} " r"$\mu$m"
             "\n" r"$F(x)=2\int_x^\infty f(r)\,r\,dr/\sqrt{r^2-x^2}$", fontsize=11)
 c.grid(alpha=.3)
 
 opl = np.asarray(d["opl_nm"])
 p = ax[1,0].pcolormesh(z, xx, opl.T, cmap="bwr", shading="auto",
                        vmin=-np.abs(opl).max(), vmax=np.abs(opl).max())
-ax[1,0].set_title("3b. vue de cote OPL$(z,x)$\n[451, 512] $\\rightarrow$ [451, 561]", fontsize=11)
+ax[1,0].set_title("3b. side view OPL$(z,x)$\n[451, 512] $\\rightarrow$ [451, 561]", fontsize=11)
 fig.colorbar(p, ax=ax[1,0], label="nm")
 
 dzs = float(np.mean(np.diff(z))); dxs = float(np.mean(np.diff(xx)))
@@ -89,8 +89,8 @@ p = ax[1,1].pcolormesh(z, xx, lp.T, cmap="bwr", shading="auto",
                        vmin=-np.abs(opl).max(), vmax=np.abs(opl).max())
 ax[1,1].axhline(0, color="k", lw=.8, ls=":")
 ax[1,1].plot([150],[0], "o", ms=9, mfc="none", mec="lime", mew=2.5)
-ax[1,1].set_title(f"4. passe-bas a NA/$\\lambda$ = {NOMARSKI_515.resolution_um:.2f} "
-                  r"$\mu$m" "\npuis lecture au point vert", fontsize=11)
+ax[1,1].set_title(f"4. low-pass at NA/$\\lambda$ = {NOMARSKI_515.resolution_um:.2f} "
+                  r"$\mu$m" "\nthen read at the green point", fontsize=11)
 fig.colorbar(p, ax=ax[1,1], label="nm")
 for k in (0,1):
     ax[1,k].set_xlabel(r"$z$ [$\mu$m]"); ax[1,k].set_ylabel(r"$x$ [$\mu$m]")
@@ -101,11 +101,11 @@ cur = np.loadtxt("/home/user/Rapport/.github/1630/notebooks/runs_z0/curve_4uJ.cs
 e = ax[1,2]
 e.axhline(0, color="0.6", lw=1)
 e.plot(cur[:,0]*1e-3, cur[:,1], "o", ms=3.5, color="crimson")
-e.set_xlabel("delai optique (ps)"); e.set_ylabel(r"$\delta\varphi$ (rad)")
-e.set_title(r"5. un point par delai : $\delta\varphi(\tau)=2\pi\,$OPL$/\lambda$"
-            "\n(courbe reelle du run 4 uJ)", fontsize=11)
+e.set_xlabel("optical delay (ps)"); e.set_ylabel(r"$\delta\varphi$ (rad)")
+e.set_title(r"5. one point per delay : $\delta\varphi(\tau)=2\pi\,$OPL$/\lambda$"
+            "\n(actual curve from the 4 uJ run)", fontsize=11)
 e.grid(alpha=.3)
-fig.suptitle("De $(z,r,t)$ a $\\delta\\varphi(\\tau)$ : la chaine complete",
+fig.suptitle("From $(z,r,t)$ to $\\delta\\varphi(\\tau)$ : the full chain",
              fontsize=13, y=1.00)
 fig.tight_layout(); fig.savefig("/tmp/pipeline_2.png", dpi=145, bbox_inches="tight")
 print("ok")

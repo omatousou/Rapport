@@ -227,7 +227,7 @@ def _plot_free_vs_trapped_ax(ax, res, z_target_um, label="", z_shift_um=0.0,
     # fenêtre tombent HORS du cadre au lieu d'être remontés sur un faux
     # plateau à l'intérieur.
     ax.plot(t_fs, np.clip(rho_e, 1e-30, None), color="black", lw=1.4, label="ρ_e libre")
-    ax.plot(t_fs, np.clip(rho_s, 1e-30, None), color="tab:blue", lw=1.4, label="ρ_s piégé")
+    ax.plot(t_fs, np.clip(rho_s, 1e-30, None), color="tab:blue", lw=1.4, label="ρ_s trapped")
     ax.set_yscale("log")
     if xlim is not None: ax.set_xlim(*xlim)
     if ylim is not None: ax.set_ylim(*ylim)
@@ -370,7 +370,7 @@ def plot_free_vs_trapped_vs_z(res, save=None, z_shift_um=0.0, rho_max_cm3=None,
     i_axis = onaxis_index(res)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(z_um, np.clip(res["rho_rz"][:, i_axis], 1e-3, None),
-            lw=1.6, color="black", label="ρ_e (libres)")
+            lw=1.6, color="black", label="ρ_e (free)")
     ax.plot(z_um, np.clip(res["rho_s_rz"][:, i_axis], 1e-3, None),
             lw=1.6, color="tab:blue", label="ρ_s (STE)")
     if rho_max_cm3:
@@ -384,7 +384,7 @@ def plot_free_vs_trapped_vs_z(res, save=None, z_shift_um=0.0, rho_max_cm3=None,
     if xlim is not None: ax.set_xlim(*xlim)
     if ylim is not None: ax.set_ylim(*ylim)
     ax.set_xlabel("z (µm)"); ax.set_ylabel("On-axis ρ (cm⁻³)")
-    ax.set_title("Électrons libres vs excitons auto-piégés le long de z")
+    ax.set_title("Free electrons vs self-trapped excitons along z")
     ax.legend(fontsize=7, ncol=2)
     fig.tight_layout()
     if save: fig.savefig(save, dpi=150)
@@ -1053,7 +1053,7 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
 
     im0 = ax[0, 0].imshow(face_opl, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
                           extent=ext_face, origin="lower")
-    ax[0, 0].set_title("top OPL (integre sur toute la colonne)"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
+    ax[0, 0].set_title("top OPL (integrated over the whole column)"); ax[0, 0].set_xlabel("x [um]"); ax[0, 0].set_ylabel("y [um]")
 
     im1 = ax[0, 1].imshow(opl.T, cmap="bwr", vmin=-opl_clip_nm, vmax=opl_clip_nm,
                           extent=ext_side, origin="lower", aspect="auto")
@@ -1063,7 +1063,7 @@ def plot_opl_panel(res, delay_fs, z_face_um=None, z_shift_um=0.0, z_lim=None,
 
     im2 = ax[1, 0].imshow(face_T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
                           extent=ext_face, origin="lower")
-    ax[1, 0].set_title("top transmittance (integre sur toute la colonne)"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
+    ax[1, 0].set_title("top transmittance (integrated over the whole column)"); ax[1, 0].set_xlabel("x [um]"); ax[1, 0].set_ylabel("y [um]")
 
     im3 = ax[1, 1].imshow(T.T, cmap="gray", vmin=t_lim[0], vmax=t_lim[1],
                           extent=ext_side, origin="lower", aspect="auto")

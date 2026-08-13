@@ -201,28 +201,28 @@ def plot_caustic(caus, fit=None, valid=None, pixel_um=None, s_um_per_unit=None,
 
     fig, ax = plt.subplots(figsize=(9.5, 5.5))
     ax.plot(caus["z"][good] * s, caus["w"][good] * p, "o", color="tab:blue", ms=7,
-            label=f"retenues ({good.sum()}) -- puissance coherente")
+            label=f"kept ({good.sum()}) -- consistent power")
     if rejected.any():
         ax.plot(caus["z"][rejected] * s, caus["w"][rejected] * p, "s", mfc="none",
                 mec="darkorange", ms=8, mew=1.6,
-                label=f"ecartees ({rejected.sum()}) -- densite optique differente")
+                label=f"rejected ({rejected.sum()}) -- different optical density")
     if sat.any():
         ax.plot(caus["z"][sat] * s, caus["w"][sat] * p, "x", color="crimson", ms=10, mew=2,
-                label="saturee")
+                label="saturated")
     if fit:
         zz = np.linspace(caus["z"].min(), caus["z"].max(), 400)
         ax.plot(zz * s, _caustic(zz, fit["w0_px"], fit["z0"], fit["zR"]) * p, "-",
                 color="black", lw=1.5,
-                label=(f"gaussienne : w0={fit['w0_px']*p:.2f}"
+                label=(f"Gaussian fit : w0={fit['w0_px']*p:.2f}"
                        f"{' µm' if pixel_um else ' px'}, zR={fit['zR']*s:.0f}"))
         ax.axvline(fit["z0"] * s, ls=":", color="gray", lw=1)
         if fit_window:
             ax.axvspan((fit["z0"] - fit_window) * s, (fit["z0"] + fit_window) * s,
-                       color="tab:blue", alpha=0.07, label="zone d'ajustement")
+                       color="tab:blue", alpha=0.07, label="fit region")
     unit = "µm" if (pixel_um and s_um_per_unit) else "unites brutes"
     ax.set_xlabel(f"z ({unit})")
-    ax.set_ylabel(f"w, rayon 1/e2 ({'µm' if pixel_um else 'px'})")
-    ax.set_title("Caustique mesuree vs modele gaussien")
+    ax.set_ylabel(f"w, 1/e2 radius ({'µm' if pixel_um else 'px'})")
+    ax.set_title("Measured caustic vs Gaussian model")
     ax.legend(fontsize=8, loc="upper center")
     fig.tight_layout()
     if save:
