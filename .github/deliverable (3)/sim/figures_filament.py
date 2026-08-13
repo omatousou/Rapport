@@ -1146,3 +1146,185 @@ def compare_probe_models(res, delay_fs=0.0, lambda_probe_m=515e-9,
               f"(Re(eps) <= 0) : le milieu y reflechit, aucun des deux modeles "
               f"de dephasage n'y a de sens.")
     return dict(legacy=old, martin=new, martin_linear=lin)
+
+
+# ================================================================================
+#  Controles d'integration
+# ================================================================================
+def check_integration(res, delay_fs=0.0, x_half_um=70.0, dx_um=0.25,
+                      verbose=True, **probe_kw):
+    """Mesures de controle sur les deux integrations de la chaine de sonde.
+
+    Les planches reposent sur deux integrales numeriques : la transformee
+    d'Abel directe le long de la corde (vue de cote) et l'integrale sur z
+    (vue de dessus). Ni l'une ni l'autre n'a de verite de reference dans un
+    run, donc on les controle par des invariants.
+
+    Cinq controles, du plus local au plus global :
+
+    1. MATRICE D'ABEL contre solution analytique. Pour f(r) = exp(-r^2/a^2)
+       la transformee directe vaut exactement F(x) = a sqrt(pi) exp(-x^2/a^2).
+       Teste build_abel_matrix seule, sans les donnees du run.
+
+    2. INVARIANT D'ABEL, plan par plan. Quel que soit le profil,
+           integrale de F(x) dx = 2 pi integrale de f(r) r dr
+       (les deux valent l'integrale de f sur le plan). Ne depend d'aucune
+       hypothese sur la forme : un ecart signale soit la troncature en x,
+       soit une erreur de matrice.
+
+    3. TRONCATURE RADIALE. Fraction du signal au-dela de r_max de la grille
+       de Hankel. Si elle n'est pas negligeable, la projection perd de la
+       matiere et l'invariant 2 le montrera.
+
+    4. TRONCATURE EN z. Valeur de l'integrande aux deux bords de la boite,
+       rapportee a son maximum. Une valeur non nulle en z = 0 ou z = end
+       signifie que la colonne sort de la boite : l'integrale de la vue de
+       dessus est alors tronquee, pas convergee.
+
+    5. INVARIANT INTER-PANNEAU. C'est le controle le plus fort, parce qu'il
+       relie les deux vues :
+           integrale double (OPL de cote) dx dz = integrale double (OPL de
+           dessus) dx dy
+       les deux valant l'integrale de Delta n sur tout le volume. C'est
+       exactement ce test qui attrape une vue de dessus qui echantillonnerait
+       un seul plan au lieu d'integrer la colonne.
+
+    Renvoie un dict de diagnostics ; imprime un compte rendu si verbose.
+    """
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    out = {}
+
+    # ---- 1. matrice d'Abel contre gaussienne analytique --------------------
+    a = 8.0
+    r_t = np.linspace(0.0, 60.0, 600)
+    x_t = np.linspace(-40.0, 40.0, 401)
+    F_num = build_abel_matrix(r_t, x_t) @ np.exp(-(r_t / a)**2)
+    F_ana = a * np.sqrt(np.pi) * np.exp(-(x_t / a)**2)
+    err1 = float(np.max(np.abs(F_num - F_ana)) / np.max(np.abs(F_ana)))
+    out["abel_vs_analytic_relerr"] = err1
+
+    # ---- donnees du run ----------------------------------------------------
+    d = probe_opl_transmittance(res, delay_fs, x_half_um=x_half_um,
+                                dx_um=dx_um, **probe_kw)
+    x, z = d["x_um"], d["z_um"]
+    r_pos, dn_rz = d["r_pos_um"], d["dn_rz"]
+    opl_side = d["opl_nm"]                              # (nz, nx), nm
+
+    # ---- 2. invariant d'Abel plan par plan ---------------------------------
+    lhs = _trapz(opl_side, x, axis=1) * 1e-3            # nm*µm -> µm^2
+    rhs = 2.0 * np.pi * _trapz(dn_rz * r_pos[None, :], r_pos, axis=1)
+    scale = np.maximum(np.abs(rhs).max(), 1e-300)
+    rel = np.abs(lhs - rhs) / scale
+    out["abel_invariant_max_relerr"] = float(rel.max())
+    out["abel_invariant_worst_z_um"] = float(z[int(np.argmax(rel))])
+
+    # ---- 3. troncature radiale ---------------------------------------------
+    edge = np.abs(dn_rz[:, -1]).max() / max(np.abs(dn_rz).max(), 1e-300)
+    out["radial_edge_fraction"] = float(edge)
+
+    # ---- 4. troncature en z -------------------------------------------------
+    col = np.abs(dn_rz).max(axis=1)
+    peak = max(col.max(), 1e-300)
+    out["z_edge_start_fraction"] = float(col[0] / peak)
+    out["z_edge_end_fraction"] = float(col[-1] / peak)
+
+    # ---- 5. invariant inter-panneau ----------------------------------------
+    z_m = z * 1e-6
+    opl_top_nm = _trapz(dn_rz, z_m, axis=0) * 1e9       # nm, fonction de r
+    vol_side = _trapz(_trapz(opl_side, x, axis=1), z)   # nm*µm^2
+    vol_top = 2.0 * np.pi * _trapz(opl_top_nm * r_pos, r_pos)
+    denom = max(abs(vol_side), abs(vol_top), 1e-300)
+    out["cross_panel_relerr"] = float(abs(vol_side - vol_top) / denom)
+    out["volume_side_nm_um2"] = float(vol_side)
+    out["volume_top_nm_um2"] = float(vol_top)
+
+    # ---- 6. trapeze contre Simpson sur l'integrale en z --------------------
+    try:
+        from scipy.integrate import simpson
+        top_simp = simpson(dn_rz, x=z_m, axis=0) * 1e9
+        num = np.abs(top_simp - opl_top_nm).max()
+        out["z_quadrature_relerr"] = float(num / max(np.abs(opl_top_nm).max(), 1e-300))
+    except Exception:
+        out["z_quadrature_relerr"] = float("nan")
+
+    if verbose:
+        def _v(ok):
+            return "OK " if ok else "/!\\"
+        print(f"Controles d'integration, delai {delay_fs:+.0f} fs")
+        print(f"  {_v(err1 < 2e-2)} 1. matrice d'Abel vs gaussienne analytique : "
+              f"erreur relative max {err1:.2%}")
+        print(f"  {_v(out['abel_invariant_max_relerr'] < 5e-2)} 2. invariant "
+              f"int F dx = 2pi int f r dr : ecart max "
+              f"{out['abel_invariant_max_relerr']:.2%} "
+              f"(a z = {out['abel_invariant_worst_z_um']:.0f} um)")
+        print(f"  {_v(edge < 1e-2)} 3. troncature radiale : |dn| au bord "
+              f"r = {r_pos[-1]:.0f} um vaut {edge:.2%} du max")
+        print(f"  {_v(out['z_edge_start_fraction'] < 5e-2)} 4a. bord z = "
+              f"{z[0]:.0f} um : {out['z_edge_start_fraction']:.1%} du max "
+              f"-> la colonne {'ENTRE deja excitee' if out['z_edge_start_fraction'] >= 5e-2 else 'demarre a zero'}")
+        print(f"  {_v(out['z_edge_end_fraction'] < 5e-2)} 4b. bord z = "
+              f"{z[-1]:.0f} um : {out['z_edge_end_fraction']:.1%} du max "
+              f"-> la colonne {'SORT de la boite' if out['z_edge_end_fraction'] >= 5e-2 else 'est refermee'}")
+        print(f"  {_v(out['cross_panel_relerr'] < 1e-2)} 5. invariant "
+              f"inter-panneau cote/dessus : ecart {out['cross_panel_relerr']:.3%} "
+              f"({vol_side:.4g} vs {vol_top:.4g} nm.um2)")
+        print(f"  {_v(out['z_quadrature_relerr'] < 1e-2)} 6. trapeze vs Simpson "
+              f"sur l'integrale en z : {out['z_quadrature_relerr']:.3%}")
+    return out
+
+
+def absorption_budget(res, delay_fs=0.0, x_half_um=70.0, T_measured=None,
+                      chord_um=None, column_um=None, verbose=True, **probe_kw):
+    """Confronte l'absorption simulee a une transmittance mesuree.
+
+    L'experience donne DEUX transmittances pour le meme plasma, avec des
+    longueurs de trajet tres differentes : la vue de cote traverse une corde
+    de quelques microns, la vue de dessus toute la colonne (plusieurs
+    centaines de microns). Le rapport des deux profondeurs optiques est donc
+    fixe par la geometrie et NE DEPEND PAS de sigma :
+
+        tau_dessus / tau_cote = L_colonne / L_corde
+
+    Verifier cette identite sur les donnees mesurees teste la geometrie et le
+    traitement, indépendamment de tout modele. Ensuite seulement, comparer les
+    valeurs absolues teste sigma et rho_e.
+
+    `T_measured`, `chord_um` et `column_um` sont facultatifs : sans eux la
+    fonction ne renvoie que le cote simule.
+    """
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    d = probe_opl_transmittance(res, delay_fs, x_half_um=x_half_um, **probe_kw)
+    z = d["z_um"]
+    T_side_min = float(d["transmittance"].min())
+    tau_side_max = -np.log(max(T_side_min, 1e-12))
+
+    alpha = np.asarray(d["alpha_cm_rz"], float)
+    tau_col = _trapz(alpha, z * 1e-4, axis=0)           # µm -> cm
+    T_top_min = float(np.exp(-np.clip(tau_col, 0, None)).min())
+
+    out = dict(T_side_min=T_side_min, T_top_min=T_top_min,
+               tau_side_max=tau_side_max, tau_top_max=float(tau_col.max()),
+               sigma_cm2=d["sigma_cm2"],
+               rho_e_max=float(np.asarray(d["rho_e_rz"]).max()))
+
+    if verbose:
+        print(f"Bilan d'absorption, delai {delay_fs:+.0f} fs")
+        print(f"  sigma sonde      = {out['sigma_cm2']:.3e} cm2")
+        print(f"  rho_e max        = {out['rho_e_max']:.3e} cm-3")
+        print(f"  simule, de cote  : T min = {T_side_min:.4f}  (tau = {tau_side_max:.4f})")
+        print(f"  simule, de dessus: T min = {T_top_min:.4f}  (tau = {out['tau_top_max']:.4f})")
+        if T_measured is not None:
+            tau_meas = -np.log(max(float(T_measured), 1e-12))
+            out["tau_measured"] = tau_meas
+            print(f"  mesure           : T = {T_measured:.3f}  (tau = {tau_meas:.4f})")
+            print(f"  rapport tau simule/mesure, de cote : "
+                  f"{tau_side_max/max(tau_meas,1e-12):.2f}")
+            if chord_um:
+                rho_needed = tau_meas / (out["sigma_cm2"] * chord_um * 1e-4)
+                out["rho_e_implied_side"] = rho_needed
+                print(f"  rho_e qu'il faudrait sur une corde de {chord_um:.0f} um : "
+                      f"{rho_needed:.3e} cm-3")
+        if chord_um and column_um:
+            print(f"  identite geometrique attendue sur les DONNEES : "
+                  f"tau_dessus/tau_cote = {column_um/chord_um:.1f}")
+    return out
