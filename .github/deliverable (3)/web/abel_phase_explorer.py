@@ -329,7 +329,7 @@ def channel_phases_2d(sim, t_exp_fs, *,
 
     n0_probe     = float(params.get("n0_probe", 1.46))
     nc_probe_cm3 = float(params["nc_probe_cm3"])
-    lmd_probe_nm = float(params.get("lambda_probe_nm", 490.0))
+    lmd_probe_nm = float(params.get("lambda_probe_nm", 515.0))
     n2_m2W       = float(params.get("n2", 2.4e-20))
     z_focus_glass_dist_um = -float(params.get("begin_um", 0.0))
 
@@ -681,7 +681,7 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, include_therm
 
 def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          raw_dir=None, energy_uJ=13.0, pmin=-20, pmax=19,
-                         fs_per_pulse=67.0, lmd_nm=490.0,
+                         fs_per_pulse=67.0, lmd_nm=515.0,
                          include_thermal=True, apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
                          coarsen_z=1):

@@ -555,7 +555,7 @@ def build_abel_matrix(r_um, x_um):
     return A
 
 
-def decompose_probe_phase(res, lambda_probe_m=490e-9, E_tr_eV=4.2, n2=3.54e-20,
+def decompose_probe_phase(res, lambda_probe_m=515e-9, E_tr_eV=4.2, n2=3.54e-20,
                           rho_max_cm3=2.1e22, x_half_um=50.0, dx_um=0.1,
                           verbose=True):
     """Borne SUPÉRIEURE du déphasage sonde, canal par canal.
@@ -711,7 +711,7 @@ def _populations_at(res, t_local_fs, tau_r_s=330e-15, tau_ste_s=None):
     return rho_e, rho_s, I
 
 
-def probe_phase_map(res, delay_fs, lambda_probe_m=490e-9, E_tr_eV=4.2,
+def probe_phase_map(res, delay_fs, lambda_probe_m=515e-9, E_tr_eV=4.2,
                     n2=3.54e-20, tau_r_s=330e-15, tau_ste_s=None, n_g=1.4627,
                     include=("drude", "ste", "kerr"), x_half_um=20.0, dx_um=0.1):
     """Déphasage sonde phi(x, z) [rad] au délai pompe-sonde `delay_fs`.

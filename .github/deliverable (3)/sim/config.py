@@ -170,7 +170,11 @@ class Config:
     enable_recombination: bool = True
 
     # ---- probe wavelength ----
-    lambda_probe: float = 490e-9
+    # Sonde de l'experience Nomarski : 515 nm (2e harmonique du 1030 nm).
+    # Valait 490e-9, ce qui n'etait la longueur d'onde d'aucune manip du
+    # depot et se propageait silencieusement dans params.json puis dans tout
+    # le post-traitement quand l'appelant oubliait de la passer.
+    lambda_probe: float = 515e-9
 
     # ---- time-resolved rho snapshot ----
     rho_t_stride: int = 15
