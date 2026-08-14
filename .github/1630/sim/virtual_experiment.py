@@ -94,13 +94,25 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
                          z_um=None, x_um=0.0, average_x_um=None,
                          average_z_um=None, apply_na=True, add_noise=True,
                          seed=0, convolve_probe=True, x_half_um=70.0,
-                         oversample=None, **probe_kw):
+                         t0_ref="pump", n_g=1.4627, oversample=None, **probe_kw):
     """Renvoie un jeu de points (delai, dephasage, transmittance) simule.
 
     `z_um`   plan de lecture ; None = le plan ou |OPL| est maximal.
     `x_um`   position transverse ; 0 = sur l'axe.
     `average_x_um` / `average_z_um` : demi-largeurs de la fenetre sur laquelle
              moyenner, pour imiter une lecture integree plutot que ponctuelle.
+    `t0_ref` fixe l'ORIGINE DES DELAIS :
+        "pump"     (defaut) t = 0 est la coincidence pompe-sonde AU PLAN LU,
+                   c'est a dire l'arrivee de la pompe en z_um. C'est la
+                   convention de toute experience pompe-sonde, et celle des
+                   figures publiees : le pic Kerr y est en t = 0.
+        "entrance" t = 0 est l'entree de la boite, z = 0. Le pic Kerr apparait
+                   alors decale de z/v_g -- 732 fs a z = 150 um -- ce qui rend
+                   la courbe incomparable a la litterature.
+        un nombre  decalage explicite en fs.
+    Les delais demandes sont interpretes DANS cette origine ; le decalage est
+    ajoute en interne avant l'echantillonnage. `t0_shift_fs` est renvoye.
+
     `convolve_probe` : convoluer par l'enveloppe temporelle de la sonde.
              Le pas de la grille interne est choisi automatiquement (tp/8),
              il n'y a plus de nombre de sous-echantillons a regler.
@@ -115,6 +127,24 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
     if delays_fs is None:
         delays_fs = experimental_delay_grid()
     delays_fs = np.atleast_1d(np.asarray(delays_fs, float))
+
+    # --- origine des delais ---------------------------------------------
+    v_g = 299.792458 / n_g                       # µm/ps
+    if isinstance(t0_ref, (int, float)):
+        t0_shift = float(t0_ref)
+    elif str(t0_ref).lower() in ("pump", "kerr", "coincidence"):
+        if z_um is None:
+            print("  (!) t0_ref='pump' demande sans z_um : l'origine ne peut pas "
+                  "etre calculee avant de connaitre le plan lu. Origine laissee "
+                  "a l'entree de la boite ; passer z_um pour la corriger.")
+            t0_shift = 0.0
+        else:
+            t0_shift = float(z_um) / (v_g * 1e-3)
+    elif str(t0_ref).lower() in ("entrance", "box", "none"):
+        t0_shift = 0.0
+    else:
+        raise ValueError(f"t0_ref inconnu : {t0_ref!r}")
+    delays_abs = delays_fs + t0_shift
 
     # PROBE_KW du notebook contient deja lambda_probe_m ; l'instrument aussi.
     # On garde celui de l'instrument et on signale un desaccord plutot que de
@@ -143,7 +173,7 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
 
     t_sub = np.asarray(res["t_sub_fs"], float)
     dt_cube = float(np.mean(np.diff(t_sub))) if len(t_sub) > 1 else np.inf
-    dt_scan = float(np.min(np.diff(delays_fs))) if len(delays_fs) > 1 else np.inf
+    dt_scan = float(np.min(np.diff(delays_abs))) if len(delays_abs) > 1 else np.inf
     if dt_scan < dt_cube:
         print(f"  (!) pas de balayage {dt_scan:.0f} fs plus fin que la resolution "
               f"temporelle du cube ({dt_cube:.0f} fs, fixee par rho_t_stride) : "
@@ -154,11 +184,11 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
         # pas interne : assez fin pour echantillonner le noyau ET le cube
         dt_fine = min(tp / 8.0, max(dt_cube, 1.0), dt_scan)
         pad = 3.0 * tp
-        t_eval = np.arange(delays_fs[0] - pad, delays_fs[-1] + pad + dt_fine,
+        t_eval = np.arange(delays_abs[0] - pad, delays_abs[-1] + pad + dt_fine,
                            dt_fine)
     else:
         dt_fine = dt_scan
-        t_eval = delays_fs
+        t_eval = delays_abs
 
     rng = np.random.default_rng(seed)
     raw_opl, raw_tr, z_used = [], [], None
@@ -203,8 +233,8 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
             yp = np.concatenate((np.full(m, y[0]), y, np.full(m, y[-1])))
             return np.convolve(yp, kern, mode="same")[m:m + len(y)]
         raw_opl, raw_tr = _conv(raw_opl), _conv(raw_tr)
-        opl_pts = np.interp(delays_fs, t_eval, raw_opl)
-        tr_pts = np.interp(delays_fs, t_eval, raw_tr)
+        opl_pts = np.interp(delays_abs, t_eval, raw_opl)
+        tr_pts = np.interp(delays_abs, t_eval, raw_tr)
     else:
         opl_pts, tr_pts = raw_opl, raw_tr
 
@@ -215,7 +245,8 @@ def sample_as_experiment(res, delays_fs=None, inst: Instrument = NOMARSKI_515,
         tr = tr + rng.normal(0.0, inst.noise_transmittance, tr.shape)
 
     lam_nm = inst.lambda_probe_m * 1e9
-    return dict(delays_fs=delays_fs, opl_nm=opl,
+    return dict(delays_fs=delays_fs, delays_abs_fs=delays_abs,
+                t0_shift_fs=t0_shift, opl_nm=opl,
                 phase_rad=2.0 * np.pi * opl / lam_nm,
                 transmittance=tr, z_um=z_used, x_um=x_um,
                 instrument=inst,
@@ -252,9 +283,13 @@ def plot_experiment_overlay(sampled, model=None, measured=None, xlim_ps=(-0.5, 2
     a.set_ylabel(r"$\delta\varphi$ (rad)")
     a.legend(fontsize=9)
     a.grid(alpha=0.3)
+    t0 = sampled.get("t0_shift_fs", 0.0)
+    org = ("t = 0 : pump-probe coincidence" if t0 else "t = 0 : box entrance")
     a.set_title(title or
                 f"z = {sampled['z_um']:.0f} um, x = {sampled['x_um']:.0f} um, "
-                f"{sampled['instrument'].name}")
+                f"{sampled['instrument'].name}\n{org}"
+                + (f"  (shift {t0:.0f} fs)" if t0 else ""))
+    a.axvline(0.0, color="0.75", lw=1, ls="--", zorder=0)
 
     if show_transmittance:
         b = ax[1][0]
