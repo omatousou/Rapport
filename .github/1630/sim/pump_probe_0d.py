@@ -50,7 +50,7 @@ class PumpProbe0D:
     lambda_probe_m: float
     pulse_fwhm_s: float
     probe_response_s: float          # largeur temporelle effective de la sonde
-    overlap_length_m: float          # L : longueur de recouvrement pompe-sonde
+    overlap_length_m: float          # L, seulement pour geometry="slab"
     material: MaterialResponse
     n2_m2W: float
     xpm_factor: float = XPM
@@ -68,6 +68,21 @@ class PumpProbe0D:
     tau_ste_s: Optional[float] = None   # None = pas de decroissance des STE
     enable_avalanche: bool = False
     tau_c_avalanche_s: Optional[float] = None
+
+    # --- geometrie de la mesure -------------------------------------------
+    # "crossed"  : geometrie de l'article. La sonde croise la pompe a
+    #              cross_angle_deg a travers un profil gaussien, les Eqs. (3)
+    #              et (4) sont integrees LE LONG DU TRAJET pour chaque r, puis
+    #              le signal est integre sur r. Il n'y a pas de L unique : la
+    #              longueur effective depend du canal, parce qu'un canal en I^K
+    #              se concentre la ou la pompe est intense.
+    # "slab"     : ancienne approximation, Delta n constant sur une longueur L.
+    geometry: str = "crossed"
+    cross_angle_deg: float = 10.0
+    pump_w_um: float = 26.0          # rayon a 1/e de l'INTENSITE (= diam/2)
+    r_max_w: float = 3.0             # integration spatiale jusqu'a r_max_w * w
+    n_r: int = 121
+    n_s: int = 401
 
     def photon_flux(self, I_Wcm2):
         """Flux de photons pompe [cm^-2 s^-1] pour une intensite en W/cm^2."""
@@ -127,6 +142,76 @@ USER_SIO2_1030 = PumpProbe0D(
 # ================================================================================
 #  Equations de population
 # ================================================================================
+def geometric_weights(cfg: PumpProbe0D, n_bins=48):
+    """Distribution des intensites locales le long du trajet de la sonde.
+
+    La sonde croise la pompe a `cross_angle_deg`. Un rayon dont l'approche la
+    plus proche de l'axe pompe vaut r se trouve, a l'abscisse s de son trajet,
+    a la distance transverse
+
+        rho(r, s) = sqrt(r^2 + (s sin theta)^2)
+
+    donc voit l'intensite I0 exp(-(rho/w)^2). Le signal mesure est la double
+    integrale sur (r, s), ce qui revient a une somme ponderee sur les
+    intensites locales. On renvoie cette ponderation une fois pour toutes :
+    le calcul des populations ne se fait plus qu'une fois par bin.
+
+    Verification analytique : pour un canal en I^K la double integrale vaut
+    pi w^2 / (K sin theta), donc un canal en I^4 est pese QUATRE FOIS MOINS
+    qu'un canal en I^1. C'est purement geometrique, et c'est ce qui manquait.
+    """
+    th = np.deg2rad(cfg.cross_angle_deg)
+    w = cfg.pump_w_um
+    r = np.linspace(0.0, cfg.r_max_w * w, cfg.n_r)
+    s_max = cfg.r_max_w * w / max(np.sin(th), 1e-9)
+    s = np.linspace(-s_max, s_max, cfg.n_s)
+    R, S = np.meshgrid(r, s, indexing="ij")
+    rho = np.hypot(R, S * np.sin(th))
+    frac = np.exp(-(rho / w) ** 2)                    # I_local / I0
+
+    dr = r[1] - r[0]
+    ds = s[1] - s[0]
+    # poids d'aire : 2 pour les r negatifs (profil symetrique), dr ds en µm^2
+    cell = 2.0 * dr * ds * np.ones_like(frac)
+    cell[0, :] *= 0.5                                  # bord r = 0
+
+    # Bin par fraction d'intensite, mais la valeur representative de chaque bin
+    # est la moyenne de frac PONDEREE PAR L'AIRE a l'interieur du bin, pas le
+    # centre du bin. Pres de frac -> 0 l'aire diverge (Gaussienne a queue
+    # longue) et se concentre au bord bas du bin : prendre le centre du bin
+    # comme representant surestime systematiquement frac dans ce bin, donc
+    # surestime l'integrale (biais observe : ~5% en trop pour K=1, quasi nul
+    # pour K>=2 ou l'integrale est dominee par le pic, moins sensible a la queue).
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    fflat, cflat = frac.ravel(), cell.ravel()
+    idx = np.clip(np.digitize(fflat, edges) - 1, 0, n_bins - 1)
+    wts = np.bincount(idx, weights=cflat, minlength=n_bins)
+    wsum_frac = np.bincount(idx, weights=cflat * fflat, minlength=n_bins)
+    keep = wts > 0
+    means = np.zeros(n_bins)
+    means[keep] = wsum_frac[keep] / wts[keep]
+    return means[keep], wts[keep], float(2.0 * r[-1])
+
+
+def check_geometry(cfg: PumpProbe0D, verbose=True):
+    """Confronte les poids geometriques a la solution analytique pi w^2/(K sin th)."""
+    frac, wts, _ = geometric_weights(cfg)
+    th = np.deg2rad(cfg.cross_angle_deg)
+    out = {}
+    for K in (1, 2, 4, 6):
+        num = float(np.sum(wts * frac ** K))
+        ana = np.pi * cfg.pump_w_um ** 2 / (K * np.sin(th))
+        out[K] = (num, ana, num / ana)
+        if verbose:
+            print(f"  K={K} : numerique {num:9.1f} um^2   analytique {ana:9.1f}"
+                  f"   rapport {num/ana:6.3f}")
+    if verbose:
+        r14 = out[4][0] / out[1][0]
+        print(f"  -> un canal en I^4 est pese {1/r14:.2f}x moins qu'un canal en I^1"
+              f"   (attendu 4.00)")
+    return out
+
+
 def integrate_populations(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None, n_t=4001):
     """Integre les equations de population sous une pompe gaussienne.
 
