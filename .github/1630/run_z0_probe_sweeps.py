@@ -59,7 +59,16 @@ TAU_C_S, TAU_R_S, TAU_STE_S, RHO_MAX_CM3 = 1.7e-15, 330e-15, 1e-12, 2.1e22
 US_EV, F_R, TAU_D_S, TAU_S_S = 6.0, 0.18, 32e-15, 12e-15
 BEGIN_M, END_M = 0.0, 350e-6
 
-GRID = dict(Nz=9000, Nt=2048, Nr=1024, R_factor=8.0, save_stride=20, rho_t_stride=8, rho_r_stride=2)
+GRID = dict(Nz=9000, Nt=4096, Nr=1024, R_factor=8.0, save_stride=20, rho_t_stride=8, rho_r_stride=2)
+
+# Fenetre temporelle comobile : tmax = TMAX_FACTOR * tp (tp = largeur 1/e du
+# pulse). Au defaut historique (5.0, Nt=2048) elle ne couvrait que +/-1.1 ps
+# -- trop court pour voir la decroissance des STE (~1 ps) : au-dela le cube
+# n'a plus de donnees et le curseur du HTML plafonne, meme si on lui demande
+# un pas plus fin. Double le facteur ET Nt ensemble (5->10, 2048->4096) :
+# meme dt qu'avant (donc meme f_Nyq/f0), fenetre doublee a +/-2.2 ps
+# (4.5 ps de large), au prix d'un run ~2x plus long.
+TMAX_FACTOR = 10.0
 
 # t=0 = l'instant le plus reculent effectivement simule, a l'entree de la
 # boite (voir web/abel_phase_explorer.run_slider_scenario) : le curseur
@@ -67,10 +76,10 @@ GRID = dict(Nz=9000, Nt=2048, Nr=1024, R_factor=8.0, save_stride=20, rho_t_strid
 #
 # T_STEP_HTML_FS fixe le pas du curseur -- PAS la resolution native du cube
 # (t_step_fs=None dans build_explorer_html balaierait tous les points du
-# cube, soit ~257 instants avec rho_t_stride=8 sur Nt=2048 : chaque instant
-# porte une carte de phase ET une carte de densite, le HTML depasserait
-# rapidement le Go). 67 fs donne une soixantaine d'instants sur toute la
-# duree simulee, largement assez pour voir tau_trap (~330 fs) et la
+# cube, soit plusieurs centaines d'instants avec rho_t_stride=8 : chaque
+# instant porte une carte de phase ET une carte de densite, le HTML
+# depasserait rapidement le Go). 67 fs donne une centaine d'instants sur
+# toute la duree simulee, largement assez pour voir tau_trap (~330 fs) et la
 # decroissance des STE (~1 ps).
 T_STEP_HTML_FS, HTML_COARSEN_Z = 67.0, 4
 PHASE_CLIP, T_MIN = 0.2, 0.75
@@ -83,7 +92,7 @@ k0 = 2.0 * np.pi * n0 / PUMP_WAVELENGTH_M
 zR = k0 * W0_M**2 / 2.0
 
 tp = DELTA_T_S / np.sqrt(2.0 * np.log(2.0))
-tmax = 5.0 * tp
+tmax = TMAX_FACTOR * tp
 dt = 2.0 * tmax / GRID["Nt"]
 dz = (END_M - BEGIN_M) / GRID["Nz"]
 R_MAX = GRID["R_factor"] * W0_M
@@ -134,6 +143,7 @@ if res is None:
         lambda_probe=PROBE_WAVELENGTHS_NM[0] * 1e-9,
         rho_t_stride=GRID["rho_t_stride"], rho_r_stride=GRID["rho_r_stride"],
         out_dir=str(BASE_OUT_DIR), envelope="gaussian_focused",
+        tmax_factor=TMAX_FACTOR,
     )
 else:
     print(f"cache charge : {BASE_OUT_DIR}")

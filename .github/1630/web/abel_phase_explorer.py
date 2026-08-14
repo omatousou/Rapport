@@ -264,6 +264,17 @@ def load_sim(sim_dir):
         I_rzt      = np.asarray(d["I_rzt"], dtype=np.float32),
         t_sub_fs   = np.asarray(d["t_sub_fs"], dtype=np.float64),
     )
+    # Enveloppes (z, r) DEJA calculees par le solveur : maximum sur tout le
+    # temps, deja symetriques en r (integrator.py les ecrit mirrorees). Pas
+    # de recalcul par delai -- une seule carte par run, immediate a tracer.
+    if "rho_rz" in d.files and np.asarray(d["rho_rz"]).shape != ():
+        sim["r_full_um"] = np.asarray(d["r"], dtype=np.float64) * 1e6
+        sim["rho_rz_env"]   = np.asarray(d["rho_rz"],   dtype=np.float32)
+        sim["rho_s_rz_env"] = (np.asarray(d["rho_s_rz"], dtype=np.float32)
+                               if "rho_s_rz" in d.files and np.asarray(d["rho_s_rz"]).shape != ()
+                               else None)
+    else:
+        sim["r_full_um"] = sim["rho_rz_env"] = sim["rho_s_rz_env"] = None
     with open(Path(sim_dir) / "params.json", "r") as f:
         sim["params"] = json.load(f)
     return sim
@@ -515,6 +526,33 @@ def density_maps_2d(sim, t_exp_fs, t0_ref_um=None, log_floor_cm3=1e12):
             _log(sim.get("rho_rzt")), _log(sim.get("rho_s_rzt")))
 
 
+def envelope_maps(sim, log_floor_cm3=1e14):
+    """rho_e(z, r) et rho_STE(z, r) [log10 cm^-3], MAXIMUM SUR TOUT LE TEMPS.
+
+    Pas un instantane a un delai donne : c'est l'enveloppe deja calculee et
+    stockee par le solveur (`rho_rz`/`rho_s_rz` dans result.npz), deja
+    symetrique en r -- une seule carte par run, aucun recalcul, immediate a
+    tracer. Donne la vue d'ensemble du canal (le "cigare" du filament) plutot
+    qu'une tranche temporelle.
+    """
+    if sim.get("rho_rz_env") is None:
+        return None, None, None, None
+    z_focus_glass_dist_um = -float(sim["params"].get("begin_um", 0.0))
+    z_lab_um = sim["z_sim_um"] + z_focus_glass_dist_um
+    r_full_um = sim["r_full_um"]
+
+    def _log(cube):
+        if cube is None:
+            return None
+        a = np.asarray(cube, dtype=np.float64)
+        out = np.full_like(a, np.nan)
+        m = a >= float(log_floor_cm3)
+        out[m] = np.log10(a[m])
+        return out
+
+    return z_lab_um, r_full_um, _log(sim["rho_rz_env"]), _log(sim.get("rho_s_rz_env"))
+
+
 # =============================================================================
 # == HTML output ===============================================================
 # =============================================================================
@@ -560,8 +598,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <b style="margin-left: 20px;">Densités :</b>
   <label><input type="checkbox" id="cb_rho_e" checked> Électrons</label>
   <label><input type="checkbox" id="cb_rho_s" checked> STE</label>
-  <label style="margin-left: 10px;">
-    <input type="checkbox" id="cb_rho_abel"> vue colonne Abel (comme la phase, axe x)
+  <label style="margin-left: 10px;">Vue :
+    <select id="rho_view">
+      <option value="raw" selected>instantané (z, r)</option>
+      <option value="abel">colonne Abel (z, x)</option>
+      <option value="envelope">enveloppe max(t)</option>
+    </select>
   </label>
 </div>
 
@@ -694,29 +736,30 @@ function mirrorR(r_dens, zMap) {
 }
 
 function buildDensityTraces() {
-  // Instantane au delai DU PULSE COURANT -- pas un historique fixe : ce
-  // panneau doit reagir au curseur exactement comme le panneau de phase.
-  //
-  // Deux vues possibles (case a cocher "vue colonne Abel") :
-  //   - (z, r) brut : la densite REELLE dans le plan meridien, telle que
-  //     calculee par le solveur -- pas ce qu'une camera peut voir.
-  //   - (z, x) Abel-projete, filtre NA : une integrale de ligne de visee en
-  //     cm^-3.µm, comme la phase -- ce qu'un imageur "verrait" s'il pouvait
-  //     voir la densite, axes coherents avec le panneau du haut.
+  // Trois vues, choisies par le menu "Vue :" -- par defaut "instantane",
+  // qui reagit au curseur exactement comme le panneau de phase :
+  //   - "raw"      : (z, r) brut, la densite REELLE dans le plan meridien,
+  //                  telle que calculee par le solveur -- pas ce qu'une
+  //                  camera peut voir.
+  //   - "abel"     : (z, x) Abel-projete, filtre NA, comme la phase -- ce
+  //                  qu'un imageur "verrait" s'il pouvait voir la densite.
+  //   - "envelope" : (z, r) maximum sur TOUT LE TEMPS (rho_rz/rho_s_rz,
+  //                  deja calcules par le solveur) -- pas un instantane,
+  //                  vue d'ensemble du canal, PAS le defaut.
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
-  const useAbel = document.getElementById('cb_rho_abel').checked;
+  const view = document.getElementById('rho_view').value;
 
   const show_rho_e = document.getElementById('cb_rho_e').checked;
   const show_rho_s = document.getElementById('cb_rho_s').checked;
   const traces = [];
 
-  if (useAbel) {
+  if (view === 'abel') {
     if (!pulse.rho_e_col) return [];
     if (show_rho_e) {
       traces.push(
         { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_e_col),
-          colorscale: 'Blues', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
+          colorscale: 'Viridis', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
           colorbar: logColorbar('∫ρe dx (cm⁻².µm)', META.rho_col_log_min, META.rho_col_log_max, {len: 0.42, y: 0.76}),
           hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρe dx=%{z:.2f}<extra></extra>',
           xaxis: 'x', yaxis: 'y' }
@@ -725,9 +768,33 @@ function buildDensityTraces() {
     if (show_rho_s && pulse.rho_s_col) {
       traces.push(
         { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_s_col),
-          colorscale: 'Greens', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
+          colorscale: 'Plasma', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
           colorbar: logColorbar('∫ρSTE dx (cm⁻².µm)', META.rho_col_log_min, META.rho_col_log_max, {len: 0.42, y: 0.23}),
           hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρSTE dx=%{z:.2f}<extra></extra>',
+          xaxis: 'x2', yaxis: 'y2' }
+      );
+    }
+    return traces;
+  }
+
+  if (view === 'envelope') {
+    const env = scen.envelope;
+    if (!env || !env.rho_e) return [];
+    if (show_rho_e) {
+      traces.push(
+        { type: 'heatmap', x: env.z, y: env.r, z: transposeZr(env.rho_e),
+          colorscale: 'Viridis', reversescale: false, zmin: META.rho_env_log_min, zmax: META.rho_env_log_max,
+          colorbar: logColorbar('ρe max(t) (cm⁻³)', META.rho_env_log_min, META.rho_env_log_max, {len: 0.42, y: 0.76}),
+          hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρe max(t)=%{z:.2f}<extra></extra>',
+          xaxis: 'x', yaxis: 'y' }
+      );
+    }
+    if (show_rho_s && env.rho_s) {
+      traces.push(
+        { type: 'heatmap', x: env.z, y: env.r, z: transposeZr(env.rho_s),
+          colorscale: 'Plasma', reversescale: false, zmin: META.rho_env_log_min, zmax: META.rho_env_log_max,
+          colorbar: logColorbar('ρSTE max(t) (cm⁻³)', META.rho_env_log_min, META.rho_env_log_max, {len: 0.42, y: 0.23}),
+          hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρSTE max(t)=%{z:.2f}<extra></extra>',
           xaxis: 'x2', yaxis: 'y2' }
       );
     }
@@ -739,7 +806,7 @@ function buildDensityTraces() {
     const m = mirrorR(scen.r_dens, pulse.rho_e_map);
     traces.push(
       { type: 'heatmap', x: scen.z_sim, y: m.r, z: m.z,
-        colorscale: 'Blues', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
+        colorscale: 'Viridis', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
         colorbar: logColorbar('ρe (cm⁻³)', META.rho_log_min, META.rho_log_max, {len: 0.42, y: 0.76}),
         hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρe=%{z:.2f}<extra></extra>',
         xaxis: 'x', yaxis: 'y' }
@@ -749,7 +816,7 @@ function buildDensityTraces() {
     const m = mirrorR(scen.r_dens, pulse.rho_s_map);
     traces.push(
       { type: 'heatmap', x: scen.z_sim, y: m.r, z: m.z,
-        colorscale: 'Greens', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
+        colorscale: 'Plasma', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
         colorbar: logColorbar('ρSTE (cm⁻³)', META.rho_log_min, META.rho_log_max, {len: 0.42, y: 0.23}),
         hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρSTE=%{z:.2f}<extra></extra>',
         xaxis: 'x2', yaxis: 'y2' }
@@ -758,15 +825,18 @@ function buildDensityTraces() {
   return traces;
 }
 
-function densityLayoutFor(useAbel) {
-  // Les deux vues sont symetriques (r reflete, x deja symetrique) ; seul le
+function densityLayoutFor(view) {
+  // Les trois vues sont symetriques (r reflete, x deja symetrique) ; seul le
   // titre d'axe change pour rappeler quelle grandeur est affichee.
   const scen = DATA.scenarios[scenarioSel.value];
   const L = JSON.parse(JSON.stringify(DENSITY_LAYOUT));
-  if (useAbel && scen.x_sim && scen.x_sim.length) {
+  if (view === 'abel' && scen.x_sim && scen.x_sim.length) {
     const xMax = Math.max(...scen.x_sim.map(Math.abs));
     L.yaxis.range = [-xMax, xMax]; L.yaxis.title = 'x (µm) — colonne ρe';
     L.yaxis2.range = [-xMax, xMax]; L.yaxis2.title = 'x (µm) — colonne ρSTE';
+  } else if (view === 'envelope') {
+    L.yaxis.title = 'r (µm) — ρe max(t)';
+    L.yaxis2.title = 'r (µm) — ρSTE max(t)';
   }
   return L;
 }
@@ -778,10 +848,10 @@ function render() {
 
   const show_rho_e = document.getElementById('cb_rho_e').checked;
   const show_rho_s = document.getElementById('cb_rho_s').checked;
-  const useAbel = document.getElementById('cb_rho_abel').checked;
+  const view = document.getElementById('rho_view').value;
 
   if (HAS_DENSITY && (show_rho_e || show_rho_s)) {
-    Plotly.react('densityPlot', buildDensityTraces(), densityLayoutFor(useAbel), {responsive: true});
+    Plotly.react('densityPlot', buildDensityTraces(), densityLayoutFor(view), {responsive: true});
     document.getElementById('densityPlot').style.display = 'block';
   } else {
     document.getElementById('densityPlot').style.display = 'none';
@@ -801,7 +871,7 @@ scenarioSel.addEventListener('change', () => {
   render();
 });
 document.getElementById('pulseSlider').addEventListener('input', e => { pulseIdx = +e.target.value; render(); });
-['ch_drude', 'ch_kerr', 'ch_ste', 'cb_rho_e', 'cb_rho_s', 'cb_rho_abel'].forEach(id =>
+['ch_drude', 'ch_kerr', 'ch_ste', 'cb_rho_e', 'cb_rho_s', 'rho_view'].forEach(id =>
   document.getElementById(id).addEventListener('change', render));
 
 render();
@@ -875,6 +945,10 @@ def run_slider_scenario(sim_dir, lmd_nm, apply_na_filter,
         if sim["rho_s_rzt"] is not None:
             sim["rho_s_rzt"] = sim["rho_s_rzt"][::coarsen_z]
         sim["I_rzt"]      = sim["I_rzt"][::coarsen_z]
+        if sim.get("rho_rz_env") is not None:
+            sim["rho_rz_env"] = sim["rho_rz_env"][::coarsen_z]
+            if sim.get("rho_s_rz_env") is not None:
+                sim["rho_s_rz_env"] = sim["rho_s_rz_env"][::coarsen_z]
 
     NA_eff = calc_NA(lmd_nm); lmd_um = lmd_nm * 1e-3
     z_focus = -float(sim["params"].get("begin_um", 0.0))
@@ -893,6 +967,16 @@ def run_slider_scenario(sim_dir, lmd_nm, apply_na_filter,
         t_list = np.arange(t_start_fs, t_end_fs + 0.5 * t_step_fs, t_step_fs)
 
     r_dens_um = sim["rlist_um"][::coarsen_r]
+
+    # Enveloppe (max sur le temps) : une seule carte, pas par pulse.
+    z_env, r_env, rho_e_env, rho_s_env = envelope_maps(sim)
+    env_data = None
+    if rho_e_env is not None:
+        env_data = dict(
+            z=_to_json_array(z_env, 3), r=_to_json_array(r_env[::coarsen_r], 3),
+            rho_e=_to_json_array(rho_e_env[:, ::coarsen_r], 3),
+            rho_s=(_to_json_array(rho_s_env[:, ::coarsen_r], 3) if rho_s_env is not None else None),
+        )
 
     frames = []
     z_sim_ref = x_sim_ref = None
@@ -919,7 +1003,7 @@ def run_slider_scenario(sim_dir, lmd_nm, apply_na_filter,
         ))
 
     return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
-                r_dens=_to_json_array(r_dens_um, 3),
+                r_dens=_to_json_array(r_dens_um, 3), envelope=env_data,
                 pulses=frames, z_focus=z_focus, probe_nm=float(lmd_nm),
                 t0_ref_lab_um=t0_ref_lab_um)
 
@@ -929,7 +1013,8 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
                          coarsen_z=1, coarsen_r=1, rho_log_min=12.0, rho_log_max=21.0,
-                         rho_col_log_min=14.0, rho_col_log_max=23.0):
+                         rho_col_log_min=14.0, rho_col_log_max=23.0,
+                         rho_env_log_min=14.0, rho_env_log_max=20.0):
     """
     sim_dirs : dict {scenario_name: path_to_dir_containing_result.npz+params.json}
                (exactly what the ablation loop in the notebook produces).
@@ -992,7 +1077,8 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                 t0_ref=t0_ref_by_scenario,
                 tmin=float(t_min),
                 rho_log_min=float(rho_log_min), rho_log_max=float(rho_log_max),
-                rho_col_log_min=float(rho_col_log_min), rho_col_log_max=float(rho_col_log_max))
+                rho_col_log_min=float(rho_col_log_min), rho_col_log_max=float(rho_col_log_max),
+                rho_env_log_min=float(rho_env_log_min), rho_env_log_max=float(rho_env_log_max))
     layout = build_layout(xlim_eff, ylim, with_transmittance=has_T)
 
     first = next(iter(scenarios.values()))
