@@ -4,15 +4,15 @@ web/abel_phase_explorer.py
 Generalisation of `unified_filament_slider_v3.py` (Abel-forward phase slider)
 for the term-ablation study:
 
-  - the Delta n(r, z, t) that feeds the Abel transform is split into FOUR
+  - the Delta n(r, z, t) that feeds the Abel transform is split into THREE
     independently togglable channels -- Drude (free electrons), Lorentz/STE
-    (self-trapped excitons), Kerr (n2 I), thermal (phonon heating from STE
-    trapping) -- each Abel-transformed and NA-filtered SEPARATELY in Python
-    (both operations are linear, so summing channels commutes with both the
-    line-of-sight integral and the low-pass filter). The browser only needs
-    to sum whichever channels are checked: no FFT / matrix multiply in JS.
+    (self-trapped excitons), Kerr (n2 I) -- each Abel-transformed and NA-filtered
+    SEPARATELY in Python (both operations are linear, so summing channels
+    commutes with both the line-of-sight integral and the low-pass filter).
+    The browser only needs to sum whichever channels are checked: no FFT /
+    matrix multiply in JS.
 
-  - several simulation SCENARIOS (e.g. the ablation-loop outputs from
+  - several simulation scenario (e.g. the ablation-loop outputs from
     `notebooks/term_ablation_study.ipynb`: full physics, no-Kerr-Raman,
     no-plasma-defocusing, ...) can be loaded side by side and switched with a
     dropdown, to see how disabling a term in the solver changes the predicted
@@ -83,12 +83,6 @@ SIDE_BASELINE_RECTS = (
 STE_LEVEL_EV = 4.2          # conserve pour le chemin historique uniquement
 USE_PERMITTIVITY_MODEL = True   # False -> ancien calcul a la main
 
-# --- Canal thermique (chaleur deposee au piegeage STE) ----------------------
-DN_DT_K         = 1.1e-5     # dn/dT silice [K^-1]
-RHO_CP_J_CM3_K  = 1.628      # rho*Cp = 2200 kg/m^3 x 740 J/(kg K)  [J cm^-3 K^-1]
-E_KIN_MEAN_EV   = 2.0
-TAU_PH_FS       = 1000.0
-
 # --- Grille x de l'integrale Abel -------------------------------------------
 X_SIM_HALF_UM = 50.0
 DX_SIM_UM     = 0.2
@@ -97,6 +91,10 @@ DX_SIM_UM     = 0.2
 _SELLMEIER_B  = np.array([0.6961663, 0.4079426, 0.8974794])
 _SELLMEIER_L2 = np.array([0.0684043, 0.1162414, 9.896161]) ** 2
 _C_UM_FS = 299792458.0 * 1e-9  # um/fs
+_C_M_S = 299792458.0
+_EPS0 = 8.8541878128e-12
+_M_E = 9.1093837139e-31
+_Q_E = 1.602176634e-19
 
 
 def _n_sellmeier(lam_um):
@@ -112,6 +110,21 @@ def group_index(lam_um, d=1e-4):
 
 def calc_NA(lmd_nm):
     return float(NA_REF) * float(lmd_nm) / float(NA_REF_LMD_NM)
+
+
+def probe_optics(lmd_nm):
+    """n0 et densite critique de la sonde a `lmd_nm`.
+
+    Le HTML peut etre genere a plusieurs longueurs d'onde de sonde depuis un
+    meme run de pompe. Dans ce cas il faut recalculer ces deux grandeurs, et ne
+    pas relire aveuglement la valeur historisee dans params.json.
+    """
+    lmd_nm = float(lmd_nm)
+    lmd_m = lmd_nm * 1e-9
+    omega = 2.0 * np.pi * _C_M_S / lmd_m
+    n0_probe = float(_n_sellmeier(lmd_nm * 1e-3))
+    nc_probe_cm3 = float(_EPS0 * _M_E * omega**2 / _Q_E**2 * 1e-6)
+    return n0_probe, nc_probe_cm3
 
 
 # =============================================================================
@@ -256,25 +269,6 @@ def load_sim(sim_dir):
     return sim
 
 
-def precompute_dn_thermal(sim, tau_ph_fs=TAU_PH_FS, e_kin_mean_eV=E_KIN_MEAN_EV):
-    rho_s = sim.get("rho_s_rzt")
-    if rho_s is None:
-        return None
-    p = sim["params"]
-    e_dep_eV = float(p.get("U_g_eV", 9.0)) - STE_LEVEL_EV + e_kin_mean_eV
-    fac = np.float32(DN_DT_K * e_dep_eV * 1.602176634e-19 / RHO_CP_J_CM3_K)
-    t = sim["t_sub_fs"]
-    a = np.float32(np.exp(-float(t[1] - t[0]) / float(tau_ph_fs)))
-
-    dn = np.zeros_like(rho_s)
-    for j in range(1, rho_s.shape[-1]):
-        eq = fac * rho_s[..., j]
-        dn[..., j] = eq + (dn[..., j - 1] - eq) * a
-
-    sim["dn_th_rzt"] = dn
-    return dn
-
-
 def build_abel_matrix(rlist_um, x_um):
     rlist_um = np.asarray(rlist_um, dtype=np.float64)
     x_um     = np.asarray(x_um,     dtype=np.float64)
@@ -315,21 +309,25 @@ def lowpass_NA_2d(phi, d_axis0_um, d_axis1_um, NA, lmd_um):
 
 
 def channel_phases_2d(sim, t_exp_fs, *,
-                       include_thermal=True,
                        apply_na_filter=True, NA_eff=None, lmd_um=None,
+                       probe_lmd_nm=None,
                        mask_before_interface=True,
                        x_sim_half_um=X_SIM_HALF_UM, dx_sim_um=DX_SIM_UM):
     """
-    Retourne (z_lab_um, x_um, {"drude":phi, "kerr":phi, "ste":phi, "thermal":phi|None})
+    Retourne (z_lab_um, x_um, {"drude":phi, "kerr":phi, "ste":phi})
     -- une carte de phase (Nz, Nx) deja transformee par Abel et filtree NA,
     PAR CANAL, prete a etre sommee lineairement cote navigateur.
     """
     rlist_um = sim["rlist_um"]; z_sim_um = sim["z_sim_um"]; t_sub_fs = sim["t_sub_fs"]
     params   = sim["params"]
 
-    n0_probe     = float(params.get("n0_probe", 1.46))
-    nc_probe_cm3 = float(params["nc_probe_cm3"])
-    lmd_probe_nm = float(params.get("lambda_probe_nm", 515.0))
+    lmd_probe_nm = float(probe_lmd_nm if probe_lmd_nm is not None
+                         else params.get("lambda_probe_nm", 515.0))
+    if probe_lmd_nm is not None or "n0_probe" not in params or "nc_probe_cm3" not in params:
+        n0_probe, nc_probe_cm3 = probe_optics(lmd_probe_nm)
+    else:
+        n0_probe     = float(params["n0_probe"])
+        nc_probe_cm3 = float(params["nc_probe_cm3"])
     n2_m2W       = float(params.get("n2", 2.4e-20))
     z_focus_glass_dist_um = -float(params.get("begin_um", 0.0))
 
@@ -354,13 +352,6 @@ def channel_phases_2d(sim, t_exp_fs, *,
     lmd_probe_m = lmd_probe_nm * 1e-9
     alpha_cm_rz = None
     if USE_PERMITTIVITY_MODEL and SIO2_MARTIN1997 is not None:
-        # Martin et al. 1997 Eq. (2) : deux bandes STE avec leurs forces
-        # d'oscillateur et leurs largeurs, masse effective 0.5 m_e dans le
-        # terme Drude, deplation de la bande de valence, et n = sqrt(eps) au
-        # lieu du developpement au premier ordre. Chaque canal est evalue seul
-        # (les autres densites mises a zero) pour rester sommable cote
-        # navigateur ; c'est exact tant qu'on reste dans le regime lineaire et
-        # `overdense` signale ou ce n'est plus le cas.
         mat = MaterialResponse(n2_m2W=n2_m2W)
         z0 = np.zeros_like(rho_e_rz)
 
@@ -391,9 +382,6 @@ def channel_phases_2d(sim, t_exp_fs, *,
             "ste":     (f_STE * rho_s_rz / (2.0 * n0_probe * nc_probe_cm3)) if has_ste else np.zeros_like(rho_e_rz),
             "kerr":    n2_m2W * I_rz * 1.0e4,
         }
-    has_thermal = include_thermal and sim.get("dn_th_rzt") is not None
-    dn_channels["thermal"] = (sim["dn_th_rzt"][iz, :, k_t].astype(np.float64)
-                              if has_thermal else np.zeros_like(rho_e_rz))
 
     x_max = float(min(x_sim_half_um, rlist_um[-1]))
     n_x   = int(2 * x_max / dx_sim_um) + 1
@@ -415,7 +403,7 @@ def channel_phases_2d(sim, t_exp_fs, *,
         if apply_na_filter:
             phi = lowpass_NA_2d(phi, dz_sim, dx_sim, NA_eff, lmd_um)
         phi[air, :] = np.nan
-        phases[name] = phi if (name != "thermal" or has_thermal) else None
+        phases[name] = phi
 
     # L'experience mesure la partie REELLE et la partie IMAGINAIRE de l'indice
     # (dephasage et contraste de frange). Jusqu'ici cette page ne calculait que
@@ -445,6 +433,34 @@ def _to_json_array(a, decimals=4):
     return a.tolist()
 
 
+def density_time_maps(sim, log_floor_cm3=1e12):
+    """Cartes temporelles on-axis de rho_e et rho_STE.
+
+    Le HTML garde seulement r=0 et trace log10(rho/cm^-3), ce qui rend la
+    dynamique lisible sans gonfler fortement le fichier autonome.
+    """
+    rho_e = sim.get("rho_rzt")
+    t_fs = sim.get("t_sub_fs")
+    if rho_e is None or np.asarray(rho_e).shape == () or t_fs is None:
+        return None
+
+    def _log_onaxis(cube):
+        if cube is None or np.asarray(cube).shape == ():
+            return None
+        a = np.asarray(cube[:, 0, :], dtype=np.float64)
+        out = np.full_like(a, np.nan, dtype=np.float64)
+        mask = a >= float(log_floor_cm3)
+        out[mask] = np.log10(a[mask])
+        return out
+
+    rho_s = sim.get("rho_s_rzt")
+    return dict(
+        t_fs=_to_json_array(t_fs, 2),
+        rho_e_log=_to_json_array(_log_onaxis(rho_e), 3),
+        rho_s_log=(_to_json_array(_log_onaxis(rho_s), 3) if rho_s is not None else None),
+    )
+
+
 # =============================================================================
 # == HTML output ===============================================================
 # =============================================================================
@@ -465,6 +481,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .channels label { margin-right: 10px; }
   #status { font-size: 13px; color: #555; margin-left: auto; }
   #plot { width: 100%; height: __FIGURE_HEIGHT__px; }
+  #densityPlot { width: 100%; height: 540px; margin-top: 12px; }
   #note { font-size: 12px; color: #888; }
 </style>
 </head>
@@ -486,17 +503,22 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <label><input type="checkbox" id="ch_drude" checked> Drude (électrons libres, &lt;0)</label>
   <label><input type="checkbox" id="ch_kerr" checked> Kerr (n2·I, &gt;0)</label>
   <label><input type="checkbox" id="ch_ste" checked> STE / Lorentz (excitons piégés)</label>
-  <label><input type="checkbox" id="ch_thermal"> Thermique (chauffage phonons)</label>
+  <b style="margin-left: 20px;">Densités :</b>
+  <label><input type="checkbox" id="cb_rho_e" checked> Électrons</label>
+  <label><input type="checkbox" id="cb_rho_s" checked> STE</label>
 </div>
 
 <div id="plot"></div>
+<div id="densityPlot"></div>
 <p id="note">Δφ = Abel-forward de Δn, filtré NA de la sonde (pas de recalcul FFT côté navigateur : chaque canal est déjà transformé par Abel + filtré côté Python ; le navigateur ne fait que sommer les canaux cochés).</p>
 
 <script>
 const DATA   = __DATA_JSON__;
 const LAYOUT = __LAYOUT_JSON__;
+const DENSITY_LAYOUT = __DENSITY_LAYOUT_JSON__;
 const META   = __META_JSON__;
 const HAS_EXP = __HAS_EXP__;
+const HAS_DENSITY = __HAS_DENSITY__;
 
 const scenarioSel = document.getElementById('scenario');
 Object.keys(DATA.scenarios).forEach(name => {
@@ -512,9 +534,6 @@ function sumChannels(pulse) {
   if (document.getElementById('ch_drude').checked && pulse.channels.drude) chosen.push(pulse.channels.drude);
   if (document.getElementById('ch_kerr').checked && pulse.channels.kerr) chosen.push(pulse.channels.kerr);
   if (document.getElementById('ch_ste').checked && pulse.channels.ste) chosen.push(pulse.channels.ste);
-  if (document.getElementById('ch_thermal').checked && pulse.channels.thermal) chosen.push(pulse.channels.thermal);
-  // `transmittance` n'est PAS un canal de Delta n : c'est la partie imaginaire
-  // de l'indice, tracee dans son propre panneau. Ne jamais l'ajouter ici.
   if (chosen.length === 0) return null;
   const n0 = chosen[0].length, n1 = chosen[0][0].length;
   const out = new Array(n0);
@@ -552,7 +571,6 @@ function buildTraces() {
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
   const phi2d = sumChannels(pulse);
-  // phi2d shape (Nz, Nx) -> heatmap wants z=x-axis(z), y-axis(x); transpose for imshow-like orientation
   const nz = phi2d ? phi2d.length : 0;
   const nx = phi2d ? phi2d[0].length : 0;
   const phiT = phi2d ? Array.from({length: nx}, (_, j) => phi2d.map(row => row[j])) : [];
@@ -586,15 +604,71 @@ function buildTraces() {
   return traces;
 }
 
+function transposeZt(arr) {
+  if (!arr) return [];
+  const nt = arr[0].length;
+  return Array.from({length: nt}, (_, j) => arr.map(row => row[j]));
+}
+
+function buildDensityTraces() {
+  const scen = DATA.scenarios[scenarioSel.value];
+  const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
+  if (!scen.density || !scen.density.rho_e_log) return [];
+
+  const show_rho_e = document.getElementById('cb_rho_e').checked;
+  const show_rho_s = document.getElementById('cb_rho_s').checked && scen.density.rho_s_log;
+
+  const zFocus = META.z_focus[scenarioSel.value] || 0.0;
+  const tProbe = scen.z_sim.map(z => pulse.t_exp - (z - zFocus) / scen.vg_pump_um_fs);
+  const traces = [];
+
+  if (show_rho_e) {
+    traces.push(
+      { type: 'heatmap', x: scen.z_sim, y: scen.density.t_fs, z: transposeZt(scen.density.rho_e_log),
+        colorscale: 'Blues', reversescale: true, zmin: META.rho_log_min, zmax: META.rho_log_max,
+        colorbar: { title: 'log10 ρe', len: 0.42, y: 0.76 },
+        hovertemplate: 'z=%{x:.0f} µm<br>t=%{y:.0f} fs<br>log10 ρe=%{z:.2f}<extra></extra>',
+        xaxis: 'x', yaxis: 'y' },
+      { type: 'scatter', x: scen.z_sim, y: tProbe, mode: 'lines',
+        line: { color: 'red', width: 2 }, showlegend: false,
+        hoverinfo: 'skip', xaxis: 'x', yaxis: 'y' }
+    );
+  }
+  if (show_rho_s) {
+    traces.push(
+      { type: 'heatmap', x: scen.z_sim, y: scen.density.t_fs, z: transposeZt(scen.density.rho_s_log),
+        colorscale: 'Greens', reversescale: true, zmin: META.rho_log_min, zmax: META.rho_log_max,
+        colorbar: { title: 'log10 ρSTE', len: 0.42, y: 0.23 },
+        hovertemplate: 'z=%{x:.0f} µm<br>t=%{y:.0f} fs<br>log10 ρSTE=%{z:.2f}<extra></extra>',
+        xaxis: 'x2', yaxis: 'y2' },
+      { type: 'scatter', x: scen.z_sim, y: tProbe, mode: 'lines',
+        line: { color: 'red', width: 2 }, showlegend: false,
+        hoverinfo: 'skip', xaxis: 'x2', yaxis: 'y2' }
+    );
+  }
+  return traces;
+}
+
 function render() {
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
   Plotly.react('plot', buildTraces(), LAYOUT, {responsive: true});
+
+  const show_rho_e = document.getElementById('cb_rho_e').checked;
+  const show_rho_s = document.getElementById('cb_rho_s').checked;
+
+  if (HAS_DENSITY && (show_rho_e || show_rho_s)) {
+    Plotly.react('densityPlot', buildDensityTraces(), DENSITY_LAYOUT, {responsive: true});
+    document.getElementById('densityPlot').style.display = 'block';
+  } else {
+    document.getElementById('densityPlot').style.display = 'none';
+  }
+
   const sign = pulse.p > 0 ? '+' : '';
   document.getElementById('pulseLabel').textContent =
     `pulse ${sign}${pulse.p}  (Δt = ${pulse.t_exp.toFixed(0)} fs)`;
   document.getElementById('status').textContent =
-    `scénario = ${scenarioSel.value} | z_foyer_gauss = ${META.z_focus[scenarioSel.value].toFixed(0)} µm`;
+    `scénario = ${scenarioSel.value} | sonde = ${META.probe_nm[scenarioSel.value].toFixed(0)} nm | z_foyer_gauss = ${META.z_focus[scenarioSel.value].toFixed(0)} µm`;
 }
 
 scenarioSel.addEventListener('change', () => {
@@ -603,7 +677,7 @@ scenarioSel.addEventListener('change', () => {
   render();
 });
 document.getElementById('pulseSlider').addEventListener('input', e => { pulseIdx = +e.target.value; render(); });
-['ch_drude', 'ch_kerr', 'ch_ste', 'ch_thermal'].forEach(id =>
+['ch_drude', 'ch_kerr', 'ch_ste', 'cb_rho_e', 'cb_rho_s'].forEach(id =>
   document.getElementById(id).addEventListener('change', render));
 
 render();
@@ -643,12 +717,22 @@ def build_layout(xlim, ylim, with_transmittance=True):
                    "title": "x (µm) — T"},
     }
 
-
-def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, include_thermal, apply_na_filter,
+def build_density_layout(xlim, tlim):
+    """Layout pour le panneau des densités (électrons et STE)"""
+    return {
+        "template": "plotly_white",
+        "margin": {"l": 70, "r": 30, "t": 20, "b": 50},
+        "height": 600,
+        "xaxis":  {"domain": [0.0, 1.0], "anchor": "y", "range": xlim, "matches": "x2", "title": "Propagation z (µm) — lab frame"},
+        "yaxis":  {"domain": [0.55, 1.0], "anchor": "x", "range": list(tlim), "title": "Temps t (fs) - ρe"},
+        "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim, "matches": "x"},
+        "yaxis2": {"domain": [0.0, 0.45], "anchor": "x2", "range": list(tlim), "title": "Temps t (fs) - ρSTE"},
+    }
+def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
                          coarsen_z=1):
     sim = load_sim(sim_dir)
-    if include_thermal:
-        precompute_dn_thermal(sim)
+    if lmd_nm is None:
+        lmd_nm = float(sim["params"].get("lambda_probe_nm", 515.0))
 
     if coarsen_z > 1:
         sim["z_sim_um"]  = sim["z_sim_um"][::coarsen_z]
@@ -656,35 +740,42 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, include_therm
         if sim["rho_s_rzt"] is not None:
             sim["rho_s_rzt"] = sim["rho_s_rzt"][::coarsen_z]
         sim["I_rzt"]      = sim["I_rzt"][::coarsen_z]
-        if sim.get("dn_th_rzt") is not None:
-            sim["dn_th_rzt"] = sim["dn_th_rzt"][::coarsen_z]
 
     NA_eff = calc_NA(lmd_nm); lmd_um = lmd_nm * 1e-3
     z_focus = -float(sim["params"].get("begin_um", 0.0))
+
+    # --- Vitesse de groupe de la pompe (trace du delai sonde dans le panneau densites) ---
+    lam_pump_um = float(sim["params"].get("wavelength_nm", 1030.0)) * 1e-3
+    vg_pump_um_fs = float(_C_UM_FS / group_index(lam_pump_um))
+    density_data = density_time_maps(sim, log_floor_cm3=1e12)
+    # -----------------------------------------------------------------------------
 
     pulses = []
     z_sim_ref = x_sim_ref = None
     for p in range(pmin, pmax + 1):
         t_exp = p * fs_per_pulse
         z_lab, x_um, phases = channel_phases_2d(
-            sim, t_exp, include_thermal=include_thermal,
-            apply_na_filter=apply_na_filter, NA_eff=NA_eff, lmd_um=lmd_um)
+            sim, t_exp,
+            apply_na_filter=apply_na_filter, NA_eff=NA_eff, lmd_um=lmd_um,
+            probe_lmd_nm=lmd_nm)
         if z_sim_ref is None:
             z_sim_ref = z_lab; x_sim_ref = x_um
         pulses.append(dict(
             p=int(p), t_exp=float(t_exp),
             channels={k: (_to_json_array(v) if v is not None else None) for k, v in phases.items()},
         ))
-    return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
-                pulses=pulses, z_focus=z_focus)
 
+    return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
+                pulses=pulses, z_focus=z_focus, probe_nm=float(lmd_nm),
+                vg_pump_um_fs=vg_pump_um_fs, density=density_data)
 
 def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
-                         raw_dir=None, energy_uJ=13.0, pmin=-20, pmax=19,
-                         fs_per_pulse=67.0, lmd_nm=515.0,
-                         include_thermal=True, apply_na_filter=True,
+                         raw_dir=None, energy_uJ=4.0,
+                         pmin=-40, pmax=40,
+                         fs_per_pulse=67.0, lmd_nm=None,
+                         apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
-                         coarsen_z=1):
+                         coarsen_z=1, rho_log_min=12.0, rho_log_max=21.0):
     """
     sim_dirs : dict {scenario_name: path_to_dir_containing_result.npz+params.json}
                (exactly what the ablation loop in the notebook produces).
@@ -693,12 +784,15 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     """
     scenarios = {}
     z_focus_by_scenario = {}
+    probe_nm_by_scenario = {}
+
     for name, sim_dir in sim_dirs.items():
         try:
             scenarios[name] = run_slider_scenario(
-                sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, include_thermal, apply_na_filter,
+                sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
                 coarsen_z=coarsen_z)
             z_focus_by_scenario[name] = scenarios[name].pop("z_focus")
+            probe_nm_by_scenario[name] = scenarios[name].pop("probe_nm")
             print(f"[{name}] {len(scenarios[name]['pulses'])} pulses depuis {sim_dir}")
         except Exception as e:
             print(f"[{name}] indisponible ({e})")
@@ -708,7 +802,8 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
 
     has_exp = False
     if raw_dir is not None and rotate is not None:
-        test_file = Path(raw_dir) / raw_filename(energy_uJ, 0, lmd_nm)
+        exp_lmd_nm = float(lmd_nm) if lmd_nm is not None else float(next(iter(probe_nm_by_scenario.values())))
+        test_file = Path(raw_dir) / raw_filename(energy_uJ, 0, exp_lmd_nm)
         has_exp = test_file.exists()
         if not has_exp:
             print(f"[exp] pas de fichiers trouvés dans {raw_dir} -- panneau expérience désactivé")
@@ -716,11 +811,25 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     xlim_max = max(float(s["z_sim"][-1]) for s in scenarios.values()) + 20
     xlim_eff = list(xlim) if xlim is not None else [-50.0, xlim_max]
 
+    # Analyser l'axe temporel (t_fs) pour configurer les graphes de densité
+    t_min_fs, t_max_fs = 0.0, 0.0
+    has_density = False
+    for sc in scenarios.values():
+        if sc.get("density") and sc["density"].get("t_fs"):
+            t_arr = sc["density"]["t_fs"]
+            t_min_fs = min(t_min_fs, float(t_arr[0]))
+            t_max_fs = max(t_max_fs, float(t_arr[-1]))
+            has_density = True
+
+    density_layout = build_density_layout(xlim_eff, [t_min_fs, t_max_fs]) if has_density else {}
+
     data_obj = dict(scenarios=scenarios)
     has_T = any(p["channels"].get("transmittance") is not None
                 for sc in scenarios.values() for p in sc["pulses"])
     meta = dict(clip=float(phase_clip), z_focus=z_focus_by_scenario,
-                tmin=float(t_min))
+                probe_nm=probe_nm_by_scenario,
+                tmin=float(t_min),
+                rho_log_min=float(rho_log_min), rho_log_max=float(rho_log_max))
     layout = build_layout(xlim_eff, ylim, with_transmittance=has_T)
 
     first = next(iter(scenarios.values()))
@@ -734,7 +843,9 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
         .replace("__DATA_JSON__", json.dumps(data_obj))
         .replace("__LAYOUT_JSON__", json.dumps(layout))
         .replace("__META_JSON__", json.dumps(meta))
-        .replace("__HAS_EXP__", "true" if has_exp else "false"))
+        .replace("__HAS_EXP__", "true" if has_exp else "false")
+        .replace("__DENSITY_LAYOUT_JSON__", json.dumps(density_layout))
+        .replace("__HAS_DENSITY__", "true" if has_density else "false"))
 
     with open(save, "w", encoding="utf-8") as f:
         f.write(html)

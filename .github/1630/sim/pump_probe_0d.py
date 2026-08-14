@@ -124,6 +124,28 @@ MARTIN_SIO2 = PumpProbe0D(
 )
 
 # --- configuration de la manip : pompe 1030 nm, sonde 515 nm -----------------
+# ATTENTION GEOMETRIE : contrairement a l'article (croisement a 10 deg, quasi
+# rasant), la sonde de la manip traverse la pompe a 90 deg (incidence normale,
+# setup Nomarski/Abel classique). cross_angle_deg=90 est donc CORRECT ici, pas
+# une valeur heritee par erreur du defaut de MARTIN_SIO2.
+#
+# Mais la geometrie "crossed" de ce module (integration sur s PUIS moyenne sur
+# r, geometric_weights) modelise une mesure PONCTUELLE spatialement moyennee,
+# comme celle de l'article (leur sonde spectrale n'est pas imageante). A 90
+# deg, l'integrale sur s pour un r fixe EST exactement l'integrale de ligne de
+# vue d'une transformee d'Abel a l'abscisse x=r -- mais la manip, elle,
+# RESOUT spatialement chaque r (chaque colonne de pixels), elle ne les moyenne
+# pas en un seul nombre. La vraie comparaison a la manip doit donc passer par
+# le pipeline Abel deja spatialement resolu (figures_filament.py,
+# virtual_experiment.py, web/abel_phase_explorer.py), pas par ce modele 0D :
+# il sert a verifier les ordres de grandeur et les rapports entre canaux, pas
+# a produire une carte (z, x) comparable pixel a pixel aux mesures.
+#
+# La sonde 515 nm ci-dessous est celle de l'interferometrie Nomarski (2e
+# harmonique de la pompe). Le balayage a 490/620/690 nm (etude multi-sonde,
+# web/abel_phase_explorer.py) est une campagne separee, geree par le pipeline
+# Abel avec `probe_lmd_nm` en parametre, pas par ce modele 0D a une seule
+# longueur d'onde de sonde.
 USER_SIO2_1030 = PumpProbe0D(
     name="manip Nomarski, pompe 1030 nm / sonde 515 nm",
     lambda_pump_m=1030e-9,
@@ -136,6 +158,7 @@ USER_SIO2_1030 = PumpProbe0D(
     xpm_factor=XPM,                  # donc facteur de phase croisee explicite
     ionization="keldysh", Ui_eV=9.0, meff_keldysh_rel=0.64,
     tau_trap_s=330e-15, tau_ste_s=1e-12,
+    cross_angle_deg=90.0,            # sonde perpendiculaire a la pompe
 )
 
 
