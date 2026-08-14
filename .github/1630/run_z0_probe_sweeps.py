@@ -61,7 +61,12 @@ BEGIN_M, END_M = 0.0, 350e-6
 
 GRID = dict(Nz=9000, Nt=2048, Nr=1024, R_factor=8.0, save_stride=20, rho_t_stride=8, rho_r_stride=2)
 
-PULSE_MIN, PULSE_MAX, FS_PER_PULSE, HTML_COARSEN_Z = -10, 9, 67.0, 4
+# Delai de -1005 a +3015 fs (60 pas de 67 fs) : t=0 est desormais la
+# coincidence pompe/sonde AU POINT DE COLLAPSE (auto-detecte, pas l'entree
+# de la boite -- voir web/abel_phase_explorer.auto_t0_ref_um). La plage doit
+# couvrir tau_trap (~330 fs) et la decroissance des STE (~1 ps) avec marge,
+# d'ou un balayage plus large que les -670/+603 fs precedents.
+PULSE_MIN, PULSE_MAX, FS_PER_PULSE, HTML_COARSEN_Z = -15, 45, 67.0, 4
 PHASE_CLIP, T_MIN = 0.2, 0.75
 Z_LIM_HTML, X_LIM_HTML = (0.0, 350.0), (-50.0, 50.0)
 print("parametres definis")

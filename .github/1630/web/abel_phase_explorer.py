@@ -308,15 +308,37 @@ def lowpass_NA_2d(phi, d_axis0_um, d_axis1_um, NA, lmd_um):
     return out
 
 
+def auto_t0_ref_um(sim):
+    """z (repere labo, meme convention que z_sim_um) ou la pompe est la plus
+    intense sur l'axe -- le point de collapse.
+
+    C'est LA reference physiquement sensee pour t=0 : "delai nul = coincidence
+    des maxima pompe/sonde" (comme dans virtual_experiment.py), pas
+    l'entree de la boite, qui n'a rien de particulier une fois le faisceau
+    focalise a l'interieur.
+    """
+    I_rzt = sim["I_rzt"]
+    if I_rzt is None or np.asarray(I_rzt).shape == ():
+        return float(sim["z_sim_um"][0])
+    I_onaxis_max_z = np.asarray(I_rzt[:, 0, :], dtype=np.float64).max(axis=1)
+    return float(sim["z_sim_um"][int(np.argmax(I_onaxis_max_z))])
+
+
 def channel_phases_2d(sim, t_exp_fs, *,
                        apply_na_filter=True, NA_eff=None, lmd_um=None,
-                       probe_lmd_nm=None,
+                       probe_lmd_nm=None, t0_ref_um=None,
                        mask_before_interface=True,
                        x_sim_half_um=X_SIM_HALF_UM, dx_sim_um=DX_SIM_UM):
     """
     Retourne (z_lab_um, x_um, {"drude":phi, "kerr":phi, "ste":phi})
     -- une carte de phase (Nz, Nx) deja transformee par Abel et filtree NA,
     PAR CANAL, prete a etre sommee lineairement cote navigateur.
+
+    `t0_ref_um` : position z (repere simulation, avant decalage vers le
+    labo) ou t_exp_fs=0 signifie "pompe et sonde coincident". Par defaut
+    (None) c'est le point de collapse (voir `auto_t0_ref_um`), pas l'entree
+    de la boite -- la sonde n'a aucune raison physique de coincider avec la
+    pompe a z=0 plutot qu'au point ou l'intensite est maximale.
     """
     rlist_um = sim["rlist_um"]; z_sim_um = sim["z_sim_um"]; t_sub_fs = sim["t_sub_fs"]
     params   = sim["params"]
@@ -335,7 +357,8 @@ def channel_phases_2d(sim, t_exp_fs, *,
     n_group_pump  = group_index(lam_pump_um)
     v_g_pump_um_fs = _C_UM_FS / n_group_pump
 
-    t_local = t_exp_fs - z_sim_um / v_g_pump_um_fs
+    z_ref_um = float(t0_ref_um if t0_ref_um is not None else auto_t0_ref_um(sim))
+    t_local = t_exp_fs - (z_sim_um - z_ref_um) / v_g_pump_um_fs
     k_t = np.clip(np.searchsorted(t_sub_fs, t_local), 1, len(t_sub_fs) - 1)
     left  = np.abs(t_sub_fs[k_t - 1] - t_local)
     right = np.abs(t_sub_fs[k_t]     - t_local)
@@ -433,32 +456,43 @@ def _to_json_array(a, decimals=4):
     return a.tolist()
 
 
-def density_time_maps(sim, log_floor_cm3=1e12):
-    """Cartes temporelles on-axis de rho_e et rho_STE.
+def density_maps_2d(sim, t_exp_fs, t0_ref_um=None, log_floor_cm3=1e12):
+    """rho_e(z, r) et rho_STE(z, r) [log10 cm^-3] AU DELAI `t_exp_fs`.
 
-    Le HTML garde seulement r=0 et trace log10(rho/cm^-3), ce qui rend la
-    dynamique lisible sans gonfler fortement le fichier autonome.
+    Meme selection temporelle que `channel_phases_2d` (t=0 au collapse, pas a
+    l'entree de la boite), mais SANS transformee d'Abel : c'est la densite
+    reelle dans le plan meridien (z, r) -- un instantane, pas un historique
+    complet -- de sorte que ce panneau reagisse au curseur de delai exactement
+    comme le panneau de phase, au lieu de montrer tout le temps a la fois avec
+    une simple ligne indicatrice.
     """
-    rho_e = sim.get("rho_rzt")
-    t_fs = sim.get("t_sub_fs")
-    if rho_e is None or np.asarray(rho_e).shape == () or t_fs is None:
-        return None
+    z_sim_um = sim["z_sim_um"]; r_um = sim["rlist_um"]; t_sub_fs = sim["t_sub_fs"]
+    params = sim["params"]
 
-    def _log_onaxis(cube):
+    lam_pump_um = float(params.get("wavelength_nm", 1030.0)) * 1e-3
+    v_g_pump_um_fs = _C_UM_FS / group_index(lam_pump_um)
+    z_focus_glass_dist_um = -float(params.get("begin_um", 0.0))
+    z_ref_um = float(t0_ref_um if t0_ref_um is not None else auto_t0_ref_um(sim))
+
+    t_local = t_exp_fs - (z_sim_um - z_ref_um) / v_g_pump_um_fs
+    k_t = np.clip(np.searchsorted(t_sub_fs, t_local), 1, len(t_sub_fs) - 1)
+    left  = np.abs(t_sub_fs[k_t - 1] - t_local)
+    right = np.abs(t_sub_fs[k_t]     - t_local)
+    k_t = np.where(left < right, k_t - 1, k_t)
+    iz = np.arange(len(z_sim_um))
+
+    def _log(cube):
         if cube is None or np.asarray(cube).shape == ():
             return None
-        a = np.asarray(cube[:, 0, :], dtype=np.float64)
-        out = np.full_like(a, np.nan, dtype=np.float64)
-        mask = a >= float(log_floor_cm3)
-        out[mask] = np.log10(a[mask])
+        a = np.asarray(cube[iz, :, k_t], dtype=np.float64)   # (Nz, Nr)
+        out = np.full_like(a, np.nan)
+        m = a >= float(log_floor_cm3)
+        out[m] = np.log10(a[m])
         return out
 
-    rho_s = sim.get("rho_s_rzt")
-    return dict(
-        t_fs=_to_json_array(t_fs, 2),
-        rho_e_log=_to_json_array(_log_onaxis(rho_e), 3),
-        rho_s_log=(_to_json_array(_log_onaxis(rho_s), 3) if rho_s is not None else None),
-    )
+    z_lab_um = z_sim_um + z_focus_glass_dist_um
+    return (z_lab_um, r_um,
+            _log(sim.get("rho_rzt")), _log(sim.get("rho_s_rzt")))
 
 
 # =============================================================================
@@ -604,46 +638,40 @@ function buildTraces() {
   return traces;
 }
 
-function transposeZt(arr) {
+function transposeZr(arr) {
+  // (Nz, Nr) -> (Nr, Nz), pour heatmap(x=z, y=r)
   if (!arr) return [];
-  const nt = arr[0].length;
-  return Array.from({length: nt}, (_, j) => arr.map(row => row[j]));
+  const nr = arr[0].length;
+  return Array.from({length: nr}, (_, j) => arr.map(row => row[j]));
 }
 
 function buildDensityTraces() {
+  // Instantane (z, r) au delai DU PULSE COURANT -- pas un historique fixe :
+  // ce panneau doit reagir au curseur exactement comme le panneau de phase.
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
-  if (!scen.density || !scen.density.rho_e_log) return [];
+  if (!scen.r_dens || !pulse.rho_e_map) return [];
 
   const show_rho_e = document.getElementById('cb_rho_e').checked;
-  const show_rho_s = document.getElementById('cb_rho_s').checked && scen.density.rho_s_log;
-
-  const zFocus = META.z_focus[scenarioSel.value] || 0.0;
-  const tProbe = scen.z_sim.map(z => pulse.t_exp - (z - zFocus) / scen.vg_pump_um_fs);
+  const show_rho_s = document.getElementById('cb_rho_s').checked && pulse.rho_s_map;
   const traces = [];
 
   if (show_rho_e) {
     traces.push(
-      { type: 'heatmap', x: scen.z_sim, y: scen.density.t_fs, z: transposeZt(scen.density.rho_e_log),
-        colorscale: 'Blues', reversescale: true, zmin: META.rho_log_min, zmax: META.rho_log_max,
+      { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_e_map),
+        colorscale: 'Blues', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
         colorbar: { title: 'log10 ρe', len: 0.42, y: 0.76 },
-        hovertemplate: 'z=%{x:.0f} µm<br>t=%{y:.0f} fs<br>log10 ρe=%{z:.2f}<extra></extra>',
-        xaxis: 'x', yaxis: 'y' },
-      { type: 'scatter', x: scen.z_sim, y: tProbe, mode: 'lines',
-        line: { color: 'red', width: 2 }, showlegend: false,
-        hoverinfo: 'skip', xaxis: 'x', yaxis: 'y' }
+        hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρe=%{z:.2f}<extra></extra>',
+        xaxis: 'x', yaxis: 'y' }
     );
   }
   if (show_rho_s) {
     traces.push(
-      { type: 'heatmap', x: scen.z_sim, y: scen.density.t_fs, z: transposeZt(scen.density.rho_s_log),
-        colorscale: 'Greens', reversescale: true, zmin: META.rho_log_min, zmax: META.rho_log_max,
+      { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_s_map),
+        colorscale: 'Greens', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
         colorbar: { title: 'log10 ρSTE', len: 0.42, y: 0.23 },
-        hovertemplate: 'z=%{x:.0f} µm<br>t=%{y:.0f} fs<br>log10 ρSTE=%{z:.2f}<extra></extra>',
-        xaxis: 'x2', yaxis: 'y2' },
-      { type: 'scatter', x: scen.z_sim, y: tProbe, mode: 'lines',
-        line: { color: 'red', width: 2 }, showlegend: false,
-        hoverinfo: 'skip', xaxis: 'x2', yaxis: 'y2' }
+        hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρSTE=%{z:.2f}<extra></extra>',
+        xaxis: 'x2', yaxis: 'y2' }
     );
   }
   return traces;
@@ -668,7 +696,9 @@ function render() {
   document.getElementById('pulseLabel').textContent =
     `pulse ${sign}${pulse.p}  (Δt = ${pulse.t_exp.toFixed(0)} fs)`;
   document.getElementById('status').textContent =
-    `scénario = ${scenarioSel.value} | sonde = ${META.probe_nm[scenarioSel.value].toFixed(0)} nm | z_foyer_gauss = ${META.z_focus[scenarioSel.value].toFixed(0)} µm`;
+    `scénario = ${scenarioSel.value} | sonde = ${META.probe_nm[scenarioSel.value].toFixed(0)} nm | ` +
+    `z_foyer_gauss = ${META.z_focus[scenarioSel.value].toFixed(0)} µm | ` +
+    `t=0 (collapse) a z = ${META.t0_ref[scenarioSel.value].toFixed(0)} µm`;
 }
 
 scenarioSel.addEventListener('change', () => {
@@ -717,19 +747,20 @@ def build_layout(xlim, ylim, with_transmittance=True):
                    "title": "x (µm) — T"},
     }
 
-def build_density_layout(xlim, tlim):
-    """Layout pour le panneau des densités (électrons et STE)"""
+def build_density_layout(xlim, rlim):
+    """Layout du panneau densites : instantane (z, r) au delai courant,
+    electrons en haut / STE en bas -- pas un historique (z, t) fixe."""
     return {
         "template": "plotly_white",
         "margin": {"l": 70, "r": 30, "t": 20, "b": 50},
         "height": 600,
         "xaxis":  {"domain": [0.0, 1.0], "anchor": "y", "range": xlim, "matches": "x2", "title": "Propagation z (µm) — lab frame"},
-        "yaxis":  {"domain": [0.55, 1.0], "anchor": "x", "range": list(tlim), "title": "Temps t (fs) - ρe"},
+        "yaxis":  {"domain": [0.55, 1.0], "anchor": "x", "range": list(rlim), "title": "r (µm) — ρe"},
         "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim, "matches": "x"},
-        "yaxis2": {"domain": [0.0, 0.45], "anchor": "x2", "range": list(tlim), "title": "Temps t (fs) - ρSTE"},
+        "yaxis2": {"domain": [0.0, 0.45], "anchor": "x2", "range": list(rlim), "title": "r (µm) — ρSTE"},
     }
 def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
-                         coarsen_z=1):
+                         coarsen_z=1, coarsen_r=1):
     sim = load_sim(sim_dir)
     if lmd_nm is None:
         lmd_nm = float(sim["params"].get("lambda_probe_nm", 515.0))
@@ -744,11 +775,13 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
     NA_eff = calc_NA(lmd_nm); lmd_um = lmd_nm * 1e-3
     z_focus = -float(sim["params"].get("begin_um", 0.0))
 
-    # --- Vitesse de groupe de la pompe (trace du delai sonde dans le panneau densites) ---
-    lam_pump_um = float(sim["params"].get("wavelength_nm", 1030.0)) * 1e-3
-    vg_pump_um_fs = float(_C_UM_FS / group_index(lam_pump_um))
-    density_data = density_time_maps(sim, log_floor_cm3=1e12)
-    # -----------------------------------------------------------------------------
+    # t=0 = coincidence pompe/sonde AU POINT DE COLLAPSE, pas a l'entree de la
+    # boite (voir auto_t0_ref_um) -- calcule une fois, reutilise pour tous
+    # les pulses.
+    t0_ref_um = auto_t0_ref_um(sim)
+    t0_ref_lab_um = t0_ref_um + z_focus
+
+    r_dens_um = sim["rlist_um"][::coarsen_r]
 
     pulses = []
     z_sim_ref = x_sim_ref = None
@@ -757,17 +790,23 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
         z_lab, x_um, phases = channel_phases_2d(
             sim, t_exp,
             apply_na_filter=apply_na_filter, NA_eff=NA_eff, lmd_um=lmd_um,
-            probe_lmd_nm=lmd_nm)
+            probe_lmd_nm=lmd_nm, t0_ref_um=t0_ref_um)
         if z_sim_ref is None:
             z_sim_ref = z_lab; x_sim_ref = x_um
+        # Instantane de densite (z, r) A CE DELAI -- pas un historique complet
+        # comme avant : reagit au curseur exactement comme le panneau de phase.
+        _, _, rho_e_log, rho_s_log = density_maps_2d(sim, t_exp, t0_ref_um=t0_ref_um)
         pulses.append(dict(
             p=int(p), t_exp=float(t_exp),
             channels={k: (_to_json_array(v) if v is not None else None) for k, v in phases.items()},
+            rho_e_map=(_to_json_array(rho_e_log[:, ::coarsen_r], 3) if rho_e_log is not None else None),
+            rho_s_map=(_to_json_array(rho_s_log[:, ::coarsen_r], 3) if rho_s_log is not None else None),
         ))
 
     return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
+                r_dens=_to_json_array(r_dens_um, 3),
                 pulses=pulses, z_focus=z_focus, probe_nm=float(lmd_nm),
-                vg_pump_um_fs=vg_pump_um_fs, density=density_data)
+                t0_ref_lab_um=t0_ref_lab_um)
 
 def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          raw_dir=None, energy_uJ=4.0,
@@ -775,7 +814,7 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          fs_per_pulse=67.0, lmd_nm=None,
                          apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
-                         coarsen_z=1, rho_log_min=12.0, rho_log_max=21.0):
+                         coarsen_z=1, coarsen_r=1, rho_log_min=12.0, rho_log_max=21.0):
     """
     sim_dirs : dict {scenario_name: path_to_dir_containing_result.npz+params.json}
                (exactly what the ablation loop in the notebook produces).
@@ -785,15 +824,18 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     scenarios = {}
     z_focus_by_scenario = {}
     probe_nm_by_scenario = {}
+    t0_ref_by_scenario = {}
 
     for name, sim_dir in sim_dirs.items():
         try:
             scenarios[name] = run_slider_scenario(
                 sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
-                coarsen_z=coarsen_z)
+                coarsen_z=coarsen_z, coarsen_r=coarsen_r)
             z_focus_by_scenario[name] = scenarios[name].pop("z_focus")
             probe_nm_by_scenario[name] = scenarios[name].pop("probe_nm")
-            print(f"[{name}] {len(scenarios[name]['pulses'])} pulses depuis {sim_dir}")
+            t0_ref_by_scenario[name] = scenarios[name].pop("t0_ref_lab_um")
+            print(f"[{name}] {len(scenarios[name]['pulses'])} pulses depuis {sim_dir} "
+                  f"(t=0 au collapse, z={t0_ref_by_scenario[name]:.0f} µm lab)")
         except Exception as e:
             print(f"[{name}] indisponible ({e})")
 
@@ -811,23 +853,23 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     xlim_max = max(float(s["z_sim"][-1]) for s in scenarios.values()) + 20
     xlim_eff = list(xlim) if xlim is not None else [-50.0, xlim_max]
 
-    # Analyser l'axe temporel (t_fs) pour configurer les graphes de densité
-    t_min_fs, t_max_fs = 0.0, 0.0
+    # Axe r pour le panneau densites : instantane (z, r) a CHAQUE delai (pas
+    # un historique (z, t) fixe) -- meme principe que le panneau de phase.
+    r_max_dens = 0.0
     has_density = False
     for sc in scenarios.values():
-        if sc.get("density") and sc["density"].get("t_fs"):
-            t_arr = sc["density"]["t_fs"]
-            t_min_fs = min(t_min_fs, float(t_arr[0]))
-            t_max_fs = max(t_max_fs, float(t_arr[-1]))
+        if sc.get("r_dens") and any(p.get("rho_e_map") is not None for p in sc["pulses"]):
+            r_max_dens = max(r_max_dens, float(sc["r_dens"][-1]))
             has_density = True
 
-    density_layout = build_density_layout(xlim_eff, [t_min_fs, t_max_fs]) if has_density else {}
+    density_layout = build_density_layout(xlim_eff, [0.0, r_max_dens]) if has_density else {}
 
     data_obj = dict(scenarios=scenarios)
     has_T = any(p["channels"].get("transmittance") is not None
                 for sc in scenarios.values() for p in sc["pulses"])
     meta = dict(clip=float(phase_clip), z_focus=z_focus_by_scenario,
                 probe_nm=probe_nm_by_scenario,
+                t0_ref=t0_ref_by_scenario,
                 tmin=float(t_min),
                 rho_log_min=float(rho_log_min), rho_log_max=float(rho_log_max))
     layout = build_layout(xlim_eff, ylim, with_transmittance=has_T)
