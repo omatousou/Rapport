@@ -61,12 +61,18 @@ BEGIN_M, END_M = 0.0, 350e-6
 
 GRID = dict(Nz=9000, Nt=2048, Nr=1024, R_factor=8.0, save_stride=20, rho_t_stride=8, rho_r_stride=2)
 
-# Delai de -1005 a +3015 fs (60 pas de 67 fs) : t=0 est desormais la
-# coincidence pompe/sonde AU POINT DE COLLAPSE (auto-detecte, pas l'entree
-# de la boite -- voir web/abel_phase_explorer.auto_t0_ref_um). La plage doit
-# couvrir tau_trap (~330 fs) et la decroissance des STE (~1 ps) avec marge,
-# d'ou un balayage plus large que les -670/+603 fs precedents.
-PULSE_MIN, PULSE_MAX, FS_PER_PULSE, HTML_COARSEN_Z = -15, 45, 67.0, 4
+# t=0 = l'instant le plus reculent effectivement simule, a l'entree de la
+# boite (voir web/abel_phase_explorer.run_slider_scenario) : le curseur
+# balaie donc TOUT ce qui a ete simule, depuis le tout debut.
+#
+# T_STEP_HTML_FS fixe le pas du curseur -- PAS la resolution native du cube
+# (t_step_fs=None dans build_explorer_html balaierait tous les points du
+# cube, soit ~257 instants avec rho_t_stride=8 sur Nt=2048 : chaque instant
+# porte une carte de phase ET une carte de densite, le HTML depasserait
+# rapidement le Go). 67 fs donne une soixantaine d'instants sur toute la
+# duree simulee, largement assez pour voir tau_trap (~330 fs) et la
+# decroissance des STE (~1 ps).
+T_STEP_HTML_FS, HTML_COARSEN_Z = 67.0, 4
 PHASE_CLIP, T_MIN = 0.2, 0.75
 Z_LIM_HTML, X_LIM_HTML = (0.0, 350.0), (-50.0, 50.0)
 print("parametres definis")
@@ -152,7 +158,7 @@ for probe_nm in PROBE_WAVELENGTHS_NM:
     print(f"\n=== HTML sonde {probe_nm:.0f} nm ===")
     build_explorer_html(
         sim_dirs=SIM_DIRS, save=str(save), raw_dir=None, energy_uJ=ENERGY_INCIDENT_UJ,
-        lmd_nm=probe_nm, pmin=PULSE_MIN, pmax=PULSE_MAX, fs_per_pulse=FS_PER_PULSE,
+        lmd_nm=probe_nm, t_step_fs=T_STEP_HTML_FS,
         apply_na_filter=True, phase_clip=PHASE_CLIP,
         t_min=T_MIN, xlim=Z_LIM_HTML, ylim=X_LIM_HTML, coarsen_z=HTML_COARSEN_Z,
     )

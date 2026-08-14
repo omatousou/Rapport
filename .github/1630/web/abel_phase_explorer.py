@@ -546,9 +546,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <div class="controls">
   <label>Scénario:
     <select id="scenario"></select></label>
-  <label>Pulse:
+  <label>Temps depuis le début de la simulation :
     <input type="range" id="pulseSlider" min="0" max="__PULSE_MAX__" value="0">
-    <span id="pulseLabel" style="display:inline-block; width:180px;">__INIT_LABEL__</span>
+    <span id="pulseLabel" style="display:inline-block; width:220px;">__INIT_LABEL__</span>
   </label>
   <span id="status"></span>
 </div>
@@ -585,6 +585,20 @@ Object.keys(DATA.scenarios).forEach(name => {
 });
 
 let pulseIdx = 0;
+
+const SUPERSCRIPT = {'-': '⁻', '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴',
+                     '5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+function logColorbar(title, zmin, zmax, extra) {
+  // Etiquettes "10ⁿ" (densite reelle en cm^-3) plutot que le log10 brut
+  // (12, 15, 18...) ou une notation "1e15" -- les donnees restent en log10,
+  // seul l'AFFICHAGE change.
+  const lo = Math.ceil(zmin), hi = Math.floor(zmax);
+  const step = Math.max(1, Math.round((hi - lo) / 5));
+  const vals = [];
+  for (let v = lo; v <= hi; v += step) vals.push(v);
+  const txt = vals.map(v => '10' + String(v).split('').map(c => SUPERSCRIPT[c] || c).join(''));
+  return Object.assign({ title, tickvals: vals, ticktext: txt }, extra || {});
+}
 
 function sumChannels(pulse) {
   const chosen = [];
@@ -668,6 +682,17 @@ function transposeZr(arr) {
   return Array.from({length: nr}, (_, j) => arr.map(row => row[j]));
 }
 
+function mirrorR(r_dens, zMap) {
+  // Densite radialement symetrique : reflete r>=0 vers r<0, comme l'axe x
+  // (symetrique) du panneau de phase -- purement cosmetique, aucune
+  // information perdue ni inventee.
+  if (!zMap) return { r: [], z: [] };
+  const zt = transposeZr(zMap);                 // (Nr, Nz)
+  const rNeg = r_dens.slice(1).map(v => -v).reverse();
+  const zNeg = zt.slice(1).reverse();
+  return { r: rNeg.concat(r_dens), z: zNeg.concat(zt) };
+}
+
 function buildDensityTraces() {
   // Instantane au delai DU PULSE COURANT -- pas un historique fixe : ce
   // panneau doit reagir au curseur exactement comme le panneau de phase.
@@ -692,7 +717,7 @@ function buildDensityTraces() {
       traces.push(
         { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_e_col),
           colorscale: 'Blues', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
-          colorbar: { title: 'log10 ∫ρe dx', len: 0.42, y: 0.76 },
+          colorbar: logColorbar('∫ρe dx (cm⁻².µm)', META.rho_col_log_min, META.rho_col_log_max, {len: 0.42, y: 0.76}),
           hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρe dx=%{z:.2f}<extra></extra>',
           xaxis: 'x', yaxis: 'y' }
       );
@@ -701,7 +726,7 @@ function buildDensityTraces() {
       traces.push(
         { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_s_col),
           colorscale: 'Greens', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
-          colorbar: { title: 'log10 ∫ρSTE dx', len: 0.42, y: 0.23 },
+          colorbar: logColorbar('∫ρSTE dx (cm⁻².µm)', META.rho_col_log_min, META.rho_col_log_max, {len: 0.42, y: 0.23}),
           hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρSTE dx=%{z:.2f}<extra></extra>',
           xaxis: 'x2', yaxis: 'y2' }
       );
@@ -711,19 +736,21 @@ function buildDensityTraces() {
 
   if (!scen.r_dens || !pulse.rho_e_map) return [];
   if (show_rho_e) {
+    const m = mirrorR(scen.r_dens, pulse.rho_e_map);
     traces.push(
-      { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_e_map),
+      { type: 'heatmap', x: scen.z_sim, y: m.r, z: m.z,
         colorscale: 'Blues', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
-        colorbar: { title: 'log10 ρe', len: 0.42, y: 0.76 },
+        colorbar: logColorbar('ρe (cm⁻³)', META.rho_log_min, META.rho_log_max, {len: 0.42, y: 0.76}),
         hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρe=%{z:.2f}<extra></extra>',
         xaxis: 'x', yaxis: 'y' }
     );
   }
   if (show_rho_s && pulse.rho_s_map) {
+    const m = mirrorR(scen.r_dens, pulse.rho_s_map);
     traces.push(
-      { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_s_map),
+      { type: 'heatmap', x: scen.z_sim, y: m.r, z: m.z,
         colorscale: 'Greens', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
-        colorbar: { title: 'log10 ρSTE', len: 0.42, y: 0.23 },
+        colorbar: logColorbar('ρSTE (cm⁻³)', META.rho_log_min, META.rho_log_max, {len: 0.42, y: 0.23}),
         hovertemplate: 'z=%{x:.0f} µm<br>r=%{y:.0f} µm<br>log10 ρSTE=%{z:.2f}<extra></extra>',
         xaxis: 'x2', yaxis: 'y2' }
     );
@@ -732,7 +759,8 @@ function buildDensityTraces() {
 }
 
 function densityLayoutFor(useAbel) {
-  // (z, r) brut : r >= 0 seul, titre "r". (z, x) Abel : x symetrique, titre "x".
+  // Les deux vues sont symetriques (r reflete, x deja symetrique) ; seul le
+  // titre d'axe change pour rappeler quelle grandeur est affichee.
   const scen = DATA.scenarios[scenarioSel.value];
   const L = JSON.parse(JSON.stringify(DENSITY_LAYOUT));
   if (useAbel && scen.x_sim && scen.x_sim.length) {
@@ -759,13 +787,12 @@ function render() {
     document.getElementById('densityPlot').style.display = 'none';
   }
 
-  const sign = pulse.p > 0 ? '+' : '';
   document.getElementById('pulseLabel').textContent =
-    `pulse ${sign}${pulse.p}  (Δt = ${pulse.t_exp.toFixed(0)} fs)`;
+    `t = ${pulse.t_disp.toFixed(0)} fs depuis le début`;
   document.getElementById('status').textContent =
     `scénario = ${scenarioSel.value} | sonde = ${META.probe_nm[scenarioSel.value].toFixed(0)} nm | ` +
     `z_foyer_gauss = ${META.z_focus[scenarioSel.value].toFixed(0)} µm | ` +
-    `t=0 (collapse) a z = ${META.t0_ref[scenarioSel.value].toFixed(0)} µm`;
+    `t=0 (début simulé) à l'entrée de boîte, z = ${META.t0_ref[scenarioSel.value].toFixed(0)} µm`;
 }
 
 scenarioSel.addEventListener('change', () => {
@@ -826,8 +853,18 @@ def build_density_layout(xlim, rlim):
         "xaxis2": {"domain": [0.0, 1.0], "anchor": "y2", "range": xlim, "matches": "x"},
         "yaxis2": {"domain": [0.0, 0.45], "anchor": "x2", "range": list(rlim), "title": "r (µm) — ρSTE"},
     }
-def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
-                         coarsen_z=1, coarsen_r=1):
+def run_slider_scenario(sim_dir, lmd_nm, apply_na_filter,
+                         coarsen_z=1, coarsen_r=1, t_step_fs=None):
+    """Balaie DIRECTEMENT la grille temporelle simulee, sans indirection par
+    un compteur de pulses. t=0 (affiche) = l'instant le plus reculent
+    effectivement simule (t_sub_fs.min()), et la reference de phase pour
+    Eqs. (3)-(4) est l'entree de la boite (z=0, sim frame) -- pas un point de
+    collapse auto-detecte : c'est un choix fixe et sans ambiguite, la ou le
+    collapse depend du run.
+
+    `t_step_fs` : pas d'echantillonnage du curseur. None = la resolution
+    native du cube (t_sub_fs), pas de sous- ni de sur-echantillonnage.
+    """
     sim = load_sim(sim_dir)
     if lmd_nm is None:
         lmd_nm = float(sim["params"].get("lambda_probe_nm", 515.0))
@@ -842,18 +879,25 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
     NA_eff = calc_NA(lmd_nm); lmd_um = lmd_nm * 1e-3
     z_focus = -float(sim["params"].get("begin_um", 0.0))
 
-    # t=0 = coincidence pompe/sonde AU POINT DE COLLAPSE, pas a l'entree de la
-    # boite (voir auto_t0_ref_um) -- calcule une fois, reutilise pour tous
-    # les pulses.
-    t0_ref_um = auto_t0_ref_um(sim)
+    # t=0 = entree de la boite (z_sim = 0), reference fixe et concrete --
+    # pas le point de collapse (qui deplace t=0 d'un run a l'autre).
+    t0_ref_um = float(sim["z_sim_um"][0])
     t0_ref_lab_um = t0_ref_um + z_focus
+
+    t_sub_fs = sim["t_sub_fs"]
+    t_start_fs = float(t_sub_fs[0])       # affiche comme "t = 0"
+    t_end_fs = float(t_sub_fs[-1])
+    if t_step_fs is None:
+        t_list = np.asarray(t_sub_fs, float)
+    else:
+        t_list = np.arange(t_start_fs, t_end_fs + 0.5 * t_step_fs, t_step_fs)
 
     r_dens_um = sim["rlist_um"][::coarsen_r]
 
-    pulses = []
+    frames = []
     z_sim_ref = x_sim_ref = None
-    for p in range(pmin, pmax + 1):
-        t_exp = p * fs_per_pulse
+    for t_exp in t_list:
+        t_exp = float(t_exp)
         z_lab, x_um, phases = channel_phases_2d(
             sim, t_exp,
             apply_na_filter=apply_na_filter, NA_eff=NA_eff, lmd_um=lmd_um,
@@ -865,8 +909,8 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
         # Instantane de densite (z, r) A CE DELAI -- pas un historique complet
         # comme avant : reagit au curseur exactement comme le panneau de phase.
         _, _, rho_e_log, rho_s_log = density_maps_2d(sim, t_exp, t0_ref_um=t0_ref_um)
-        pulses.append(dict(
-            p=int(p), t_exp=float(t_exp),
+        frames.append(dict(
+            t_exp=t_exp, t_disp=t_exp - t_start_fs,
             channels={k: (_to_json_array(v) if v is not None else None) for k, v in phases.items()},
             rho_e_map=(_to_json_array(rho_e_log[:, ::coarsen_r], 3) if rho_e_log is not None else None),
             rho_s_map=(_to_json_array(rho_s_log[:, ::coarsen_r], 3) if rho_s_log is not None else None),
@@ -876,13 +920,12 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
 
     return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
                 r_dens=_to_json_array(r_dens_um, 3),
-                pulses=pulses, z_focus=z_focus, probe_nm=float(lmd_nm),
+                pulses=frames, z_focus=z_focus, probe_nm=float(lmd_nm),
                 t0_ref_lab_um=t0_ref_lab_um)
 
 def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          raw_dir=None, energy_uJ=4.0,
-                         pmin=-40, pmax=40,
-                         fs_per_pulse=67.0, lmd_nm=None,
+                         t_step_fs=None, lmd_nm=None,
                          apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
                          coarsen_z=1, coarsen_r=1, rho_log_min=12.0, rho_log_max=21.0,
@@ -892,6 +935,9 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                (exactly what the ablation loop in the notebook produces).
     raw_dir  : optional path to experimental npz shots (unified_filament_slider_v3
                naming convention). Left as None => sim-only page.
+    t_step_fs : pas du curseur de delai. None = resolution native du cube
+               (t_sub_fs), le curseur balaie alors TOUT ce qui a ete simule,
+               de l'instant le plus reculent (affiche "t=0") au plus tardif.
     """
     scenarios = {}
     z_focus_by_scenario = {}
@@ -901,13 +947,13 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     for name, sim_dir in sim_dirs.items():
         try:
             scenarios[name] = run_slider_scenario(
-                sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filter,
-                coarsen_z=coarsen_z, coarsen_r=coarsen_r)
+                sim_dir, lmd_nm, apply_na_filter,
+                coarsen_z=coarsen_z, coarsen_r=coarsen_r, t_step_fs=t_step_fs)
             z_focus_by_scenario[name] = scenarios[name].pop("z_focus")
             probe_nm_by_scenario[name] = scenarios[name].pop("probe_nm")
             t0_ref_by_scenario[name] = scenarios[name].pop("t0_ref_lab_um")
-            print(f"[{name}] {len(scenarios[name]['pulses'])} pulses depuis {sim_dir} "
-                  f"(t=0 au collapse, z={t0_ref_by_scenario[name]:.0f} µm lab)")
+            print(f"[{name}] {len(scenarios[name]['pulses'])} instants depuis {sim_dir} "
+                  f"(t=0 = debut de la simulation, entree de boite a z={t0_ref_by_scenario[name]:.0f} µm lab)")
         except Exception as e:
             print(f"[{name}] indisponible ({e})")
 
@@ -934,7 +980,9 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
             r_max_dens = max(r_max_dens, float(sc["r_dens"][-1]))
             has_density = True
 
-    density_layout = build_density_layout(xlim_eff, [0.0, r_max_dens]) if has_density else {}
+    # r-axis mirree cote JS (densite radialement symetrique), comme le x de
+    # la phase -- la plage par defaut doit donc etre symetrique aussi.
+    density_layout = build_density_layout(xlim_eff, [-r_max_dens, r_max_dens]) if has_density else {}
 
     data_obj = dict(scenarios=scenarios)
     has_T = any(p["channels"].get("transmittance") is not None
@@ -949,7 +997,7 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
 
     first = next(iter(scenarios.values()))
     p0 = first["pulses"][0]
-    init_label = f"pulse {'+' if p0['p'] >= 0 else ''}{p0['p']}  (Δt = {p0['t_exp']:.0f} fs)"
+    init_label = f"t = {p0['t_disp']:.0f} fs depuis le début"
 
     html = (HTML_TEMPLATE
         .replace("__FIGURE_HEIGHT__", "700")
