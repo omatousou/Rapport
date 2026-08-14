@@ -462,10 +462,11 @@ def channel_phases_2d(sim, t_exp_fs, *,
         col = rho_rz @ A.T
         if apply_na_filter:
             col = lowpass_NA_2d(col, dz_sim, dx_sim, NA_eff, lmd_um)
-        out = np.full_like(col, np.nan)
-        m = col >= floor
-        out[m] = np.log10(col[m])
-        out[air, :] = np.nan
+        # Ecrete au plancher plutot que de mettre a NaN : en dessous, la
+        # couleur reste celle du plancher au lieu de laisser un trou blanc --
+        # la valeur est petite, pas absente.
+        out = np.log10(np.clip(col, float(floor), None))
+        out[air, :] = np.nan          # la, vraiment hors de la boite simulee
         return out
 
     phases["rho_e_col"] = _col_log(rho_e_rz)
@@ -516,10 +517,9 @@ def density_maps_2d(sim, t_exp_fs, t0_ref_um=None, log_floor_cm3=1e12):
         if cube is None or np.asarray(cube).shape == ():
             return None
         a = np.asarray(cube[iz, :, k_t], dtype=np.float64)   # (Nz, Nr)
-        out = np.full_like(a, np.nan)
-        m = a >= float(log_floor_cm3)
-        out[m] = np.log10(a[m])
-        return out
+        # Ecrete au plancher plutot que NaN : une valeur petite reste une
+        # couleur (celle du plancher), pas un trou blanc dans la carte.
+        return np.log10(np.clip(a, float(log_floor_cm3), None))
 
     z_lab_um = z_sim_um + z_focus_glass_dist_um
     return (z_lab_um, r_um,
@@ -545,10 +545,7 @@ def envelope_maps(sim, log_floor_cm3=1e14):
         if cube is None:
             return None
         a = np.asarray(cube, dtype=np.float64)
-        out = np.full_like(a, np.nan)
-        m = a >= float(log_floor_cm3)
-        out[m] = np.log10(a[m])
-        return out
+        return np.log10(np.clip(a, float(log_floor_cm3), None))
 
     return z_lab_um, r_full_um, _log(sim["rho_rz_env"]), _log(sim.get("rho_s_rz_env"))
 
