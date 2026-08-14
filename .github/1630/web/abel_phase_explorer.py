@@ -440,6 +440,26 @@ def channel_phases_2d(sim, t_exp_fs, *,
         T[air, :] = np.nan
         phases["transmittance"] = T
 
+    # Densites de colonne (Abel-projetees, filtrees NA comme la phase) : ce
+    # qu'un imageur "verrait" s'il pouvait voir la densite -- PAS la densite
+    # reelle en un point, une integrale de ligne de visee en cm^-3.um. Sert
+    # de pendant, en (z, x), a la carte (z, r) brute de density_maps_2d :
+    # meme convention d'axes que le panneau de phase, au choix cote HTML.
+    def _col_log(rho_rz, floor=1.0):
+        if rho_rz is None:
+            return None
+        col = rho_rz @ A.T
+        if apply_na_filter:
+            col = lowpass_NA_2d(col, dz_sim, dx_sim, NA_eff, lmd_um)
+        out = np.full_like(col, np.nan)
+        m = col >= floor
+        out[m] = np.log10(col[m])
+        out[air, :] = np.nan
+        return out
+
+    phases["rho_e_col"] = _col_log(rho_e_rz)
+    phases["rho_s_col"] = _col_log(rho_s_rz) if has_ste else None
+
     return z_lab_um, x_um, phases
 
 
@@ -540,6 +560,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <b style="margin-left: 20px;">Densités :</b>
   <label><input type="checkbox" id="cb_rho_e" checked> Électrons</label>
   <label><input type="checkbox" id="cb_rho_s" checked> STE</label>
+  <label style="margin-left: 10px;">
+    <input type="checkbox" id="cb_rho_abel"> vue colonne Abel (comme la phase, axe x)
+  </label>
 </div>
 
 <div id="plot"></div>
@@ -646,16 +669,47 @@ function transposeZr(arr) {
 }
 
 function buildDensityTraces() {
-  // Instantane (z, r) au delai DU PULSE COURANT -- pas un historique fixe :
-  // ce panneau doit reagir au curseur exactement comme le panneau de phase.
+  // Instantane au delai DU PULSE COURANT -- pas un historique fixe : ce
+  // panneau doit reagir au curseur exactement comme le panneau de phase.
+  //
+  // Deux vues possibles (case a cocher "vue colonne Abel") :
+  //   - (z, r) brut : la densite REELLE dans le plan meridien, telle que
+  //     calculee par le solveur -- pas ce qu'une camera peut voir.
+  //   - (z, x) Abel-projete, filtre NA : une integrale de ligne de visee en
+  //     cm^-3.µm, comme la phase -- ce qu'un imageur "verrait" s'il pouvait
+  //     voir la densite, axes coherents avec le panneau du haut.
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
-  if (!scen.r_dens || !pulse.rho_e_map) return [];
+  const useAbel = document.getElementById('cb_rho_abel').checked;
 
   const show_rho_e = document.getElementById('cb_rho_e').checked;
-  const show_rho_s = document.getElementById('cb_rho_s').checked && pulse.rho_s_map;
+  const show_rho_s = document.getElementById('cb_rho_s').checked;
   const traces = [];
 
+  if (useAbel) {
+    if (!pulse.rho_e_col) return [];
+    if (show_rho_e) {
+      traces.push(
+        { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_e_col),
+          colorscale: 'Blues', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
+          colorbar: { title: 'log10 ∫ρe dx', len: 0.42, y: 0.76 },
+          hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρe dx=%{z:.2f}<extra></extra>',
+          xaxis: 'x', yaxis: 'y' }
+      );
+    }
+    if (show_rho_s && pulse.rho_s_col) {
+      traces.push(
+        { type: 'heatmap', x: scen.z_sim, y: scen.x_sim, z: transposeZr(pulse.rho_s_col),
+          colorscale: 'Greens', reversescale: false, zmin: META.rho_col_log_min, zmax: META.rho_col_log_max,
+          colorbar: { title: 'log10 ∫ρSTE dx', len: 0.42, y: 0.23 },
+          hovertemplate: 'z=%{x:.0f} µm<br>x=%{y:.0f} µm<br>log10 ∫ρSTE dx=%{z:.2f}<extra></extra>',
+          xaxis: 'x2', yaxis: 'y2' }
+      );
+    }
+    return traces;
+  }
+
+  if (!scen.r_dens || !pulse.rho_e_map) return [];
   if (show_rho_e) {
     traces.push(
       { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_e_map),
@@ -665,7 +719,7 @@ function buildDensityTraces() {
         xaxis: 'x', yaxis: 'y' }
     );
   }
-  if (show_rho_s) {
+  if (show_rho_s && pulse.rho_s_map) {
     traces.push(
       { type: 'heatmap', x: scen.z_sim, y: scen.r_dens, z: transposeZr(pulse.rho_s_map),
         colorscale: 'Greens', reversescale: false, zmin: META.rho_log_min, zmax: META.rho_log_max,
@@ -677,6 +731,18 @@ function buildDensityTraces() {
   return traces;
 }
 
+function densityLayoutFor(useAbel) {
+  // (z, r) brut : r >= 0 seul, titre "r". (z, x) Abel : x symetrique, titre "x".
+  const scen = DATA.scenarios[scenarioSel.value];
+  const L = JSON.parse(JSON.stringify(DENSITY_LAYOUT));
+  if (useAbel && scen.x_sim && scen.x_sim.length) {
+    const xMax = Math.max(...scen.x_sim.map(Math.abs));
+    L.yaxis.range = [-xMax, xMax]; L.yaxis.title = 'x (µm) — colonne ρe';
+    L.yaxis2.range = [-xMax, xMax]; L.yaxis2.title = 'x (µm) — colonne ρSTE';
+  }
+  return L;
+}
+
 function render() {
   const scen = DATA.scenarios[scenarioSel.value];
   const pulse = scen.pulses[Math.min(pulseIdx, scen.pulses.length - 1)];
@@ -684,9 +750,10 @@ function render() {
 
   const show_rho_e = document.getElementById('cb_rho_e').checked;
   const show_rho_s = document.getElementById('cb_rho_s').checked;
+  const useAbel = document.getElementById('cb_rho_abel').checked;
 
   if (HAS_DENSITY && (show_rho_e || show_rho_s)) {
-    Plotly.react('densityPlot', buildDensityTraces(), DENSITY_LAYOUT, {responsive: true});
+    Plotly.react('densityPlot', buildDensityTraces(), densityLayoutFor(useAbel), {responsive: true});
     document.getElementById('densityPlot').style.display = 'block';
   } else {
     document.getElementById('densityPlot').style.display = 'none';
@@ -707,7 +774,7 @@ scenarioSel.addEventListener('change', () => {
   render();
 });
 document.getElementById('pulseSlider').addEventListener('input', e => { pulseIdx = +e.target.value; render(); });
-['ch_drude', 'ch_kerr', 'ch_ste', 'cb_rho_e', 'cb_rho_s'].forEach(id =>
+['ch_drude', 'ch_kerr', 'ch_ste', 'cb_rho_e', 'cb_rho_s', 'cb_rho_abel'].forEach(id =>
   document.getElementById(id).addEventListener('change', render));
 
 render();
@@ -793,6 +860,8 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
             probe_lmd_nm=lmd_nm, t0_ref_um=t0_ref_um)
         if z_sim_ref is None:
             z_sim_ref = z_lab; x_sim_ref = x_um
+        rho_e_col = phases.pop("rho_e_col", None)
+        rho_s_col = phases.pop("rho_s_col", None)
         # Instantane de densite (z, r) A CE DELAI -- pas un historique complet
         # comme avant : reagit au curseur exactement comme le panneau de phase.
         _, _, rho_e_log, rho_s_log = density_maps_2d(sim, t_exp, t0_ref_um=t0_ref_um)
@@ -801,6 +870,8 @@ def run_slider_scenario(sim_dir, pmin, pmax, fs_per_pulse, lmd_nm, apply_na_filt
             channels={k: (_to_json_array(v) if v is not None else None) for k, v in phases.items()},
             rho_e_map=(_to_json_array(rho_e_log[:, ::coarsen_r], 3) if rho_e_log is not None else None),
             rho_s_map=(_to_json_array(rho_s_log[:, ::coarsen_r], 3) if rho_s_log is not None else None),
+            rho_e_col=(_to_json_array(rho_e_col, 3) if rho_e_col is not None else None),
+            rho_s_col=(_to_json_array(rho_s_col, 3) if rho_s_col is not None else None),
         ))
 
     return dict(z_sim=_to_json_array(z_sim_ref, 3), x_sim=_to_json_array(x_sim_ref, 3),
@@ -814,7 +885,8 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                          fs_per_pulse=67.0, lmd_nm=None,
                          apply_na_filter=True,
                          phase_clip=0.2, t_min=0.75, xlim=None, ylim=(-50.0, 50.0),
-                         coarsen_z=1, coarsen_r=1, rho_log_min=12.0, rho_log_max=21.0):
+                         coarsen_z=1, coarsen_r=1, rho_log_min=12.0, rho_log_max=21.0,
+                         rho_col_log_min=14.0, rho_col_log_max=23.0):
     """
     sim_dirs : dict {scenario_name: path_to_dir_containing_result.npz+params.json}
                (exactly what the ablation loop in the notebook produces).
@@ -871,7 +943,8 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
                 probe_nm=probe_nm_by_scenario,
                 t0_ref=t0_ref_by_scenario,
                 tmin=float(t_min),
-                rho_log_min=float(rho_log_min), rho_log_max=float(rho_log_max))
+                rho_log_min=float(rho_log_min), rho_log_max=float(rho_log_max),
+                rho_col_log_min=float(rho_col_log_min), rho_col_log_max=float(rho_col_log_max))
     layout = build_layout(xlim_eff, ylim, with_transmittance=has_T)
 
     first = next(iter(scenarios.values()))
