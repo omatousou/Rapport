@@ -265,12 +265,22 @@ def integrate_populations(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None, n_t=4001):
 # ================================================================================
 def phase_and_absorption(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
                          convolve_probe=True, linearize=False,
-                         spatial_average=None, n_r=24):
-    """Voir la version mono-intensite plus bas ; `spatial_average` = rayon
-    (en unites de w_pompe) sur lequel moyenner le signal, comme le fait
-    l'article. C'est loin d'etre neutre : le Kerr suit I alors que la densite
-    suit I^K, donc la moyenne spatiale attenue BEAUCOUP plus le canal plasma
-    que le canal Kerr. Avec K = 4 le rapport creux/pic change d'un facteur 4."""
+                         spatial_average=None, n_r=24, n_bins=48):
+    """delta_phi(tau) et A(tau), moyennes sur le volume sonde/pompe.
+
+    Par defaut (`cfg.geometry == "crossed"`), la moyenne est la vraie
+    geometrie de l'article : sonde croisant la pompe a `cfg.cross_angle_deg`,
+    Eqs. (3)-(4) integrees le long du trajet oblique pour chaque r, puis
+    moyennees sur r -- voir `geometric_weights`. Un canal en I^K y est
+    pese 1/K par rapport au Kerr (I^1), exactement, pas approximativement.
+
+    `spatial_average` (rayon, en unites de w_pompe) ou `cfg.geometry ==
+    "slab"` retombent sur l'ancienne moyenne radiale ad hoc a `L` constant --
+    gardee pour comparaison, mais ce n'est plus le defaut : elle sous-pese le
+    canal plasma d'un facteur qui n'a rien de geometrique."""
+    if cfg.geometry == "crossed" and not spatial_average:
+        return _phase_and_absorption_crossed(cfg, I_peak_Wcm2, t_fs,
+                                             convolve_probe, linearize, n_bins)
     if spatial_average:
         # moyenne ponderee par l'aire sur le profil transverse de pompe.
         # ATTENTION : seuls les CHAMPS dependant de l'intensite sont moyennes.
@@ -362,6 +372,61 @@ def _phase_and_absorption_single(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
                 features=_features(t_fs, phi))
 
 
+def _phase_and_absorption_crossed(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
+                                  convolve_probe=True, linearize=False,
+                                  n_bins=48):
+    """Moyenne le signal sur la vraie geometrie croisee de l'article.
+
+    `geometric_weights` decoupe le double recouvrement (r, s) en `n_bins`
+    classes de fraction d'intensite locale I_local/I0 = frac, avec un poids
+    d'aire par classe. On integre les populations UNE FOIS PAR CLASSE, a
+    l'intensite de crete locale I0*frac (pas a I0), puis on fait la moyenne
+    ponderee des dephasages/absorptions -- pas une moyenne sur un disque
+    tronque a un rayon arbitraire comme l'ancienne `spatial_average`.
+
+    Un canal en I^K y ressort automatiquement pese 1/K par rapport au Kerr,
+    parce que c'est la valeur EXACTE de l'integrale geometrique, pas une
+    approximation : voir `check_geometry`.
+    """
+    tp = cfg.pulse_fwhm_s / np.sqrt(2.0 * np.log(2.0))
+    if t_fs is None:
+        t_fs = np.linspace(-4.0 * tp * 1e15, 2500.0, 4001)
+    frac, wts, _ = geometric_weights(cfg, n_bins=n_bins)
+    wts = wts / wts.sum()
+
+    acc = None
+    for f, wt in zip(frac, wts):
+        d = _phase_and_absorption_single(cfg, float(I_peak_Wcm2) * float(f),
+                                         t_fs, convolve_probe=False,
+                                         linearize=linearize)
+        if acc is None:
+            acc = {k: np.asarray(d[k], float) * wt
+                   for k in ("phase_rad", "absorption", "N_CB", "N_tr", "I_Wcm2")}
+            acc["channels"] = {k: np.asarray(v, float) * wt
+                               for k, v in d["channels"].items()}
+            acc["t_fs"] = d["t_fs"]
+            acc["overdense"] = np.asarray(d["overdense"]).copy()
+        else:
+            for k in ("phase_rad", "absorption", "N_CB", "N_tr", "I_Wcm2"):
+                acc[k] = acc[k] + np.asarray(d[k], float) * wt
+            for k in acc["channels"]:
+                acc["channels"][k] = acc["channels"][k] + d["channels"][k] * wt
+            acc["overdense"] = acc["overdense"] | np.asarray(d["overdense"])
+
+    if convolve_probe:
+        dt = float(np.mean(np.diff(acc["t_fs"])))
+        g = np.exp(-((np.arange(-4 * tp * 1e15, 4 * tp * 1e15 + dt, dt)) / (tp * 1e15)) ** 2)
+        g /= g.sum()
+        def _c(y):
+            return np.convolve(y, g, mode="same")
+        acc["phase_rad"] = _c(acc["phase_rad"])
+        acc["absorption"] = _c(acc["absorption"])
+        acc["channels"] = {k: _c(v) for k, v in acc["channels"].items()}
+
+    acc["features"] = _features(acc["t_fs"], acc["phase_rad"])
+    return acc
+
+
 def _features(t_fs, phi):
     """Les trois reperes de la courbe : pic Kerr, creux plasma, plateau STE."""
     i_pk = int(np.argmax(phi))
@@ -424,20 +489,22 @@ def plot_delay_scan(cfg: PumpProbe0D, intensities_Wcm2, labels=None,
     return fig, out
 
 
-def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
+def reproduce_martin_fig6(save=None, spatial_average=None, verbose=True):
     """Fig. 6 de l'article : SiO2, sonde 618 nm, pompe a 3 et 4 TW/cm^2.
 
-    `spatial_average` est le rayon, en unites du waist de pompe, sur lequel le
-    signal est moyenne. L'article precise que chaque point de ses courbes
-    temporelles est une moyenne spatiale du profil de la Fig. 3, et cette
-    moyenne n'est PAS neutre sur la comparaison : le Kerr suit I, la densite
-    suit I^4, donc moyenner attenue quatre fois plus le canal plasma que le
-    canal Kerr. Sans elle le creux ressort huit fois trop profond.
+    Par defaut, la moyenne est la vraie geometrie croisee de l'article
+    (`MARTIN_SIO2.geometry == "crossed"`, voir `geometric_weights`) : la
+    sonde traverse le profil gaussien de pompe a 10 degres, integree le long
+    du trajet pour chaque r puis moyennee sur r. Un canal en I^4 (la densite)
+    y est pese exactement 4x moins qu'un canal en I^1 (le Kerr) -- ce n'est
+    plus une moyenne radiale ad hoc a rayon de coupure arbitraire.
+
+    Passer `spatial_average` (rayon en unites de w_pompe) retombe sur
+    l'ancienne moyenne radiale, gardee pour comparaison.
 
     Ce qui se compare vraiment, c'est le RAPPORT creux/pic : l'amplitude
-    absolue depend de la longueur de recouvrement effective, que l'article ne
-    donne pas (il integre le long d'un trajet incline a 10 degres a travers un
-    profil gaussien, pas sur une longueur constante).
+    absolue depend de la longueur de recouvrement effective (overlap_length_m),
+    que l'article ne donne pas.
     """
     fig, res = plot_delay_scan(MARTIN_SIO2, [3e12, 4e12], show_channels=True,
                                xlim=(-500, 2000), save=save,
@@ -445,7 +512,9 @@ def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
     published = [dict(peak=0.67, dip=-0.12, plateau=0.03),
                  dict(peak=1.00, dip=-0.90, plateau=0.15)]
     if verbose:
-        print(f"moyenne spatiale sur {spatial_average} w_pompe\n")
+        geo = f"geometrie croisee a {MARTIN_SIO2.cross_angle_deg:.0f} deg" \
+              if not spatial_average else f"moyenne spatiale sur {spatial_average} w_pompe"
+        print(f"{geo}\n")
         print(f"{'':10s} {'pic (rad)':>18s} {'creux (rad)':>18s} "
               f"{'creux/pic':>18s}")
         for d, pub, lab in zip(res, published, ("3 TW/cm2", "4 TW/cm2")):
@@ -472,10 +541,11 @@ def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
 
 
 def predict_user_config(intensities_Wcm2=(1e13, 3e13, 5e13), save=None,
-                        spatial_average=1.5, verbose=True):
+                        spatial_average=None, verbose=True):
     """La meme courbe pour la manip : pompe 1030 nm, sonde 515 nm.
 
     Le taux d'ionisation vient du Keldysh du depot, pas d'un sigma_K ajuste.
+    Geometrie croisee par defaut (voir `reproduce_martin_fig6`).
     `overlap_length_m` de USER_SIO2_1030 est la corde traversee par la sonde ;
     c'est le parametre a caler sur une mesure, tout le reste est fixe.
     """
