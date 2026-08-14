@@ -523,20 +523,30 @@ def reproduce_martin_fig6(save=None, spatial_average=None, verbose=True):
                   f"{f['dip_rad']:+8.2f} /{pub['dip']:+6.2f} "
                   f"{f['dip_rad']/f['peak_rad']:+8.2f} /"
                   f"{pub['dip']/pub['peak']:+6.2f}")
+            i_dip = int(np.argmin(d["phase_rad"]))
+            mask = d["t_fs"] > d["t_fs"][i_dip]
+            tt, pp = d["t_fs"][mask], d["phase_rad"][mask]
+            cross_idx = np.where((pp[:-1] < 0) & (pp[1:] >= 0))[0]
+            tc = float(tt[cross_idx[0] + 1]) if len(cross_idx) else None
             print(f"{'':10s} N_CB max = {d['N_CB'].max():.2e} cm-3, "
                   f"N_tr max = {d['N_tr'].max():.2e} cm-3, "
                   f"A max = {d['absorption'].max():.3f}, "
-                  f"plateau = {f['plateau_rad']:+.3f} (publie {pub['plateau']:+.2f})")
+                  f"plateau = {f['plateau_rad']:+.3f} (publie {pub['plateau']:+.2f}), "
+                  f"retour au positif a {tc:.0f} fs (publie ~550 fs)"
+                  if tc is not None else "")
         print("\nCe qui marche  : la sequence des trois signes, les densites")
         print("                 (< 1e19 cm-3, la borne annoncee par l'article),")
-        print("                 et le rapport creux/pic.")
-        print("Ce qui ne marche pas : l'amplitude absolue, environ 4x trop")
-        print("                 faible -- longueur de recouvrement effective ;")
-        print("                 et le plateau STE, qui sort proche de zero au")
-        print("                 lieu d'etre franchement positif. Avec les")
-        print("                 forces d'oscillateur de la Table II, le retrait")
-        print("                 des oscillateurs de valence compense presque")
-        print("                 exactement l'apport des bandes STE.")
+        print("                 le rapport creux/pic, et le temps de retour")
+        print("                 au positif (proche de 550 fs).")
+        print("Ce qui ne marche pas encore : l'amplitude absolue, avec la")
+        print("                 geometrie croisee correcte le pic est ~7x plus")
+        print("                 faible qu'avec l'ancienne moyenne radiale ad")
+        print("                 hoc -- overlap_length_m (non donne par")
+        print("                 l'article) reste a recaler ; et le plateau STE,")
+        print("                 qui sort proche de zero au lieu d'etre")
+        print("                 franchement positif : le retrait des")
+        print("                 oscillateurs de valence (Table II) compense")
+        print("                 presque exactement l'apport des bandes STE.")
     return fig, res
 
 
