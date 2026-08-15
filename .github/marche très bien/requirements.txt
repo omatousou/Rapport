@@ -1,0 +1,13 @@
+# CPU : suffisent pour tout le post-traitement (relire un result.npz,
+# regenerer les figures, exporter la courbe).
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.6
+pillow
+tqdm
+
+# GPU : necessaire UNIQUEMENT pour lancer un calcul (filament_sim.run()).
+# Pas de roue generique, elle depend de la version de CUDA du pilote :
+#   CUDA 12.x -> pip install cupy-cuda12x
+#   CUDA 11.x -> pip install cupy-cuda11x
+# La cellule d'installation du notebook lit nvidia-smi et choisit toute seule.
