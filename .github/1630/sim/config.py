@@ -77,6 +77,18 @@ class Config:
     peak_power_W: Optional[float] = None
     w0:      float = 10e-6
     delta_t: float = 263e-15
+    # Demi-largeur de la fenetre temporelle comobile, en unites de tp (largeur
+    # 1/e du pulse), donc tmax = tmax_factor * tp et la fenetre totale = 2 tmax.
+    # A 5.0 (defaut historique) elle ne couvre qu'environ +/-1.1 ps pour un
+    # pulse de 263 fs -- trop court pour voir la decroissance des STE (~1 ps)
+    # ou le plateau tardif : au-dela de tmax le cube n'a simplement plus de
+    # donnees, rho_rzt/I_rzt se figent sur la derniere tranche simulee.
+    # Augmenter ce facteur (ex. 12-15) elargit la fenetre ; penser a augmenter
+    # Nt en proportion pour garder le meme pas dt (le cout par pas de z croit
+    # avec Nt log Nt, la taille du cube (z,r,t) EXPORTE n'est pas affectee
+    # tant que rho_t_stride est ajuste en consequence).
+    tmax_factor: float = 5.0
+
     # Distance (in air, µm) from the sample entrance face to where the beam
     # would focus if it kept propagating in air (i.e. what you measure/fit
     # from an air-side beam-profiler scan). If set, this OVERRIDES `begin`:

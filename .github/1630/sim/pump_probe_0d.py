@@ -50,7 +50,7 @@ class PumpProbe0D:
     lambda_probe_m: float
     pulse_fwhm_s: float
     probe_response_s: float          # largeur temporelle effective de la sonde
-    overlap_length_m: float          # L : longueur de recouvrement pompe-sonde
+    overlap_length_m: float          # L, seulement pour geometry="slab"
     material: MaterialResponse
     n2_m2W: float
     xpm_factor: float = XPM
@@ -68,6 +68,21 @@ class PumpProbe0D:
     tau_ste_s: Optional[float] = None   # None = pas de decroissance des STE
     enable_avalanche: bool = False
     tau_c_avalanche_s: Optional[float] = None
+
+    # --- geometrie de la mesure -------------------------------------------
+    # "crossed"  : geometrie de l'article. La sonde croise la pompe a
+    #              cross_angle_deg a travers un profil gaussien, les Eqs. (3)
+    #              et (4) sont integrees LE LONG DU TRAJET pour chaque r, puis
+    #              le signal est integre sur r. Il n'y a pas de L unique : la
+    #              longueur effective depend du canal, parce qu'un canal en I^K
+    #              se concentre la ou la pompe est intense.
+    # "slab"     : ancienne approximation, Delta n constant sur une longueur L.
+    geometry: str = "crossed"
+    cross_angle_deg: float = 10.0
+    pump_w_um: float = 26.0          # rayon a 1/e de l'INTENSITE (= diam/2)
+    r_max_w: float = 3.0             # integration spatiale jusqu'a r_max_w * w
+    n_r: int = 121
+    n_s: int = 401
 
     def photon_flux(self, I_Wcm2):
         """Flux de photons pompe [cm^-2 s^-1] pour une intensite en W/cm^2."""
@@ -109,6 +124,28 @@ MARTIN_SIO2 = PumpProbe0D(
 )
 
 # --- configuration de la manip : pompe 1030 nm, sonde 515 nm -----------------
+# ATTENTION GEOMETRIE : contrairement a l'article (croisement a 10 deg, quasi
+# rasant), la sonde de la manip traverse la pompe a 90 deg (incidence normale,
+# setup Nomarski/Abel classique). cross_angle_deg=90 est donc CORRECT ici, pas
+# une valeur heritee par erreur du defaut de MARTIN_SIO2.
+#
+# Mais la geometrie "crossed" de ce module (integration sur s PUIS moyenne sur
+# r, geometric_weights) modelise une mesure PONCTUELLE spatialement moyennee,
+# comme celle de l'article (leur sonde spectrale n'est pas imageante). A 90
+# deg, l'integrale sur s pour un r fixe EST exactement l'integrale de ligne de
+# vue d'une transformee d'Abel a l'abscisse x=r -- mais la manip, elle,
+# RESOUT spatialement chaque r (chaque colonne de pixels), elle ne les moyenne
+# pas en un seul nombre. La vraie comparaison a la manip doit donc passer par
+# le pipeline Abel deja spatialement resolu (figures_filament.py,
+# virtual_experiment.py, web/abel_phase_explorer.py), pas par ce modele 0D :
+# il sert a verifier les ordres de grandeur et les rapports entre canaux, pas
+# a produire une carte (z, x) comparable pixel a pixel aux mesures.
+#
+# La sonde 515 nm ci-dessous est celle de l'interferometrie Nomarski (2e
+# harmonique de la pompe). Le balayage a 490/620/690 nm (etude multi-sonde,
+# web/abel_phase_explorer.py) est une campagne separee, geree par le pipeline
+# Abel avec `probe_lmd_nm` en parametre, pas par ce modele 0D a une seule
+# longueur d'onde de sonde.
 USER_SIO2_1030 = PumpProbe0D(
     name="manip Nomarski, pompe 1030 nm / sonde 515 nm",
     lambda_pump_m=1030e-9,
@@ -121,12 +158,83 @@ USER_SIO2_1030 = PumpProbe0D(
     xpm_factor=XPM,                  # donc facteur de phase croisee explicite
     ionization="keldysh", Ui_eV=9.0, meff_keldysh_rel=0.64,
     tau_trap_s=330e-15, tau_ste_s=1e-12,
+    cross_angle_deg=90.0,            # sonde perpendiculaire a la pompe
 )
 
 
 # ================================================================================
 #  Equations de population
 # ================================================================================
+def geometric_weights(cfg: PumpProbe0D, n_bins=48):
+    """Distribution des intensites locales le long du trajet de la sonde.
+
+    La sonde croise la pompe a `cross_angle_deg`. Un rayon dont l'approche la
+    plus proche de l'axe pompe vaut r se trouve, a l'abscisse s de son trajet,
+    a la distance transverse
+
+        rho(r, s) = sqrt(r^2 + (s sin theta)^2)
+
+    donc voit l'intensite I0 exp(-(rho/w)^2). Le signal mesure est la double
+    integrale sur (r, s), ce qui revient a une somme ponderee sur les
+    intensites locales. On renvoie cette ponderation une fois pour toutes :
+    le calcul des populations ne se fait plus qu'une fois par bin.
+
+    Verification analytique : pour un canal en I^K la double integrale vaut
+    pi w^2 / (K sin theta), donc un canal en I^4 est pese QUATRE FOIS MOINS
+    qu'un canal en I^1. C'est purement geometrique, et c'est ce qui manquait.
+    """
+    th = np.deg2rad(cfg.cross_angle_deg)
+    w = cfg.pump_w_um
+    r = np.linspace(0.0, cfg.r_max_w * w, cfg.n_r)
+    s_max = cfg.r_max_w * w / max(np.sin(th), 1e-9)
+    s = np.linspace(-s_max, s_max, cfg.n_s)
+    R, S = np.meshgrid(r, s, indexing="ij")
+    rho = np.hypot(R, S * np.sin(th))
+    frac = np.exp(-(rho / w) ** 2)                    # I_local / I0
+
+    dr = r[1] - r[0]
+    ds = s[1] - s[0]
+    # poids d'aire : 2 pour les r negatifs (profil symetrique), dr ds en µm^2
+    cell = 2.0 * dr * ds * np.ones_like(frac)
+    cell[0, :] *= 0.5                                  # bord r = 0
+
+    # Bin par fraction d'intensite, mais la valeur representative de chaque bin
+    # est la moyenne de frac PONDEREE PAR L'AIRE a l'interieur du bin, pas le
+    # centre du bin. Pres de frac -> 0 l'aire diverge (Gaussienne a queue
+    # longue) et se concentre au bord bas du bin : prendre le centre du bin
+    # comme representant surestime systematiquement frac dans ce bin, donc
+    # surestime l'integrale (biais observe : ~5% en trop pour K=1, quasi nul
+    # pour K>=2 ou l'integrale est dominee par le pic, moins sensible a la queue).
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    fflat, cflat = frac.ravel(), cell.ravel()
+    idx = np.clip(np.digitize(fflat, edges) - 1, 0, n_bins - 1)
+    wts = np.bincount(idx, weights=cflat, minlength=n_bins)
+    wsum_frac = np.bincount(idx, weights=cflat * fflat, minlength=n_bins)
+    keep = wts > 0
+    means = np.zeros(n_bins)
+    means[keep] = wsum_frac[keep] / wts[keep]
+    return means[keep], wts[keep], float(2.0 * r[-1])
+
+
+def check_geometry(cfg: PumpProbe0D, verbose=True):
+    """Confronte les poids geometriques a la solution analytique pi w^2/(K sin th)."""
+    frac, wts, _ = geometric_weights(cfg)
+    th = np.deg2rad(cfg.cross_angle_deg)
+    out = {}
+    for K in (1, 2, 4, 6):
+        num = float(np.sum(wts * frac ** K))
+        ana = np.pi * cfg.pump_w_um ** 2 / (K * np.sin(th))
+        out[K] = (num, ana, num / ana)
+        if verbose:
+            print(f"  K={K} : numerique {num:9.1f} um^2   analytique {ana:9.1f}"
+                  f"   rapport {num/ana:6.3f}")
+    if verbose:
+        r14 = out[4][0] / out[1][0]
+        print(f"  -> un canal en I^4 est pese {1/r14:.2f}x moins qu'un canal en I^1"
+              f"   (attendu 4.00)")
+    return out
+
+
 def integrate_populations(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None, n_t=4001):
     """Integre les equations de population sous une pompe gaussienne.
 
@@ -180,12 +288,22 @@ def integrate_populations(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None, n_t=4001):
 # ================================================================================
 def phase_and_absorption(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
                          convolve_probe=True, linearize=False,
-                         spatial_average=None, n_r=24):
-    """Voir la version mono-intensite plus bas ; `spatial_average` = rayon
-    (en unites de w_pompe) sur lequel moyenner le signal, comme le fait
-    l'article. C'est loin d'etre neutre : le Kerr suit I alors que la densite
-    suit I^K, donc la moyenne spatiale attenue BEAUCOUP plus le canal plasma
-    que le canal Kerr. Avec K = 4 le rapport creux/pic change d'un facteur 4."""
+                         spatial_average=None, n_r=24, n_bins=48):
+    """delta_phi(tau) et A(tau), moyennes sur le volume sonde/pompe.
+
+    Par defaut (`cfg.geometry == "crossed"`), la moyenne est la vraie
+    geometrie de l'article : sonde croisant la pompe a `cfg.cross_angle_deg`,
+    Eqs. (3)-(4) integrees le long du trajet oblique pour chaque r, puis
+    moyennees sur r -- voir `geometric_weights`. Un canal en I^K y est
+    pese 1/K par rapport au Kerr (I^1), exactement, pas approximativement.
+
+    `spatial_average` (rayon, en unites de w_pompe) ou `cfg.geometry ==
+    "slab"` retombent sur l'ancienne moyenne radiale ad hoc a `L` constant --
+    gardee pour comparaison, mais ce n'est plus le defaut : elle sous-pese le
+    canal plasma d'un facteur qui n'a rien de geometrique."""
+    if cfg.geometry == "crossed" and not spatial_average:
+        return _phase_and_absorption_crossed(cfg, I_peak_Wcm2, t_fs,
+                                             convolve_probe, linearize, n_bins)
     if spatial_average:
         # moyenne ponderee par l'aire sur le profil transverse de pompe.
         # ATTENTION : seuls les CHAMPS dependant de l'intensite sont moyennes.
@@ -277,6 +395,61 @@ def _phase_and_absorption_single(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
                 features=_features(t_fs, phi))
 
 
+def _phase_and_absorption_crossed(cfg: PumpProbe0D, I_peak_Wcm2, t_fs=None,
+                                  convolve_probe=True, linearize=False,
+                                  n_bins=48):
+    """Moyenne le signal sur la vraie geometrie croisee de l'article.
+
+    `geometric_weights` decoupe le double recouvrement (r, s) en `n_bins`
+    classes de fraction d'intensite locale I_local/I0 = frac, avec un poids
+    d'aire par classe. On integre les populations UNE FOIS PAR CLASSE, a
+    l'intensite de crete locale I0*frac (pas a I0), puis on fait la moyenne
+    ponderee des dephasages/absorptions -- pas une moyenne sur un disque
+    tronque a un rayon arbitraire comme l'ancienne `spatial_average`.
+
+    Un canal en I^K y ressort automatiquement pese 1/K par rapport au Kerr,
+    parce que c'est la valeur EXACTE de l'integrale geometrique, pas une
+    approximation : voir `check_geometry`.
+    """
+    tp = cfg.pulse_fwhm_s / np.sqrt(2.0 * np.log(2.0))
+    if t_fs is None:
+        t_fs = np.linspace(-4.0 * tp * 1e15, 2500.0, 4001)
+    frac, wts, _ = geometric_weights(cfg, n_bins=n_bins)
+    wts = wts / wts.sum()
+
+    acc = None
+    for f, wt in zip(frac, wts):
+        d = _phase_and_absorption_single(cfg, float(I_peak_Wcm2) * float(f),
+                                         t_fs, convolve_probe=False,
+                                         linearize=linearize)
+        if acc is None:
+            acc = {k: np.asarray(d[k], float) * wt
+                   for k in ("phase_rad", "absorption", "N_CB", "N_tr", "I_Wcm2")}
+            acc["channels"] = {k: np.asarray(v, float) * wt
+                               for k, v in d["channels"].items()}
+            acc["t_fs"] = d["t_fs"]
+            acc["overdense"] = np.asarray(d["overdense"]).copy()
+        else:
+            for k in ("phase_rad", "absorption", "N_CB", "N_tr", "I_Wcm2"):
+                acc[k] = acc[k] + np.asarray(d[k], float) * wt
+            for k in acc["channels"]:
+                acc["channels"][k] = acc["channels"][k] + d["channels"][k] * wt
+            acc["overdense"] = acc["overdense"] | np.asarray(d["overdense"])
+
+    if convolve_probe:
+        dt = float(np.mean(np.diff(acc["t_fs"])))
+        g = np.exp(-((np.arange(-4 * tp * 1e15, 4 * tp * 1e15 + dt, dt)) / (tp * 1e15)) ** 2)
+        g /= g.sum()
+        def _c(y):
+            return np.convolve(y, g, mode="same")
+        acc["phase_rad"] = _c(acc["phase_rad"])
+        acc["absorption"] = _c(acc["absorption"])
+        acc["channels"] = {k: _c(v) for k, v in acc["channels"].items()}
+
+    acc["features"] = _features(acc["t_fs"], acc["phase_rad"])
+    return acc
+
+
 def _features(t_fs, phi):
     """Les trois reperes de la courbe : pic Kerr, creux plasma, plateau STE."""
     i_pk = int(np.argmax(phi))
@@ -339,20 +512,22 @@ def plot_delay_scan(cfg: PumpProbe0D, intensities_Wcm2, labels=None,
     return fig, out
 
 
-def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
+def reproduce_martin_fig6(save=None, spatial_average=None, verbose=True):
     """Fig. 6 de l'article : SiO2, sonde 618 nm, pompe a 3 et 4 TW/cm^2.
 
-    `spatial_average` est le rayon, en unites du waist de pompe, sur lequel le
-    signal est moyenne. L'article precise que chaque point de ses courbes
-    temporelles est une moyenne spatiale du profil de la Fig. 3, et cette
-    moyenne n'est PAS neutre sur la comparaison : le Kerr suit I, la densite
-    suit I^4, donc moyenner attenue quatre fois plus le canal plasma que le
-    canal Kerr. Sans elle le creux ressort huit fois trop profond.
+    Par defaut, la moyenne est la vraie geometrie croisee de l'article
+    (`MARTIN_SIO2.geometry == "crossed"`, voir `geometric_weights`) : la
+    sonde traverse le profil gaussien de pompe a 10 degres, integree le long
+    du trajet pour chaque r puis moyennee sur r. Un canal en I^4 (la densite)
+    y est pese exactement 4x moins qu'un canal en I^1 (le Kerr) -- ce n'est
+    plus une moyenne radiale ad hoc a rayon de coupure arbitraire.
+
+    Passer `spatial_average` (rayon en unites de w_pompe) retombe sur
+    l'ancienne moyenne radiale, gardee pour comparaison.
 
     Ce qui se compare vraiment, c'est le RAPPORT creux/pic : l'amplitude
-    absolue depend de la longueur de recouvrement effective, que l'article ne
-    donne pas (il integre le long d'un trajet incline a 10 degres a travers un
-    profil gaussien, pas sur une longueur constante).
+    absolue depend de la longueur de recouvrement effective (overlap_length_m),
+    que l'article ne donne pas.
     """
     fig, res = plot_delay_scan(MARTIN_SIO2, [3e12, 4e12], show_channels=True,
                                xlim=(-500, 2000), save=save,
@@ -360,7 +535,9 @@ def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
     published = [dict(peak=0.67, dip=-0.12, plateau=0.03),
                  dict(peak=1.00, dip=-0.90, plateau=0.15)]
     if verbose:
-        print(f"moyenne spatiale sur {spatial_average} w_pompe\n")
+        geo = f"geometrie croisee a {MARTIN_SIO2.cross_angle_deg:.0f} deg" \
+              if not spatial_average else f"moyenne spatiale sur {spatial_average} w_pompe"
+        print(f"{geo}\n")
         print(f"{'':10s} {'pic (rad)':>18s} {'creux (rad)':>18s} "
               f"{'creux/pic':>18s}")
         for d, pub, lab in zip(res, published, ("3 TW/cm2", "4 TW/cm2")):
@@ -369,28 +546,39 @@ def reproduce_martin_fig6(save=None, spatial_average=1.5, verbose=True):
                   f"{f['dip_rad']:+8.2f} /{pub['dip']:+6.2f} "
                   f"{f['dip_rad']/f['peak_rad']:+8.2f} /"
                   f"{pub['dip']/pub['peak']:+6.2f}")
+            i_dip = int(np.argmin(d["phase_rad"]))
+            mask = d["t_fs"] > d["t_fs"][i_dip]
+            tt, pp = d["t_fs"][mask], d["phase_rad"][mask]
+            cross_idx = np.where((pp[:-1] < 0) & (pp[1:] >= 0))[0]
+            tc = float(tt[cross_idx[0] + 1]) if len(cross_idx) else None
             print(f"{'':10s} N_CB max = {d['N_CB'].max():.2e} cm-3, "
                   f"N_tr max = {d['N_tr'].max():.2e} cm-3, "
                   f"A max = {d['absorption'].max():.3f}, "
-                  f"plateau = {f['plateau_rad']:+.3f} (publie {pub['plateau']:+.2f})")
+                  f"plateau = {f['plateau_rad']:+.3f} (publie {pub['plateau']:+.2f}), "
+                  f"retour au positif a {tc:.0f} fs (publie ~550 fs)"
+                  if tc is not None else "")
         print("\nCe qui marche  : la sequence des trois signes, les densites")
         print("                 (< 1e19 cm-3, la borne annoncee par l'article),")
-        print("                 et le rapport creux/pic.")
-        print("Ce qui ne marche pas : l'amplitude absolue, environ 4x trop")
-        print("                 faible -- longueur de recouvrement effective ;")
-        print("                 et le plateau STE, qui sort proche de zero au")
-        print("                 lieu d'etre franchement positif. Avec les")
-        print("                 forces d'oscillateur de la Table II, le retrait")
-        print("                 des oscillateurs de valence compense presque")
-        print("                 exactement l'apport des bandes STE.")
+        print("                 le rapport creux/pic, et le temps de retour")
+        print("                 au positif (proche de 550 fs).")
+        print("Ce qui ne marche pas encore : l'amplitude absolue, avec la")
+        print("                 geometrie croisee correcte le pic est ~7x plus")
+        print("                 faible qu'avec l'ancienne moyenne radiale ad")
+        print("                 hoc -- overlap_length_m (non donne par")
+        print("                 l'article) reste a recaler ; et le plateau STE,")
+        print("                 qui sort proche de zero au lieu d'etre")
+        print("                 franchement positif : le retrait des")
+        print("                 oscillateurs de valence (Table II) compense")
+        print("                 presque exactement l'apport des bandes STE.")
     return fig, res
 
 
 def predict_user_config(intensities_Wcm2=(1e13, 3e13, 5e13), save=None,
-                        spatial_average=1.5, verbose=True):
+                        spatial_average=None, verbose=True):
     """La meme courbe pour la manip : pompe 1030 nm, sonde 515 nm.
 
     Le taux d'ionisation vient du Keldysh du depot, pas d'un sigma_K ajuste.
+    Geometrie croisee par defaut (voir `reproduce_martin_fig6`).
     `overlap_length_m` de USER_SIO2_1030 est la corde traversee par la sonde ;
     c'est le parametre a caler sur une mesure, tout le reste est fixe.
     """

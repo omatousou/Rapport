@@ -30,7 +30,7 @@ def build_grids(cfg: Config) -> dict:
     komega, omega0 = cfg.komega, cfg.omega0
 
     tp       = cfg.delta_t / np.sqrt(2 * np.log(2))
-    tmax     = 5 * tp
+    tmax     = cfg.tmax_factor * tp
     dt       = float(tmax * 2 / cfg.Nt)
     tlist    = cp.linspace(-tmax, tmax, cfg.Nt, endpoint=False)
     ff       = cp.fft.fftfreq(cfg.Nt, d=dt)
