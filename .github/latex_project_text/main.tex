@@ -31,6 +31,13 @@
 \definecolor{accent}{RGB}{24,95,165}   % titlepage accent rule
 \definecolor{notecolor}{RGB}{180,120,0}
 
+% Long code identifiers such as enable_photoionization_loss do not fit on a
+% line and run into the margin, because \texttt has no break points. Allow a
+% break after each underscore and after each dot, without inserting a hyphen
+% that would look like part of the name.
+\renewcommand{\_}{\textunderscore\allowbreak}
+\newcommand{\dotb}{.\allowbreak}
+
 % Visible review marker for points that need a second look or a future revision.
 % Usage: \authornote{text explaining the simplification or assumption made here}
 \newcommand{\authornote}[1]{%

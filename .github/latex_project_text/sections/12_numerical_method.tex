@@ -10,7 +10,7 @@ The continuous Hankel transform cannot be evaluated on a computer, so the code u
 \begin{equation}
 Y_{mn} = \frac{2}{j_N}\,\frac{J_0(j_mj_n/j_N)}{J_1(j_m)^2}
 \end{equation}
-Multiplying a field sampled at the radii $r_m = j_m R/j_N$ by $Y$ gives its Hankel transform sampled at the spatial frequencies $\rho_m = j_m/R$, and multiplying by $Y$ a second time returns the original field, since $Y$ is its own inverse. This is what \texttt{build\_grids} constructs and what \texttt{LinearOperator.half\_linear} uses, applying $Y$ before and after the diffraction phase.
+Multiplying a field sampled at the radii $r_m = j_m R/j_N$ by $Y$ gives its Hankel transform sampled at the spatial frequencies $\rho_m = j_m/R$, and multiplying by $Y$ a second time returns the original field, since $Y$ is its own inverse. This is what \texttt{build\_grids} constructs and what \texttt{LinearOperator\dotb half\_linear} uses, applying $Y$ before and after the diffraction phase.
 
 One practical consequence of this grid is that the radial samples are not evenly spaced. They are densest near the axis and spread out toward the edge of the box, which suits a beam whose interesting structure sits near $r=0$. It also means that anything reading the radial profile afterwards has to use the same non uniform grid, which is why the Abel matrix of Section~14 is built from shell integrals over these specific radii rather than from a uniform trapezoidal sum.
 
@@ -32,7 +32,7 @@ applies the spectral mask, then transforms back. Doing it this way costs one FFT
 
 Inside the nonlinear part, the code separates two things that behave differently. The absorption coefficient $\alpha=\alpha_{ion}+\sigma_\omega N/2$, coming from photoionization loss and plasma absorption, only reduces the amplitude of $u$ without exchanging energy between frequency components, so it is applied exactly as a multiplicative factor $u \to u\,e^{-\alpha\,dz/2}$ on each side of the rest of the nonlinear step. The remaining part, that is the Kerr effect, self-steepening, the dispersive part of the plasma response and the STE polarizability, is a genuine differential equation in $z$ and is integrated with a fourth order Runge-Kutta scheme over the substep. Because the exponential factor already applies the zeroth order of the two dissipative terms, \texttt{split} adds $\alpha u$ back into the right hand side it returns, so that the two treatments do not double count the same loss.
 
-The full sequence executed by \texttt{Integrator.step} for one propagation step is therefore a half linear step, a half absorption step, the four Runge-Kutta stages, another half absorption step, and a final half linear step. A radial mask is applied at the end to damp anything reaching the edge of the box.
+The full sequence executed by \texttt{Integrator\dotb step} for one propagation step is therefore a half linear step, a half absorption step, the four Runge-Kutta stages, another half absorption step, and a final half linear step. A radial mask is applied at the end to damp anything reaching the edge of the box.
 
 \subsection{Population Rate Equations on the GPU}
 
@@ -48,7 +48,7 @@ which is what the function \texttt{exact\_exp\_step} in the CUDA kernel implemen
 
 \subsection{The Main Propagation Loop}
 
-Figure~\ref{fig:main_loop} puts the three preceding subsections together into the loop that \texttt{Integrator.propagate} runs once per $z$ step.
+Figure~\ref{fig:main_loop} puts the three preceding subsections together into the loop that \texttt{Integrator\dotb propagate} runs once per $z$ step.
 
 \begin{figure}[h!]
     \centering
@@ -67,7 +67,7 @@ Figure~\ref{fig:main_loop} puts the three preceding subsections together into th
         \node[box, below=of abs2] (lin2) {Half linear step};
         \node[box, below=of lin2] (maskr) {Radial edge mask};
         \node[dec, below=of maskr] (test) {$z < z_{\text{end}}$?};
-        \node[box, below=10mm of test] (save) {Save \texttt{result.npz}};
+        \node[box, below=10mm of test] (save) {Save \texttt{result\dotb npz}};
 
         \draw[arr] (rate) -- (lin1);
         \draw[arr] (lin1) -- (abs1);
@@ -79,7 +79,7 @@ Figure~\ref{fig:main_loop} puts the three preceding subsections together into th
         \draw[arr] (test) -- node[right] {no} (save);
         \draw[arr] (test.west) -- ++(-2.6,0) node[midway, above] {yes, $z \mathrel{+}= dz$} |- (rate.west);
     \end{tikzpicture}
-    \caption{One iteration of the main propagation loop in \texttt{Integrator.propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$, then applies the symmetric Strang sequence to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps, omitted here for clarity, and the loop repeats until $z$ reaches the end of the propagation window.}
+    \caption{One iteration of the main propagation loop in \texttt{Integrator\dotb propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$, then applies the symmetric Strang sequence to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps, omitted here for clarity, and the loop repeats until $z$ reaches the end of the propagation window.}
     \label{fig:main_loop}
 \end{figure}
 
