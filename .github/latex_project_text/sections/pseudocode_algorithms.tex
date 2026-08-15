@@ -1,0 +1,859 @@
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Proc}{Subroutine}{:}{}
+\Proc{\textsc{Sellmeier} (Fused-Silica Linear Refractive Index)}{
+    \KwIn{Vacuum wavelength $\lambda$ [m]}
+    \KwOut{Linear refractive index $n(\lambda)$}
+    \BlankLine
+    $\lambda_{\mu m} \gets \lambda \times 10^{6}$ \tcp*[r]{Convert to micrometres for tabulated coefficients}
+    $n^2\!-\!1 \gets \sum_{i=1}^{3} \dfrac{B_i\,\lambda_{\mu m}^2}{\lambda_{\mu m}^2 - L_i^2}$ \tcp*[r]{Three-term fused-silica Sellmeier sum}
+    \Return $n \gets \sqrt{1 + (n^2\!-\!1)}$ \tcp*[r]{$\{B_i\},\{L_i\}$: fused-silica constants}
+}
+\caption{Linear index of fused silica (\texttt{n\_sellmeier}).}
+\label{alg:sellmeier}
+\end{algorithm}
+
+
+
+\newpage
+
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+\Class{\textsc{Config} (Simulation Parameters \& Derived Physical Constants)}{
+    \KwData{Default attributes grouped by role: numerical grid ($\texttt{nz},\texttt{Nt},\texttt{N},\dots$); laser ($\lambda,\ \texttt{energy\_uJ},\ \texttt{w0},\ \texttt{delta\_t}$); material SiO$_2$ ($\texttt{n2},\texttt{Ui\_eV},\texttt{tau\_c},\dots$); STE channel ($\texttt{Us\_eV}$); physics switches; probe ($\texttt{lambda\_probe}$); adaptive-step controls}
+    \BlankLine
+    \Method{\textsc{PostInit} (\texttt{\_\_post\_init\_\_}): derive constants \& grid quantities}{
+        \KwOut{Instance augmented with derived physical constants and grid scalars}
+        \BlankLine
+        \textbf{1. Angular Frequencies \& Probe Optics:} \\
+        $\omega_0 \gets 2\pi c / \texttt{wavelength}$ \tcp*[r]{Pump carrier angular frequency}
+        $\omega_{pr} \gets 2\pi c / \texttt{lambda\_probe}$ \tcp*[r]{Probe angular frequency}
+        $n_{0,pr} \gets \textsc{Sellmeier}(\texttt{lambda\_probe})$ \tcp*[r]{Probe linear index}
+        $\rho_{c,pr} \gets (\varepsilon_0 m_e \omega_{pr}^2 / e^2)\times 10^{-6}$ \tcp*[r]{Probe critical plasma density [cm$^{-3}$]}
+        \BlankLine
+        \textbf{2. Pump Linear Optics (Sellmeier):} \\
+        $n_0 \gets \textsc{Sellmeier}(\texttt{wavelength})$ \tcp*[r]{Pump linear index}
+        $k_0 \gets (2\pi / \texttt{wavelength})\, n_0$ \tcp*[r]{Pump wavenumber}
+        \BlankLine
+        \textbf{3. Energy Gaps \& Effective Masses:} \\
+        $U_i \gets \texttt{Ui\_eV}\cdot e$ \tcp*[r]{Valence bandgap [J]}
+        $U_s \gets \texttt{Us\_eV}\cdot e$ \tcp*[r]{STE gap [J]}
+        $m_{eff} \gets \texttt{meff\_rel}\cdot m_e$ \tcp*[r]{Reduced effective mass (Keldysh)}
+        $m_{D} \gets \texttt{meff\_drude\_rel}\cdot m_e$ \tcp*[r]{Drude effective mass}
+        \BlankLine
+        \textbf{4. Kerr \& Raman Constants:} \\
+        $\chi^{(3)} \gets \tfrac{4}{3}\varepsilon_0 n_0^2 c\, \texttt{n2}$ \tcp*[r]{Third-order susceptibility from $n_2$}
+        $\Omega_R^2 \gets 1/\texttt{tau\_s}^2 + 1/\texttt{tau\_d}^2$ \tcp*[r]{Raman oscillator resonance frequency$^2$}
+        \BlankLine
+        \textbf{5. Longitudinal Grid:} \\
+        $\Delta z \gets (\texttt{end} - \texttt{begin}) / \texttt{nz}$ \tcp*[r]{Uniform propagation step}
+        $b \gets k_0\, \texttt{w0}^2$ \tcp*[r]{Confocal parameter (twice the Rayleigh range)}
+        \If{\texttt{dz\_init} is unset}{
+            $\texttt{dz\_init} \gets \text{min}(\Delta z, \texttt{dz\_max})$ \tcp*[r]{Initial adaptive-step ceiling}
+        }
+        \BlankLine
+        \textbf{6. Peak Intensity \& Field Amplitude:} \\
+        \eIf{\texttt{peak\_power\_W} is provided}{
+            $I_0 \gets 2\,\texttt{peak\_power\_W} / (\pi\, \texttt{w0}^2)$ \tcp*[r]{Gaussian peak intensity from peak power}
+        }{
+            $I_0 \gets 2\,\mathcal{E}_p / (\pi\, \texttt{w0}^2\, \texttt{delta\_t})$ \tcp*[r]{Pulse energy $\mathcal{E}_p = \texttt{energy\_uJ}\cdot 10^{-6}$}
+        }
+        $I_0^{\mathrm{cm}} \gets I_0 \times 10^{-4}$ \tcp*[r]{W/m$^2 \to$ W/cm$^2$ (Keldysh LUT input)}
+        $E_0 \gets \sqrt{2 I_0 / (n_0 c\, \varepsilon_0)}$ \tcp*[r]{Peak electric-field amplitude}
+        \BlankLine
+        \textbf{7. Radial Sampling Diagnostic:} \\
+        $\Delta r \gets \texttt{R\_factor}\,\texttt{w0} / (\texttt{N}-1)$ \tcp*[r]{Radial grid spacing}
+        $p_{w_0} \gets \texttt{w0} / \Delta r$ \tcp*[r]{Radial points per beam waist $w_0$}
+        \If{$p_{w_0} < 3$}{
+            \textbf{warn} ``radial under-sampling'' \tcp*[r]{QDHT accuracy compromised; raise \texttt{N}}
+        }
+        \ElseIf{$p_{w_0} < 6$}{
+            \textbf{warn} ``marginal radial sampling'' \tcp*[r]{Borderline transverse resolution}
+        }
+    }
+}
+\caption{Simulation configuration and derived constants (\texttt{Config}).}
+\label{alg:config}
+\end{algorithm}
+
+
+
+
+
+\newpage
+
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+\Class{\textsc{KeldyshSiO2} (Solid-State Keldysh Photoionization Model)}{
+    \Method{\textsc{Constructor} (\texttt{\_\_init\_\_}): store parameters \& derive constants}{
+        \KwIn{Wavelength $\lambda$; gap $\texttt{Ui\_eV}$; effective mass $m_{eff}$; linear index $n_0$; series length $\texttt{N\_sum}$}
+        \KwOut{Instance holding $\{U, m_{eff}, n_0, \omega, \hbar, \texttt{N\_sum}\}$}
+        \BlankLine
+        $U \gets \texttt{Ui\_eV}\cdot e$ \tcp*[r]{Bandgap energy [J]}
+        $\omega \gets 2\pi c / \lambda$ \tcp*[r]{Carrier angular frequency}
+        \text{Store } $m_{eff}, n_0, \hbar, \texttt{N\_sum}$ \text{ as instance attributes} \tcp*[r]{Direct parameter retention ($\hbar$: SI constant)}
+    }
+    \BlankLine
+    \Method{\textsc{Rate} (\texttt{rate}): analytical photoionization rate}{
+        \KwIn{Intensity $I$ [W/cm$^2$]}
+        \KwOut{Photoionization rate $W_{PI}(I)$ [cm$^{-3}$\,s$^{-1}$]}
+        \BlankLine
+        \textbf{1. Field \& Keldysh Parameter:} \\
+        $I_{SI} \gets I \times 10^{4}$ \tcp*[r]{W/cm$^2 \to$ W/m$^2$}
+        $E \gets \sqrt{2 I_{SI} / (n_0 c\, \varepsilon_0)}$ \tcp*[r]{Peak field driving the ionization}
+        $\gamma \gets \text{max}\!\big(\omega\sqrt{m_{eff} U}/(eE),\ 10^{-12}\big)$ \tcp*[r]{Keldysh parameter; floored to avoid $E\!\to\!0$ singularity}
+        $\gamma_1 \gets \gamma/\sqrt{1+\gamma^2}$ \tcp*[r]{Tunneling-side modulus}
+        $\gamma_2 \gets 1/\sqrt{1+\gamma^2}$ \tcp*[r]{Multiphoton-side modulus ($\gamma_1^2+\gamma_2^2=1$)}
+        \BlankLine
+        \textbf{2. Complete Elliptic Integrals (Dual Modulus):} \\
+        $K_1, E_1 \gets \text{EllipticK}(\gamma_1^2),\ \text{EllipticE}(\gamma_1^2)$ \tcp*[r]{Parameter $m=\gamma_1^2$}
+        $K_2, E_2 \gets \text{EllipticK}(\gamma_2^2),\ \text{EllipticE}(\gamma_2^2)$ \tcp*[r]{Parameter $m=\gamma_2^2$}
+        \BlankLine
+        \textbf{3. Effective Ionization Order:} \\
+        $x \gets 2 U E_2 / (\pi \gamma_1 \hbar \omega)$ \tcp*[r]{Effective bandgap in dressed-photon units (MPI order)}
+        \BlankLine
+        \textbf{4. Dawson Series (Keldysh $Q$-function):} \\
+        \For{$n \gets 0$ \KwTo $\texttt{N\_sum}-1$}{
+            $a_n \gets \pi\sqrt{\big(2\lfloor x+1\rfloor - 2x + n\big)/(2 K_2 E_2)}$ \tcp*[r]{Argument of the $n$-th quasi-energy channel}
+            $s_n \gets \exp\!\big(-\pi n (K_1-E_1)/E_2\big)\cdot \text{Dawson}(a_n)$ \tcp*[r]{Channel weight $\times$ Dawson integral}
+        }
+        $\Sigma \gets \sum_{n=0}^{\texttt{N\_sum}-1} s_n$ \tcp*[r]{Sum over ionization channels}
+        $Q \gets \sqrt{\pi/(2 K_2)}\,\Sigma$ \tcp*[r]{Keldysh $Q$-function}
+        \BlankLine
+        \textbf{5. Rate Assembly:} \\
+        $\text{pref} \gets \dfrac{2\omega}{9\pi}\Big(\dfrac{\omega m_{eff}}{\hbar \gamma_1}\Big)^{3/2}$ \tcp*[r]{Keldysh prefactor [m$^{-3}$\,s$^{-1}$]}
+        $W_{PI} \gets \text{pref}\cdot Q \cdot \exp\!\big(-\pi\lfloor x+1\rfloor (K_1-E_1)/E_2\big)\times 10^{-6}$ \tcp*[r]{Exponential MPI/tunnel factor; $\times10^{-6}$: m$^{-3}\!\to$cm$^{-3}$}
+        \BlankLine
+        \Return $W_{PI}$
+    }
+}
+\caption{Solid-state Keldysh photoionization model (\texttt{KeldyshSiO2}).}
+\label{alg:keldysh_class}
+\end{algorithm}
+
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{InterpolatePIRate} (Log-Linear LUT Lookup of $W_{PI}$)}{
+    \KwIn{Intensity $I$; rate table $T$ of size $N$; log-grid origin $\log I_{min}$; inverse log-step $\Delta_{\log}^{-1}$; bounds $I_{min}, I_{max}$}
+    \KwOut{Interpolated photoionization rate $W_{PI}(I)$}
+    \BlankLine
+    \textbf{1. Sanitization \& Clamping:} \\
+    \If{$\neg\,\text{isfinite}(I) \lor I < 0$}{$I \gets 0$ \tcp*[r]{Reject NaN/Inf/negative intensity}}
+    $I \gets \text{Clip}(I, I_{min}, I_{max})$ \tcp*[r]{Restrict to tabulated range}
+    \BlankLine
+    \textbf{2. Fractional Table Index:} \\
+    $f_{idx} \gets (\log_{10} I - \log I_{min})\,\Delta_{\log}^{-1}$ \tcp*[r]{Map onto uniform log-intensity grid}
+    $idx \gets \text{Clip}(\lfloor f_{idx}\rfloor,\ 0,\ N-2)$ \tcp*[r]{Keep $idx{+}1$ valid for interpolation}
+    \BlankLine
+    \textbf{3. Log-Linear Interpolation:} \\
+    $W_{PI} \gets T[idx] + (f_{idx} - idx)\,(T[idx{+}1] - T[idx])$ \tcp*[r]{Linear blend between adjacent samples}
+    \BlankLine
+    \textbf{4. Output Sanitization:} \\
+    \If{$\neg\,\text{isfinite}(W_{PI}) \lor W_{PI} < 0$}{\Return $0$ \tcp*[r]{Guard against invalid rate}}
+    \Return $W_{PI}$
+}
+\BlankLine
+    \textbf{3. Output Sanitization:} \\
+    \If{$\neg\,\text{isfinite}(x_{new}) \lor x_{new} < 0$}{\Return $0$ \tcp*[r]{Enforce physical non-negativity}}
+    \Return $x_{new}$
+
+\caption{Exact exponential integrator for $dx/dt=S+Lx$, i.e. $x(\Delta t)=x_0 e^{L\Delta t}+S\Delta t\,\varphi_1(L\Delta t)$ with $\varphi_1(z)=(e^z-1)/z$, Taylor fallback for small $|z|$ (\texttt{exact\_exp\_step}).}
+
+\label{alg:interp}
+\end{algorithm}
+
+
+\newpage
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{ExactExpStep} (Exact Exponential Integrator for $\dot{x}=S+Lx$)}{
+    \KwIn{Population $x$; source $S$; linear coefficient $L$; time step $\Delta t$}
+    \KwOut{Updated population $x_{new}$}
+    \BlankLine
+    \textbf{1. Exponential $\varphi_1$ Function:} \\
+    $L_\Delta \gets L\,\Delta t$ \tcp*[r]{Dimensionless linear exponent}
+    \eIf{$|L_\Delta| > 10^{-6}$}{
+        $\varphi_1 \gets (e^{L_\Delta} - 1)/L_\Delta$ \tcp*[r]{Exact $\varphi_1(z)=(e^z-1)/z$}
+    }{
+        $\varphi_1 \gets 1 + L_\Delta\big(\tfrac12 + L_\Delta(\tfrac16 + L_\Delta/24)\big)$ \tcp*[r]{Taylor fallback, avoids $0/0$ at small $|L_\Delta|$}
+    }
+    \BlankLine
+    \textbf{2. Exact Update:} \\
+    $x_{new} \gets e^{L_\Delta}\,x + S\,\Delta t\,\varphi_1$ \tcp*[r]{Closed-form solution over $\Delta t$}
+    \BlankLine
+    \If{$\neg\,\text{isfinite}(x_{new}) \lor x_{new} < 0$}{\Return $0$ \tcp*[r]{Enforce physical non-negativity}}
+    \Return $x_{new}$
+}
+\caption{Exact exponential integrator for $dx/dt=S+Lx$, i.e. $x(\Delta t)=x_0 e^{L\Delta t}+S\Delta t\,\varphi_1(L\Delta t)$ with $\varphi_1(z)=(e^z-1)/z$ (Taylor for small $|z|$).}
+\label{alg:exact_exp}
+\end{algorithm}
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{SolveRateEquationKernel} (Part 1/2: CUDA Setup \& $t=0$ Initialization)}{
+    \KwIn{Field envelope $\mathcal{E}$; density arrays $n_e, n_s$; grid sizes $N_r, N_t$; step $\Delta t$; field-to-intensity factor $\kappa$; avalanche coefficients $\beta_g, \beta_s$; neutral density $n_a$; recombination rate $\tau_r^{-1}$; STE flag $E_{ste}$; PI tables $T_g$ (CB), $T_s$ (STE) with shared log-grid parameters}
+    \KwOut{Per-thread registers initialized at $t=0$; time-stepping loop launched}
+    \BlankLine
+    \textbf{1. Thread Mapping (one thread $\to$ one radial point):} \\
+    $r_i \gets \text{blockDim.x}\cdot\text{blockIdx.x} + \text{threadIdx.x}$ \tcp*[r]{Global radial index}
+    \If{$r_i \ge N_r$}{\Return \tcp*[r]{Early exit for out-of-bound threads}}
+    $base \gets r_i \cdot N_t$ \tcp*[r]{Row offset into flattened $(r,t)$ arrays}
+    \BlankLine
+    \textbf{2. Initial Densities at $t=0$:} \\
+    $n_e \gets n_e[base]$,\quad $n_s \gets n_s[base]$ \tcp*[r]{Load into local registers}
+    \If{$\neg\,\text{isfinite}(n_e) \lor n_e < 0$}{$n_e \gets 0$}
+    \If{$\neg\,\text{isfinite}(n_s) \lor n_s < 0$}{$n_s \gets 0$ \tcp*[r]{Sanitize seed densities}}
+    \BlankLine
+    \textbf{3. Initial Intensity \& PI Rates:} \\
+    $\mathbf{f}_0 \gets \mathcal{E}[base]$ \tcp*[r]{Complex field envelope at $t=0$}
+    $I_c \gets (f_{0,x}^2 + f_{0,y}^2)\,\kappa$ \tcp*[r]{Intensity $=|\mathcal{E}|^2\kappa$}
+    $W_c \gets \textsc{InterpolatePIRate}(I_c, T_g, \dots)$ \tcp*[r]{CB photoionization rate}
+    \eIf{$E_{ste} \neq 0$}{
+        $W_c^{s} \gets \textsc{InterpolatePIRate}(I_c, T_s, \dots)$ \tcp*[r]{STE photoionization rate}
+    }{
+        $W_c^{s} \gets 0$ \tcp*[r]{STE channel disabled}
+    }
+    \BlankLine
+    \textbf{4. Time-Stepping Loop:} \\
+    \For{$j \gets 0$ \KwTo $N_t - 2$}{
+        \text{Execute } \textsc{TimeStepCore} \text{ (Algorithm~\ref{alg:rate_kernel_2})} \tcp*[r]{Sequential march over temporal grid}
+    }
+    \BlankLine
+    \textbf{5. Next-Step Field, Intensity \& PI Rates:} \\
+    $\mathbf{f}_1 \gets \mathcal{E}[base + j + 1]$ \tcp*[r]{Envelope at step $j{+}1$}
+    $I_n \gets (f_{1,x}^2 + f_{1,y}^2)\,\kappa$ \tcp*[r]{Next-step intensity}
+    $W_n \gets \textsc{InterpolatePIRate}(I_n, T_g, \dots)$ \tcp*[r]{CB photoionization rate}
+    \eIf{$E_{ste} \neq 0$}{
+        $W_n^{s} \gets \textsc{InterpolatePIRate}(I_n, T_s, \dots)$ \tcp*[r]{STE photoionization rate}
+    }{
+        $W_n^{s} \gets 0$ \tcp*[r]{STE channel disabled}
+    }
+    \BlankLine
+}
+\caption{Two-population plasma rate-equation solver (Part 1/2): thread mapping, validation, $t=0$ initialization (\texttt{solve\_rate\_equation\_kernel}).}
+\label{alg:rate_kernel_1}
+\end{algorithm}
+
+\newpage
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{TimeStepCore} (Part 2/2: Trapezoidal Step $j \to j{+}1$)}{
+    \KwIn{Thread registers $base, n_e, n_s, I_c, W_c, W_c^{s}$; step index $j$}
+    \KwOut{Global memory at $base+j+1$ written; registers advanced}
+    \BlankLine
+    \textbf{1. Trapezoidal Averaging over $[j, j{+}1]$:} \\
+    $I_{avg} \gets \tfrac12(I_c + I_n)$ \tcp*[r]{Mean intensity}
+    $W_{avg} \gets \tfrac12(W_c + W_n)$ \tcp*[r]{Mean CB PI rate}
+    $W_{avg}^{s} \gets \tfrac12(W_c^{s} + W_n^{s})$ \tcp*[r]{Mean STE PI rate}
+    \BlankLine
+    \textbf{2. Valence-Band Depletion Factor:} \\
+    $D \gets 1 - n_e/n_a$ \tcp*[r]{Fraction of neutrals still available}
+    \If{$D < 0$}{$D \gets 0$ \tcp*[r]{Clamp to lower bound}}
+    \If{$D > 1$}{$D \gets 1$ \tcp*[r]{Clamp to upper bound}}
+    \BlankLine
+    \textbf{3. ODE Coefficients — Free-Electron Channel $n_e$:} \\
+    $S_e \gets W_{avg}\,D$ \tcp*[r]{Valence photoionization source}
+    \If{$E_{ste} \neq 0$}{
+        $S_e \gets S_e + (W_{avg}^{s} + \beta_s I_{avg} n_e)\,(n_s/n_a)$ \tcp*[r]{STE$\to$CB re-ionization: photo + avalanche}
+    }
+    $L_e \gets \beta_g I_{avg} D - \tau_r^{-1}$ \tcp*[r]{Avalanche gain minus trapping loss}
+    \BlankLine
+    \textbf{4. ODE Coefficients — STE Channel $n_s$:} \\
+    \eIf{$E_{ste} \neq 0$}{
+        $S_s \gets \tau_r^{-1} n_e$ \tcp*[r]{Gain from free-electron trapping}
+        $L_s \gets -(W_{avg}^{s} + \beta_s I_{avg} n_e)/n_a$ \tcp*[r]{Loss by STE re-ionization (photo + avalanche)}
+    }{
+        $S_s \gets 0$ \tcp*[r]{No STE source if disabled}
+        $L_s \gets 0$ \tcp*[r]{No STE loss if disabled}
+    }
+    \BlankLine
+    \textbf{5. Exact Exponential Integration:} \\
+    $n_e^{new} \gets \textsc{ExactExpStep}(n_e, S_e, L_e, \Delta t)$ \tcp*[r]{Advance free electrons}
+    \eIf{$E_{ste} \neq 0$}{
+        $n_s^{new} \gets \textsc{ExactExpStep}(n_s, S_s, L_s, \Delta t)$ \tcp*[r]{Advance STEs}
+    }{
+        $n_s^{new} \gets 0$ \tcp*[r]{Force zero STE density}
+    }
+    \BlankLine
+    \textbf{6. Density Conservation Constraint:} \\
+    \If{$n_e^{new} + n_s^{new} > n_a$}{
+        $\text{scale} \gets n_a / (n_e^{new} + n_s^{new})$ \tcp*[r]{Rescaling factor}
+        $n_e^{new} \gets n_e^{new} \times \text{scale}$ \tcp*[r]{Rescale electron density}
+        $n_s^{new} \gets n_s^{new} \times \text{scale}$ \tcp*[r]{Rescale STE density}
+    }
+    \BlankLine
+    \textbf{7. Commit \& Register Update:} \\
+    $n_e[base + j + 1] \gets n_e^{new}$ \tcp*[r]{Write electrons to global memory}
+    $n_s[base + j + 1] \gets n_s^{new}$ \tcp*[r]{Write STEs to global memory}
+    $n_e \gets n_e^{new}$ \tcp*[r]{Update local $n_e$ register}
+    $n_s \gets n_s^{new}$ \tcp*[r]{Update local $n_s$ register}
+    $I_c \gets I_n$ \tcp*[r]{Update local intensity register}
+    $W_c \gets W_n$,\ $W_c^{s} \gets W_n^{s}$ \tcp*[r]{Update local rate registers}
+}
+\caption{Two-population plasma rate-equation solver (Part 2/2): sequential trapezoidal time-stepping per radial point.}
+\label{alg:rate_kernel_2}
+\end{algorithm}
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{BuildGrids} (Part 1/2: Grids \& Propagation Operators)}{
+    \KwIn{Configuration \texttt{cfg}, providing pump wavenumber $k_0\ (\texttt{komega})$, carrier $\omega_0$, and laser/material/grid parameters}
+    \KwOut{Intermediate grids and operators (assembled into \texttt{g} in Part~\ref{alg:build_grids_2})}
+    \BlankLine
+    \textbf{1. Temporal \& Spectral Grids:} \\
+    $T_p \gets \texttt{cfg.delta\_t}/\sqrt{2\ln 2}$ \tcp*[r]{Intensity FWHM $\to$ field $1/e$ half-width}
+    $t_{max} \gets 5\,T_p$ \tcp*[r]{Window long enough for the pulse to vanish}
+    $\Delta t \gets 2 t_{max}/\texttt{cfg.Nt}$ \tcp*[r]{Uniform time step}
+    $t_{list} \gets \text{Linspace}(-t_{max}, t_{max}, \texttt{cfg.Nt};\ \text{endpoint}{=}\text{false})$ \tcp*[r]{Periodic time axis for FFT}
+    $f_{list} \gets \text{FFTfreq}(\texttt{cfg.Nt}, \Delta t)$ \tcp*[r]{Frequency axis}
+    \BlankLine
+    \textbf{2. Radial Grid (Quasi-Discrete Hankel Transform):} \\
+    $\{j_m\}_{m=1}^{N} \gets \text{Zeros of Bessel } J_0$ \tcp*[r]{QDHT support points ($j_N$: last zero)}
+    $R \gets \texttt{cfg.R\_factor}\cdot\texttt{cfg.w0}$ \tcp*[r]{Spatial box radius}
+    $Y_{mn} \gets \dfrac{2}{j_N}\,\dfrac{J_0(j_m j_n / j_N)}{J_1(j_m)^2}$ \tcp*[r]{QDHT transform matrix (symmetric, self-inverse)}
+    $r_m \gets j_m R / j_N$ \tcp*[r]{Radial coordinates ($r>0$)}
+    $\rho_m \gets j_m / R$ \tcp*[r]{Transverse spatial frequencies $k_\perp$}
+    \BlankLine
+    \textbf{3. Linear Dispersion Operator (Exact Sellmeier):} \\
+    $\omega_{safe} \gets \text{Clip}\big(\omega_0 + 2\pi f_{list},\ \tfrac{2\pi c}{5\,\mu m},\ \tfrac{2\pi c}{0.18\,\mu m}\big)$ \tcp*[r]{Restrict to $[0.18, 5]\,\mu$m; avoid Sellmeier poles}
+    $n(\omega) \gets \sqrt{1 + \sum_i B_i\lambda^2/(\lambda^2 - L_i^2)}$ \tcp*[r]{Exact Sellmeier index, $\lambda=2\pi c/\omega_{safe}$}
+    $k(\omega) \gets \omega\, n(\omega)/c$ \tcp*[r]{Wavenumber}
+    $k_1 \gets \dfrac{k(\omega_0{+}\delta\omega) - k(\omega_0{-}\delta\omega)}{2\,\delta\omega},\quad \delta\omega = \omega_0/1000$ \tcp*[r]{Inverse group velocity via central difference}
+    $\Delta k(\omega) \gets k(\omega) - k_0 - k_1\,\Omega,\quad \Omega = 2\pi f_{list}$ \tcp*[r]{Residual dispersion in co-moving frame}
+    \BlankLine
+    \textbf{4. Nonlinear Operators (Self-Steepening \& Raman):} \\
+    $\hat{T} \gets 1 + f_{list}/f_0$ \tcp*[r]{Self-steepening operator ($f_0=\texttt{cfg.frequency}$)}
+    $R(t) \gets \Theta(t)\,\Omega_R^2\,\tau_s\, e^{-t/\tau_d}\sin(t/\tau_s)$ \tcp*[r]{Causal Raman response (Heaviside $\Theta$, $t>0$)}
+    $R_f \gets \text{FFT}\big(\text{IFFTShift}(R(t))\big)\,\Delta t$ \tcp*[r]{Raman response in spectral domain}
+    \BlankLine
+    \textbf{5. 2D Space-Time Meshgrids:} \\
+    $(tt, rr) \gets \text{Meshgrid}(t_{list}, r_{list})$ \tcp*[r]{$(r,t)$ grids for pointwise operators}
+    $(\cdot, \rho\rho) \gets \text{Meshgrid}(t_{list}, \rho_{list})$ \tcp*[r]{Transverse-frequency grid}
+}
+\caption{Grid and operator construction (Part 1/2): temporal/radial grids, dispersion, nonlinear operators (\texttt{build\_grids}).}
+\label{alg:build_grids_1}
+\end{algorithm}
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+\Fn{\textsc{BuildGrids} (Part 2/2: Plasma Constants, Absorber, Keldysh LUTs)}{
+    \KwIn{\texttt{cfg} and Part~\ref{alg:build_grids_1} outputs ($rr$, $R$, $k_0$, $\omega_0$)}
+    \KwOut{Dictionary \texttt{g} of precomputed grids, operators, plasma constants, and photoionization LUTs}
+    \BlankLine
+    \textbf{1. Drude Plasma Constant \& Gated Coefficients:} \\
+    $\sigma \gets \dfrac{k_0 e^2 \tau_c}{n_0^2 m_{D}\,\varepsilon_0\,\omega_0\,(1 + \omega_0^2\tau_c^2)}\times 10^{4}$ \tcp*[r]{Inverse Bremsstrahlung cross-section; $\times10^4$: m$^2\!\to$cm$^2$ ($m_D=\texttt{cfg.meff\_drude}$)}
+    \eIf{\texttt{cfg.enable\_avalanche}}{
+        $\beta_g \gets \sigma / U_i$ \tcp*[r]{Valence avalanche coefficient}
+    }{
+        $\beta_g \gets 0$ \tcp*[r]{Avalanche disabled}
+    }
+    \eIf{\texttt{cfg.enable\_ste} $\wedge$ \texttt{cfg.enable\_avalanche}}{
+        $\beta_s \gets \sigma / U_s$ \tcp*[r]{STE re-ionization coefficient}
+    }{
+        $\beta_s \gets 0$ \tcp*[r]{STE avalanche disabled}
+    }
+    \eIf{\texttt{cfg.enable\_recombination}}{
+        $\tau_r^{-1} \gets 1/\tau_r$ \tcp*[r]{Trapping/recombination rate}
+    }{
+        $\tau_r^{-1} \gets 0$ \tcp*[r]{Recombination disabled}
+    }
+    $\kappa \gets \tfrac12 n_0 c\,\varepsilon_0 \times 10^{-4}$ \tcp*[r]{Field-to-intensity factor ($|\mathcal{E}|^2\!\to$W/cm$^2$)}
+    \BlankLine
+    \textbf{2. Boundary Absorber:} \\
+    $\text{mask}_r \gets \exp\!\big(-(rr/0.9R)^{20}\big)$ \tcp*[r]{Super-Gaussian radial absorber}
+    \BlankLine
+    \textbf{3. Keldysh Photoionization LUTs (Dual Channel):} \\
+    $I_{cpu} \gets \text{Log-spaced intensity grid } [1,\ \sim\!10^{17}]\ \text{W/cm}^2$ \tcp*[r]{Spline sampling nodes}
+    \ForEach{gap $(U, \text{LUT}) \in \{(U_i, \text{LUT}_g),\ (U_s, \text{LUT}_s)\}$}{
+        $W(I) \gets \text{max}\big(\text{NaNtoNum}(\textsc{KeldyshRate}(\lambda, U, m_{eff}, n_0;\, I_{cpu})),\ 0\big)$ \tcp*[r]{Evaluate \& sanitize analytical rate}
+        $f_{spline} \gets \text{PCHIP}(I_{cpu}, W)$ \tcp*[r]{Monotone continuous interpolant}
+        $\log I \gets \text{Linspace}(\log_{10} I_{min}, \log_{10} I_{max}, 4096)$ \tcp*[r]{Uniform log-intensity LUT grid}
+        $\text{LUT} \gets \text{NaNtoNum}\big(|f_{spline}(10^{\log I})|\big)$ \tcp*[r]{Sample onto GPU LUT array}
+    }
+    \BlankLine
+    \textbf{4. Return Grid Dictionary:} \\
+    \Return \texttt{g} $\gets \{t_{list}, r_{list}, Y, \Delta k, k_1, \hat{T}, R_f, rr, tt, \rho\rho, \sigma, \beta_g, \beta_s, \tau_r^{-1}, \kappa, \text{mask}_r, \text{LUT}_g, \text{LUT}_s, \dots\}$ \tcp*[r]{Precomputed state ($+$ LUT params $\log I_{min}, \Delta_{\log}^{-1}, I_{min}, I_{max}$)}
+}
+\caption{Grid and operator construction (Part 2/2): plasma constants, boundary absorber, dual Keldysh LUTs (\texttt{build\_grids}).}
+\label{alg:build_grids_2}
+\end{algorithm}
+
+\newpage
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+
+\Fn{\textsc{EnvelopeGaussianFocused} (Initial Gaussian Envelope)}{
+    \KwIn{Radial grid $r$, temporal grid $t$, configuration \texttt{cfg}, precalculated parameters dictionary \texttt{g}}
+    \KwOut{Complex spatiotemporal electric field envelope array $E(r, t)$}
+    
+    \BlankLine
+    \textbf{1. Beam Parameters Definition:} \\
+    \BlankLine
+    $T_p \gets \texttt{cfg.delta\_t} / \sqrt{2\ln(2)}$
+        \tcp*[r]{Conversion between Intensity FWHM and E-field 1/e half-width}
+    $C \gets 1 + i \frac{2 \cdot \texttt{cfg.begin}}{\texttt{g["b"]}}$
+        \tcp*[r]{Complex beam curvature factor at initial propagation distance}
+        
+    \BlankLine
+    \textbf{2. Field Construction:} \\
+    \BlankLine
+    $E(r,t) \gets \frac{\texttt{g["E0"]}}{C} \exp\left(-\frac{r^2}{\texttt{cfg.w0}^2 C}\right) \exp\left(-\frac{t^2}{T_p^2}\right)$
+        \tcp*[r]{Gaussian transverse profile and temporal envelope coupling}
+        
+    \Return $E(r,t)$ \tcp*[r]{Initialized spatiotemporal envelope}
+}
+
+\caption{Focused Gaussian Beam Initializer (\texttt{envelope\_gaussian\_focused})}
+\label{alg:envelope_gaussian_focused}
+\end{algorithm}
+
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+
+\Class{\textsc{LinearOperator} (Linear Propagation Steps)}{
+    \BlankLine
+    \Method{\textsc{Constructor} (\texttt{\_\_init\_\_}): Operator Initialization}{
+        \KwIn{Configuration object \texttt{cfg}, precalculated parameters dictionary \texttt{g}}
+        
+        \BlankLine
+        Store base grids and arrays $k(\omega)$, $Y$, $j_{1, \text{last}}$, $R$, $\rho$, $\Delta k$ as instance attributes \tcp*[r]{Model grids and operators caching}
+        
+        $R_k \gets R^2 / j_{1, \text{last}}$
+            \tcp*[r]{Forward QDHT normalization factor}
+        $R_k^{-1} \gets j_{1, \text{last}} / R^2$
+            \tcp*[r]{Inverse QDHT normalization factor}
+    }
+    
+    \BlankLine
+    \Method{\textsc{HalfDiffraction} (\texttt{half\_diffraction}): Transverse Spatial Propagation}{
+        \KwIn{Complex field envelope $u(r,t)$, propagation step $\Delta z$}
+        \KwOut{Diffracted field envelope $u(r,t)$}
+        
+        \BlankLine
+        \textbf{1. Forward Hankel Transform:} \\
+        $\tilde{u}(\rho, t) \gets R_k \cdot (Y \cdot u)$
+            \tcp*[r]{Transform to radial spatial frequency domain (QDHT)}
+        
+        \BlankLine
+        \textbf{2. Diffraction Phase Shift:} \\
+        $\tilde{u}(\rho, t) \gets \tilde{u}(\rho, t) \cdot \exp\left(-i \frac{\rho^2}{2 k(\omega)} \frac{\Delta z}{2}\right)$
+            \tcp*[r]{Apply paraxial half-step diffraction operator}
+        
+        \BlankLine
+        \textbf{3. Inverse Hankel Transform:} \\
+        $u(r, t) \gets R_k^{-1} \cdot (Y \cdot \tilde{u})$
+            \tcp*[r]{Return to spatial domain}
+        
+        \Return $u(r, t)$
+    }
+    
+    \BlankLine
+    \Method{\textsc{HalfDispersion} (\texttt{half\_dispersion}): Longitudinal Temporal Propagation}{
+        \KwIn{Complex field envelope $u(r,t)$, propagation step $\Delta z$}
+        \KwOut{Dispersed field envelope $u(r,t)$}
+        
+        \BlankLine
+        \textbf{1. Forward Fourier Transform:} \\
+        $\tilde{u}(r, \omega) \gets \text{FFT}(u)$
+            \tcp*[r]{Transform to spectral domain along temporal axis}
+        
+        \BlankLine
+        \textbf{2. Dispersion Phase Shift:} \\
+        $\tilde{u}(r, \omega) \gets \tilde{u}(r, \omega) \cdot \exp\left(i \Delta k \frac{\Delta z}{2}\right)$
+            \tcp*[r]{Apply chromatic dispersion half-step operator}
+        
+        \BlankLine
+        \textbf{3. Inverse Fourier Transform:} \\
+        $u(r, t) \gets \text{iFFT}(\tilde{u})$
+            \tcp*[r]{Return to time domain}
+        
+        \Return $u(r, t)$
+    }
+}
+
+\caption{Linear Propagation Operators (\texttt{LinearOperator})}
+\label{alg:linear_operator}
+\end{algorithm}
+
+
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+
+\Class{\textsc{NonlinearOperator} (Part 1/2: Setup \& Matter Dynamics)}{
+    \BlankLine
+    \Method{\textsc{Constructor} (\texttt{\_\_init\_\_}): Operator Initialization}{
+        \KwIn{Configuration object \texttt{cfg}, precalculated parameters dictionary \texttt{g}}
+        
+        \BlankLine
+        Store scalar constants $n_0, U_i, f_R$, grids $\hat{T}, \tilde{R}_f$ and Keldysh LUTs as instance attributes \tcp*[r]{Model grids and physical parameters caching}
+        
+        \BlankLine
+        \textbf{1. Nonlinear Optical Coefficients:} \\
+        \eIf{\texttt{cfg.enable\_kerr} $\neq 0$}{
+            $\kappa_{\text{Kerr}} \gets \frac{3 \cdot \texttt{cfg.chi3} \cdot \texttt{cfg.omega0}^2}{8 \cdot k(\omega) \cdot c^2}$
+                \tcp*[r]{Derive Kerr self-focusing nonlinear coefficient}
+        }{
+            $\kappa_{\text{Kerr}} \gets 0.0$
+                \tcp*[r]{Kerr effect computationally disabled}
+        }
+        
+        \BlankLine
+        \textbf{2. Drude Plasma Coefficients:} \\
+        $\kappa_{\text{pl}} \gets \frac{\sigma(\omega)}{2} \cdot 100.0$
+            \tcp*[r]{Inverse Bremsstrahlung absorption prefactor}
+        $C_{\text{pl}} \gets 1 + i \cdot \texttt{cfg.omega0} \cdot \texttt{cfg.tau\_c}$
+            \tcp*[r]{Complex Drude model plasma phase and absorption factor}
+    }
+    
+    \BlankLine
+    \Method{\textsc{UpdatePlasma} (\texttt{update\_plasma}): Electron Density Integration}{
+        \KwIn{Field envelope $u$, densities $\rho, \rho_s$, time step $\Delta t$}
+        \KwOut{Updated plasma densities $\rho, \rho_s$ (in-place modification)}
+        
+        \BlankLine
+        \textbf{1. Boundary Conditions:} \\
+        $\rho(t=t_0) \gets 0$
+            \tcp*[r]{Initial free electron density at the front of the pulse}
+        $\rho_s(t=t_0) \gets 0$
+            \tcp*[r]{Initial Self-Trapped Exciton density at the front of the pulse}
+        
+        \BlankLine
+        \textbf{2. Rate Equation Integration:} \\
+        \textsc{SolvePlasmaRateEquations}($u, \rho, \rho_s, \Delta t, \text{LUTs}$)
+            \tcp*[r]{Abstract CUDA kernel evaluating MPI, avalanche and STE dynamics}
+            
+        \Return \tcp*[r]{Densities are updated directly in device memory}
+    }
+}
+
+\caption{Nonlinear Operator: Initialization \& Plasma Rate Equations}
+\label{alg:nonlinear_operator_setup}
+\end{algorithm}
+
+\newpage
+
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+
+\Class{\textsc{NonlinearOperator} (Part 2/2: Field Evolution RHS)}{
+    \BlankLine
+    \Method{\textsc{NonlinearRHS} (\texttt{split}): Evaluate Source Terms}{
+        \KwIn{Complex field envelope $u(r,t)$, free electron density $\rho(r,t)$}
+        \KwOut{Tuple containing RHS derivative $\partial_z u$ and absorption map $\alpha$}
+        
+        \BlankLine
+        \textbf{1. Photoionization and Absorption:} \\
+        $I(r,t) \gets |u|^2$
+            \tcp*[r]{Calculate instantaneous spatiotemporal intensity profile}
+        $W_{\text{PI}} \gets \text{EvaluateSpline}(I \cdot E_{\text{ref}}^{-2})$
+            \tcp*[r]{Calculate photoionization rate from Keldysh lookup table}
+        $D \gets \text{Clip}\left(1 - \frac{\rho}{\rho_{\text{max}}}, 0, 1\right)$
+            \tcp*[r]{Calculate bounded valence band neutral depletion factor}
+        
+        $\alpha_{\text{PI}} \gets \left( W_{\text{PI}} \cdot 10^6 \right) \frac{U_i}{n_0 c \varepsilon_0 (I + 10^{-30})} \cdot D$
+            \tcp*[r]{Derive nonlinear multiphoton absorption coefficient}
+        $\alpha_{\text{total}} \gets \text{Max}(\kappa_{\text{pl}} \rho + \alpha_{\text{PI}}, 0)$
+            \tcp*[r]{Combine plasma heating and MPI spatial absorption profile}
+        
+        \BlankLine
+        \textbf{2. Kerr and Raman Delayed Response:} \\
+        $I_{\text{Kerr}} \gets (1 - f_R) \cdot I + f_R \cdot \Re\left\{\text{iFFT}(\text{FFT}(I) \cdot \tilde{R}_f)\right\}$
+            \tcp*[r]{Convolve intensity with delayed Raman molecular response}
+        
+        \BlankLine
+        \textbf{3. Field Evolution (RHS):} \\
+        $\tilde{N}_{\omega} \gets \text{FFT}\left(i \kappa_{\text{Kerr}} I_{\text{Kerr}} u - \alpha_{\text{PI}} u\right)$
+            \tcp*[r]{Compute nonlinear polarization source term in spectral domain}
+        $\text{RHS} \gets \text{iFFT}(\tilde{N}_{\omega} \cdot \hat{T}) + \alpha_{\text{PI}} u - \kappa_{\text{pl}} (C_{\text{pl}} - 1) \rho u$
+            \tcp*[r]{Apply self-steepening operator and Drude plasma defocusing}
+        
+        \BlankLine
+        \textbf{4. Vacuum Noise Suppression:} \\
+        \ForEach{grid point where $I < 10^{-30}$}{
+            $\text{RHS} \gets 0 + 0i$
+                \tcp*[r]{Force strict zero derivative in vanishing field regions}
+        }
+        
+        \Return $\{\text{RHS}, \alpha_{\text{total}}\}$
+            \tcp*[r]{Provide nonlinear derivative and combined diagnostic absorption}
+    }
+}
+
+\caption{Nonlinear Operator: Spatiotemporal Nonlinear Source Terms}
+\label{alg:nonlinear_operator_rhs}
+\end{algorithm}
+
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+
+\Class{\textsc{Integrator} (Part 1/2: Setup \& Main Loop)}{
+    \BlankLine
+    \Method{\textsc{Constructor} (\texttt{\_\_init\_\_}): Engine Initialization}{
+        \KwIn{Configuration object \texttt{cfg}, Envelope definition \texttt{envelope}}
+        
+        \BlankLine
+        \textbf{1. Physical Grids \& Operators:} \\
+        $g \gets \textsc{BuildGrids}(\texttt{cfg})$
+            \tcp*[r]{Generate spatial, temporal and spectral discretized grids}
+        $\Delta z, \Delta t \gets \texttt{cfg.dz}, g[\text{"dt"}]$
+            \tcp*[r]{Extract longitudinal and temporal integration steps}
+        $\hat{L} \gets \textsc{LinearOperator}(\texttt{cfg}, g)$
+            \tcp*[r]{Instantiate diffraction and dispersion solver}
+        $\hat{N} \gets \textsc{NonlinearOperator}(\texttt{cfg}, g)$
+            \tcp*[r]{Instantiate nonlinear polarization and plasma solver}
+        
+        \BlankLine
+        \textbf{2. Fields \& Energy Initialization:} \\
+        $u(r,t) \gets \textsc{EnvelopeInitializer}(r, t, \texttt{cfg}, g)$
+            \tcp*[r]{Evaluate complex spatiotemporal initial envelope}
+        $\rho(r,t), \rho_s(r,t) \gets 0, 0$
+            \tcp*[r]{Initialize free electron and STE densities to zero}
+        $F_0(r) \gets \sum_t |u(r,t)|^2 \cdot E_{\text{ref}}^{-2} \cdot \Delta t \cdot 10^4$
+            \tcp*[r]{Integrate initial temporal intensity to get radial fluence}
+        $U_0 \gets \sum_r F_0(r) \cdot 2\pi r \Delta r \cdot 10^6$
+            \tcp*[r]{Integrate radial fluence for total initial pulse energy ($\mu$J)}
+            
+        \BlankLine
+        \textbf{3. Diagnostics History Arrays Allocation:} \\
+        $N_{\text{save}} \gets \text{Floor}(\texttt{cfg.nz} / \texttt{cfg.save\_stride}) + 1$
+            \tcp*[r]{Number of longitudinal checkpoints}
+        Allocate memory for $F(z, r), \rho_{\text{max}}(z, r), I_{\text{peak}}(z), E_{\text{dissipated}}(z)$
+            \tcp*[r]{Initialize history arrays for macroscopic observables}
+        
+        \If{\texttt{cfg.rho\_t\_stride} $> 0$}{
+            Allocate subsampled arrays $\rho(z, r, t_{\text{sub}}), I(z, r, t_{\text{sub}})$
+                \tcp*[r]{Initialize history arrays for spatio-temporal dynamics}
+        }
+    }
+    
+    \BlankLine
+    \Method{\textsc{Propagate} (\texttt{propagate}): Main Evolution Loop}{
+        \KwIn{Configuration object \texttt{cfg}}
+        \KwOut{Dictionary of simulated physical diagnostics}
+        
+        \BlankLine
+        \ForEach{step index $i \in \{0, \dots, \texttt{cfg.nz}\}$}{
+            \BlankLine
+            \textbf{1. Matter Dynamics Integration:} \\
+            $\hat{N}.\textsc{UpdatePlasma}(u, \rho, \rho_s, \Delta t)$
+                \tcp*[r]{Integrate electron density temporally at current $z$}
+            
+            \BlankLine
+            \textbf{2. Optical Field Propagation:} \\
+            \textsc{PropagationStep}($\Delta z$)
+                \tcp*[r]{Advance optical envelope spatially by $\Delta z$}
+                
+            $z \gets \texttt{cfg.begin} + i \cdot \Delta z$
+                \tcp*[r]{Update physical propagation distance}
+                
+            \BlankLine
+            \textbf{3. Diagnostics Checkpoint:} \\
+            \If{$i \bmod \texttt{cfg.save\_stride} == 0$}{
+                \textsc{RecordState}($z$)
+                    \tcp*[r]{Sample fluences, peak values, and densities}
+            }
+        }
+        
+        \Return \textsc{FormatResults}()
+            \tcp*[r]{Post-process fields and unfold symmetries for export}
+    }
+}
+
+\caption{Split-Step Fourier Integrator: Initialization \& Main Loop}
+\label{alg:integrator_main}
+\end{algorithm}
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Class}{Class}{:}{}
+\SetKwProg{Method}{Method}{:}{}
+
+\Class{\textsc{Integrator} (Part 2/2: Stepping Engine \& Diagnostics)}{
+    \BlankLine
+    \Method{\textsc{PropagationStep} (\texttt{step}): Single Z-Step Advance}{
+        \KwIn{Current field $u(r,t)$, plasma density $\rho(r,t)$, spatial step size $\Delta z$}
+        \KwOut{Updated field $u(r,t)$ evaluated at $z + \Delta z$ (in-place)}
+        
+        \BlankLine
+        \textbf{1. Linear Pre-Compensation:} \\
+        $u \gets \hat{L}.\textsc{HalfDiffraction}(u, \Delta z)$
+            \tcp*[r]{Apply half-step paraxial diffraction (QDHT domain)}
+        $u \gets \hat{L}.\textsc{HalfDispersion}(u, \Delta z)$
+            \tcp*[r]{Apply half-step chromatic dispersion (FFT domain)}
+            
+        \BlankLine
+        \textbf{2. Nonlinear Source Runge-Kutta 4 Integration:} \\
+        $\_, \alpha \gets \hat{N}.\textsc{NonlinearRHS}(u, \rho)$
+            \tcp*[r]{Evaluate initial nonlinear multiphoton and plasma absorption}
+        $u \gets u \cdot \exp\left(-\frac{\Delta z}{2} \alpha\right)$
+            \tcp*[r]{Apply pre-RK4 symmetric absorption half-step}
+            
+        $k_1, \_ \gets \hat{N}.\textsc{NonlinearRHS}(u, \rho)$
+            \tcp*[r]{RK4 Stage 1: Initial field derivative}
+        $k_2, \_ \gets \hat{N}.\textsc{NonlinearRHS}(u + \frac{\Delta z}{2} k_1, \rho)$
+            \tcp*[r]{RK4 Stage 2: Midpoint derivative prediction}
+        $k_3, \_ \gets \hat{N}.\textsc{NonlinearRHS}(u + \frac{\Delta z}{2} k_2, \rho)$
+            \tcp*[r]{RK4 Stage 3: Midpoint derivative correction}
+        $k_4, \_ \gets \hat{N}.\textsc{NonlinearRHS}(u + \Delta z \cdot k_3, \rho)$
+            \tcp*[r]{RK4 Stage 4: Endpoint derivative}
+            
+        $u \gets u + \frac{\Delta z}{6} (k_1 + 2k_2 + 2k_3 + k_4)$
+            \tcp*[r]{Advance complex field using weighted nonlinear source terms}
+            
+        $\_, \alpha \gets \hat{N}.\textsc{NonlinearRHS}(u, \rho)$
+            \tcp*[r]{Evaluate final nonlinear absorption after RK4 update}
+        $u \gets u \cdot \exp\left(-\frac{\Delta z}{2} \alpha\right)$
+            \tcp*[r]{Apply post-RK4 symmetric absorption half-step}
+            
+        \BlankLine
+        \textbf{3. Linear Post-Compensation:} \\
+        $u \gets \hat{L}.\textsc{HalfDispersion}(u, \Delta z)$
+            \tcp*[r]{Apply half-step chromatic dispersion}
+        $u \gets \hat{L}.\textsc{HalfDiffraction}(u, \Delta z)$
+            \tcp*[r]{Apply half-step paraxial diffraction}
+        $u \gets u \cdot \text{mask}_r$
+            \tcp*[r]{Apply absorbing boundary condition at radial edge}
+    }
+    
+    \BlankLine
+    \Method{\textsc{RecordState} (\texttt{\_record}): Observables Sampling}{
+        \KwIn{Current longitudinal position $z$}
+        
+        \BlankLine
+        $I(r,t) \gets |u(r,t)|^2 \cdot E_{\text{ref}}^{-2}$
+            \tcp*[r]{Convert internal complex field to physical intensity}
+        
+        \BlankLine
+        \textbf{1. Macroscopic Peak \& Integrated Observables:} \\
+        $F_{\text{history}}(z_k, r) \gets \sum_t I(r,t) \cdot \Delta t$
+            \tcp*[r]{Calculate and store temporal fluence profile}
+        $\rho_{\text{history}}(z_k, r) \gets \max_t \rho(r,t)$
+            \tcp*[r]{Extract and store peak free electron density}
+        $I_{\text{max}}(z_k) \gets \max_{r,t} I(r,t)$
+            \tcp*[r]{Extract absolute maximum intensity on grid}
+            
+        \BlankLine
+        \textbf{2. Spatio-temporal Sampling:} \\
+        \If{\texttt{cfg.rho\_t\_stride} $> 0$}{
+            $t_{\text{sub}} \gets t[\text{every } \texttt{stride} \text{ steps}]$
+                \tcp*[r]{Extract decimated temporal grid indices}
+            $\rho_{\text{history\_3D}}(z_k, r, t_{\text{sub}}) \gets \rho(r, t_{\text{sub}})$
+                \tcp*[r]{Store time-resolved plasma density profile}
+            $I_{\text{history\_3D}}(z_k, r, t_{\text{sub}}) \gets I(r, t_{\text{sub}})$
+                \tcp*[r]{Store time-resolved intensity profile}
+        }
+        
+        $k \gets k + 1$ \tcp*[r]{Increment global checkpoint index}
+    }
+    
+    \BlankLine
+    \Method{\textsc{FormatResults} (\texttt{\_results}): Data Symmetrization}{
+        \KwIn{History arrays populated during propagation}
+        \KwOut{Structured dictionary \texttt{out} of physical fields}
+        
+        \BlankLine
+        $E_{\text{total}}(z) \gets E_{\text{plasma}}(z) + E_{\text{MPI}}(z)$
+            \tcp*[r]{Sum dissipated energy from plasma heating and ionization}
+            
+        $r_{\text{sym}} \gets \text{Concatenate}(-r[::-1], r)$
+            \tcp*[r]{Unfold strictly positive radial grid into full diametral cross-section}
+        $F_{\text{sym}}(r_{\text{sym}}, z) \gets \text{Concatenate}(F_{\text{history}}[::-1], F_{\text{history}})$
+            \tcp*[r]{Mirror fluence arrays along the optical axis ($r=0$)}
+            
+        \Return \texttt{out} $\gets \{r_{\text{sym}}, z, F_{\text{sym}}, \rho_{\text{sym}}, I_{\text{max}}, E_{\text{total}}, \dots\}$
+            \tcp*[r]{Export dictionary ready for post-processing}
+    }
+}
+
+\caption{Split-Step Fourier Integrator: Core Stepping \& Diagnostics}
+\label{alg:integrator_stepping}
+\end{algorithm}
+
+
+\newpage
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetKwProg{Fn}{Function}{:}{}
+
+\Fn{\textsc{RunSimulation} (\texttt{run}): Simulation Entry Point}{
+    \KwIn{Laser parameters ($\lambda, w_0, \Delta t, E_{\mu\text{J}}$), material properties ($n_2, U_i$), numerical grid sizes ($N_z, N_r, N_t$), and integration boundaries ($z_{\text{begin}}, z_{\text{end}}$)}
+    \KwOut{Dictionary of simulated macroscopic physical observables}
+    
+    \BlankLine
+    \textbf{1. State Configuration:} \\
+    $\texttt{cfg} \gets \textsc{Config}(N_z, N_t, N_r, \lambda, E_{\mu\text{J}}, w_0, \Delta t, z_{\text{begin}}, z_{\text{end}}, n_2, U_i, \dots)$ \\
+    \tcp*[r]{Aggregate physical and numerical properties into global state}
+        
+    \BlankLine
+    \textbf{2. Engine Instantiation \& Execution:} \\
+    $\text{solver} \gets \textsc{Integrator}(\texttt{cfg}, \texttt{envelope})$ \\
+    \tcp*[r]{Initialize physical grids and split-step Fourier propagator}
+        
+    $\text{results} \gets \text{solver}.\textsc{Propagate}()$ \\
+    \tcp*[r]{Execute spatial propagation and aggregate diagnostics}
+        
+    \Return \text{results} \\
+    \tcp*[r]{Return full history of converged fields}
+}
+
+\caption{Global Simulation Orchestrator (\texttt{run})}
+\label{alg:run}
+\end{algorithm}
+
+\newpage

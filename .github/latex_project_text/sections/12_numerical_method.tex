@@ -1,0 +1,86 @@
+\section{Numerical Method}
+
+The propagation equation of Section~11 mixes a transverse diffraction term, a temporal dispersion term, and a nonlinear term that depends on the local field at every point in space and time. No single numerical scheme handles all three cheaply. The code therefore treats each mechanism with the tool best suited to it, and recombines them at every propagation step through operator splitting. This section explains the three pieces in turn, namely the radial basis used for diffraction, the time stepping scheme that combines them, and the population equations that have to be solved alongside the field.
+
+\subsection{Quasi Discrete Hankel Transform for the Radial Coordinate}
+
+The beam has cylindrical symmetry, so the transverse Laplacian $\nabla_\perp^2$ acting on a field that depends only on $r$ reduces to $\frac{1}{r}\frac{\partial}{\partial r}\big(r\frac{\partial}{\partial r}\big)$. The natural basis for this operator is not the Fourier basis but the Hankel transform of order zero, because a diffracting wave with cylindrical symmetry is a superposition of Bessel functions $J_0(\rho r)$ rather than complex exponentials. In this basis diffraction becomes a multiplication by a phase factor, in the same way that dispersion becomes a multiplication in the temporal Fourier domain.
+
+The continuous Hankel transform cannot be evaluated on a computer, so the code uses the quasi discrete Hankel transform of Guizar-Sicairos and Gutierrez-Vega. The idea is to sample the field not on a uniform radial grid, but at the zeros $j_1, j_2, \dots, j_N$ of the Bessel function $J_0$. On this particular grid the forward and inverse Hankel transforms both collapse to the same linear transformation, represented by a single symmetric matrix $Y$:
+\begin{equation}
+Y_{mn} = \frac{2}{j_N}\,\frac{J_0(j_mj_n/j_N)}{J_1(j_m)^2}
+\end{equation}
+Multiplying a field sampled at the radii $r_m = j_m R/j_N$ by $Y$ gives its Hankel transform sampled at the spatial frequencies $\rho_m = j_m/R$, and multiplying by $Y$ a second time returns the original field, since $Y$ is its own inverse. This is what \texttt{build\_grids} constructs and what \texttt{LinearOperator.half\_linear} uses, applying $Y$ before and after the diffraction phase.
+
+One practical consequence of this grid is that the radial samples are not evenly spaced. They are densest near the axis and spread out toward the edge of the box, which suits a beam whose interesting structure sits near $r=0$. It also means that anything reading the radial profile afterwards has to use the same non uniform grid, which is why the Abel matrix of Section~14 is built from shell integrals over these specific radii rather than from a uniform trapezoidal sum.
+
+\subsection{Strang Splitting of the Propagation Step}
+
+The full propagation equation can be written schematically as $\partial_z u = (\mathcal{L}+\mathcal{N})u$, where $\mathcal{L}$ groups the linear operators, diffraction and dispersion, and $\mathcal{N}$ groups the nonlinear terms. Solving $\mathcal{L}$ alone and $\mathcal{N}$ alone are both cheap, since diffraction and dispersion are diagonal in the Hankel and Fourier bases and the nonlinear term is diagonal in real space. Solving $\mathcal{L}+\mathcal{N}$ together is not.
+
+Strang splitting exploits this by approximating the exact evolution operator with a symmetric product:
+\begin{equation}
+e^{(\mathcal{L}+\mathcal{N})dz} \approx e^{\mathcal{L}\,dz/2}\,e^{\mathcal{N}\,dz}\,e^{\mathcal{L}\,dz/2}
+\end{equation}
+The operators do not commute, so this product differs from the exact evolution, but the error is third order in $dz$ per step instead of second order for the naive product $e^{\mathcal{L}dz}e^{\mathcal{N}dz}$.
+
+The linear half step applies diffraction and dispersion together in a single operation rather than one after the other. This is exact and not an extra approximation, because once the field is expressed in the combined basis of Hankel radial modes and temporal frequencies $\Omega$, both operators are diagonal and therefore commute. Concretely, \texttt{half\_linear} multiplies by the QDHT matrix, takes the FFT along time, multiplies by the single combined phase
+\begin{equation}
+\exp\!\left[i\left(\hat{D}(\Omega) - \frac{\rho^2}{2k_0}\hat{U}^{-1}(\Omega)\right)\frac{dz}{2}\right],
+\end{equation}
+applies the spectral mask, then transforms back. Doing it this way costs one FFT and inverse FFT pair per call instead of the two pairs a separate frequency resolved diffraction step would need on top of the dispersion step.
+
+Inside the nonlinear part, the code separates two things that behave differently. The absorption coefficient $\alpha=\alpha_{ion}+\sigma_\omega N/2$, coming from photoionization loss and plasma absorption, only reduces the amplitude of $u$ without exchanging energy between frequency components, so it is applied exactly as a multiplicative factor $u \to u\,e^{-\alpha\,dz/2}$ on each side of the rest of the nonlinear step. The remaining part, that is the Kerr effect, self-steepening, the dispersive part of the plasma response and the STE polarizability, is a genuine differential equation in $z$ and is integrated with a fourth order Runge-Kutta scheme over the substep. Because the exponential factor already applies the zeroth order of the two dissipative terms, \texttt{split} adds $\alpha u$ back into the right hand side it returns, so that the two treatments do not double count the same loss.
+
+The full sequence executed by \texttt{Integrator.step} for one propagation step is therefore a half linear step, a half absorption step, the four Runge-Kutta stages, another half absorption step, and a final half linear step. A radial mask is applied at the end to damp anything reaching the edge of the box.
+
+\subsection{Population Rate Equations on the GPU}
+
+The rate equations of Section~11.2 are solved separately from the field envelope, by marching along the temporal axis at fixed radius, once before every propagation step. The equations for $N$ and $N_{STE}$ are stiff, since the photoionization and avalanche rates can change by orders of magnitude within a single time sample, so a plain explicit Euler step would need an impractically small $\Delta t$. The code avoids this by treating the coupled pair as a locally linear system over each time interval $[t_j,t_{j+1}]$,
+\begin{equation}
+\frac{dx}{dt} = S + Lx
+\end{equation}
+with the source $S$ and the rate $L$ evaluated from the trapezoidal average of the intensity dependent rates at $t_j$ and $t_{j+1}$. This linear equation has a closed form solution,
+\begin{equation}
+x(t_j+\Delta t) = x(t_j)\,e^{L\Delta t} + S\,\Delta t\,\varphi_1(L\Delta t), \qquad \varphi_1(z) = \frac{e^z-1}{z}
+\end{equation}
+which is what the function \texttt{exact\_exp\_step} in the CUDA kernel implements, with a Taylor expansion of $\varphi_1$ when $L\Delta t$ is close to zero to avoid dividing zero by zero. This is an exact integrator for the frozen coefficient problem, so it does not accumulate truncation error from the time stepping itself. The only error comes from assuming $S$ and $L$ are constant over each short interval, which is a much better approximation than freezing the whole nonlinear right hand side of a generic ordinary differential equation.
+
+\subsection{The Main Propagation Loop}
+
+Figure~\ref{fig:main_loop} puts the three preceding subsections together into the loop that \texttt{Integrator.propagate} runs once per $z$ step.
+
+\begin{figure}[h!]
+    \centering
+    \begin{tikzpicture}[
+        node distance=7mm and 14mm,
+        box/.style={draw, thick, rounded corners, align=center, minimum width=4.8cm, minimum height=9mm, fill=blue!4},
+        deco/.style={draw, thick, rounded corners, align=center, minimum width=4.8cm, minimum height=9mm, fill=yellow!12},
+        dec/.style={draw, thick, diamond, aspect=2.4, align=center, minimum width=3.4cm, inner sep=1pt},
+        arr/.style={-stealth, thick}
+    ]
+        \node[box] (rate) {Update $N$, $N_{STE}$\\ \footnotesize CUDA rate kernel, one thread per radius};
+        \node[box, below=of rate] (lin1) {Half linear step\\ \footnotesize QDHT and FFT, diffraction $+$ dispersion};
+        \node[deco, below=of lin1] (abs1) {Absorption half-step\\ \footnotesize exact exponential};
+        \node[box, below=of abs1] (rk4) {RK4 nonlinear substep\\ \footnotesize Kerr, self-steepening, plasma, STE};
+        \node[deco, below=of rk4] (abs2) {Absorption half-step};
+        \node[box, below=of abs2] (lin2) {Half linear step};
+        \node[box, below=of lin2] (maskr) {Radial edge mask};
+        \node[dec, below=of maskr] (test) {$z < z_{\text{end}}$?};
+        \node[box, below=10mm of test] (save) {Save \texttt{result.npz}};
+
+        \draw[arr] (rate) -- (lin1);
+        \draw[arr] (lin1) -- (abs1);
+        \draw[arr] (abs1) -- (rk4);
+        \draw[arr] (rk4) -- (abs2);
+        \draw[arr] (abs2) -- (lin2);
+        \draw[arr] (lin2) -- (maskr);
+        \draw[arr] (maskr) -- (test);
+        \draw[arr] (test) -- node[right] {no} (save);
+        \draw[arr] (test.west) -- ++(-2.6,0) node[midway, above] {yes, $z \mathrel{+}= dz$} |- (rate.west);
+    \end{tikzpicture}
+    \caption{One iteration of the main propagation loop in \texttt{Integrator.propagate}. Every $z$ step first advances the carrier populations along the full time axis at fixed $r$, then applies the symmetric Strang sequence to the field envelope. Diagnostics are recorded every \texttt{save\_stride} steps, omitted here for clarity, and the loop repeats until $z$ reaches the end of the propagation window.}
+    \label{fig:main_loop}
+\end{figure}
+
+Note the order of the two blocks at the top. The populations are updated first, using the field from the end of the previous step, and the field is then propagated using those populations held fixed. This is itself a splitting between the field and the carriers, on top of the Strang splitting inside the field update, and it is accurate as long as $dz$ is small enough that neither changes much over one step.
