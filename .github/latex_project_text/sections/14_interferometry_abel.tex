@@ -343,7 +343,21 @@ That last panel needs one word of caution. The density maps are the real densiti
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.85\linewidth]{fig10_dephasage.png}
-    \caption{Predicted probe phase shift $\delta\varphi(\tau)$ at $490\ \text{nm}$ at the nonlinear focus, decomposed into its three channels (cross-Kerr, Drude plasma, bound STE) and their sum, convolved with a $26\ \text{fs}$ probe pulse. The sequence reproduces the qualitative structure reported by Mouskeftaras et al.~\cite{mouskeftaras2012} for single-pulse pump-probe interferometry in $\mathrm{SiO}_2$: an initial positive Kerr phase synchronous with the pump, an abrupt swing to negative as free carriers appear, and a delayed recovery to a positive plateau as trapping converts $N$ into $N_{STE}$. The comparable magnitude of the Kerr and plasma contributions here, rather than Kerr dominating as in that reference, is expected given the different regime: this trace is taken at the filamentation clamping intensity, where $n_2I\approx N/(2\rho_c)$ by construction (Section~8.1), whereas the cited measurement was made well below threshold.}
-    \label{fig:fig10_dephasage}
+    \includegraphics[width=\linewidth]{fig_probe_maps.png}
+    \caption{What the diagnostic page shows for the $4\ \mu$J run at one probe delay. Top, the phase map $\delta\varphi(z,x)$ after the forward Abel transform and the numerical aperture filter, with the three $\Delta n$ channels summed. Middle, the same phase read along the axis. Bottom, the transmittance over the same plane, obtained from the imaginary part of the same permittivity. The phase is negative before the nonlinear focus, where free electrons dominate, and turns strongly positive around $z\simeq190\ \mu$m where the Kerr and trapped exciton contributions take over. The transmittance dips only along the thin channel where the electron density is high, which is the absorption counterpart of the negative phase region above it.}
+    \label{fig:probe_maps}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{fig_probe_densities.png}
+    \caption{Free electron density (top) and self-trapped exciton density (bottom) in the meridian plane at the same delay as Figure~\ref{fig:probe_maps}, on a logarithmic scale. These are the densities the solver computed, not line of sight integrals, so they are not directly measurable. They are shown because they explain the phase maps above. The electron channel is narrow and stops around $z\simeq210\ \mu$m where the pulse has been depleted, while the trapped population extends over the same region and survives after the electrons have gone, which is what produces the positive phase at late delays.}
+    \label{fig:probe_densities}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{fig_dephasage_vs_z.png}
+    \caption{On-axis probe phase shift as a function of time, at five planes along the propagation. Each curve shows the same three stage sequence, a positive peak while the pump is present, a swing to negative once free electrons appear, then a slow recovery toward zero as trapping and decay drain the population. The five peaks are staggered in time because the pump needs about $1.7\ \text{ps}$ to cross the $350\ \mu$m box, so a plane further along is reached later. This staggering is the reason the time origin has to be stated explicitly, as discussed above. The peak is largest near $z=174\ \mu$m, close to the nonlinear focus, and the negative excursion is deepest at the entrance plane where the electron density builds up without the compensating Kerr contribution of the focus.}
+    \label{fig:dephasage_vs_z}
 \end{figure}
