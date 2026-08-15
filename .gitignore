@@ -8,6 +8,8 @@
 *.synctex.gz
 *.bbl
 *.blg
+# Compiled report: regenerate with `pdflatex main.tex` in .github/latex_project_text
+.github/latex_project_text/main.pdf
 
 # Python bytecode cache
 __pycache__/
