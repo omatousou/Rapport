@@ -6,8 +6,10 @@ from scipy.constants import elementary_charge as q_e
 lam, n2, n0 = 1030e-9, 2.74e-20, 1.4498   # n0 from Sellmeier, refined below
 tau_c, meff_drude_rel, E_tr_eV = 1.7e-15, 1.0, 4.2
 
-import sys; sys.path.insert(0, "/home/user/Rapport/.github/marche très bien/sim")
-sys.path.insert(0, "/tmp/claude-0/-home-user-Rapport/faca0213-b3bc-5328-a268-d0ed76b3a490/scratchpad/verif/stub")
+# keldysh.py is pure numpy/scipy, so this needs neither cupy nor a GPU.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent / "sim"))
 from keldysh import n_sellmeier
 n0 = float(n_sellmeier(lam))
 
@@ -40,6 +42,10 @@ f_ste = w0f**2/(w_tr**2 - w0f**2)                    # grids.py:135
 ste_code = (w0f/c)*f_ste/(2.0*n0*rho_c_pump)         # grids.py:136
 print("STE       rho_c(pump) = %.4e cm^-3   f_STE = %.6f" % (rho_c_pump, f_ste))
 print("          ste_pref(code)          = %.6e" % ste_code)
-print("          w0/(2 n0 rho_c) f_STE   = %.6e   <-- what the docstring says" % (w0f*f_ste/(2*n0*rho_c_pump)))
-print("          ratio code/docstring    = %.6e  = 1/c ? %.6e" % (ste_code/(w0f*f_ste/(2*n0*rho_c_pump)), 1/c))
+# The docstring of run_filament.py used to drop the c and read
+# w0/(2 n0 rho_c), which is not even dimensionally homogeneous. Kept here as a
+# regression check: the ratio below must stay 1/c, and the docstring must
+# carry the c.
+print("          same, with c dropped    = %.6e   <-- the old wrong form" % (w0f*f_ste/(2*n0*rho_c_pump)))
+print("          ratio                   = %.6e  = 1/c ? %.6e" % (ste_code/(w0f*f_ste/(2*n0*rho_c_pump)), 1/c))
 print("          dn_STE at rho_s=1e20    = %+.3e" % (f_ste*1e20/(2*n0*rho_c_pump)))

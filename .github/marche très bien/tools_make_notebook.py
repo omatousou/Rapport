@@ -103,6 +103,7 @@ def find_repo(explicit=None):
         roots.append(p.parent if p.name == "sim" else p)
     here = Path.cwd().resolve()
     for base in (here, *here.parents):
+        roots.append(base)                       # the folder we are sitting in
         for name in ("marche tres bien", "marche tr\u00e8s bien"):
             roots += [base / name, base / ".github" / name]
     for root in roots:
