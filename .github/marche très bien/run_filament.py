@@ -40,11 +40,21 @@ signature of `simulate()` can be read side by side.
                                                             enable_photoionization_loss
              - (sigma_w / 2) N u                            enable_plasma_absorption
              - i (sigma_w w0 tau_c / 2) N u                 enable_plasma_defocusing
-             + i (w0 / 2 n0 rho_c) f_STE N_STE u            enable_ste_index
+             + i (w0 / 2 n0 c rho_c) f_STE N_STE u          enable_ste_index
 
   T^ = 1 + (i/w0) d/dt                 enable_self_steepening   (T^ = 1 when off)
   U^ = 1 + (i k'/k0) d/dt              enable_space_time_focusing (U^ = 1 when off)
-  D^ = k(w) - k0 - k' Omega            exact Sellmeier, never truncated
+  D^ = k(w) - k0 - k' Omega            Sellmeier, no Taylor truncation
+  f_STE = w0^2 / (w_tr^2 - w0^2)       Lorentz factor at the STE level w_tr
+  rho_c = eps0 m_e w0^2 / q^2          critical density at the pump, bare mass
+
+Note on U^. In half_linear the factor U^-1 multiplies the diffraction term
+only, not D^, which is why D^ picks up a U^ once U^ is moved to the left. That
+is the standard form: diffraction goes as 1/k(w) and dispersion does not.
+
+Note on the Kerr prefactor. 3 w0^2 chi3 / 8 k0 c^2 with chi3 = (4/3) eps0 n0^2
+c n2 is algebraically equal to (w0/c) n2 I / |u|^2, so the Kerr term is
+i (w0/c) n2 I u, the same k_vac * dn form as the STE term above.
 
 Carrier populations, solved on the GPU before every propagation step
 (sim/kernels.py). These are NOT gated by the flags above: switching off a
@@ -57,11 +67,75 @@ field term stops it acting on the beam, it does not stop carriers being made.
 
   dN_STE/dt = N / tau_r                                     enable_ste
             - (W_STE + beta_s I N) N_STE/N_at               enable_ste
-            - N_STE / tau_ste                               tau_ste is not None
+            - N_STE / tau_ste                               enable_ste and tau_ste
 
 W_PI is the Keldysh rate at the band gap Ui, W_STE the same formula evaluated
 at the shallower self-trapped exciton gap Us. Both are tabulated once before
 propagation and read by interpolation inside the CUDA kernel.
+
+beta_g = sigma_w / Ui and beta_s = sigma_w / Us are the avalanche coefficients
+for the valence band and for the trapped excitons. Both are zeroed by
+enable_avalanche, so switching avalanche off also removes the beta_s I N part
+of the STE re-ionization, leaving only its W_STE part.
+
+
+WHAT THE EQUATIONS ABOVE LEAVE OUT
+==================================
+Four things the solver does that are not in the equations. They are all
+deliberate, but none of them can be found by reading the equations alone.
+
+1. A radial absorbing boundary. Every z step ends with u multiplied by
+   exp(-(r / 0.9R)^20), built in grids.py as mask_r and applied at the end of
+   Integrator.step. It keeps light that reaches the edge of the box from
+   wrapping around through the Hankel transform. It also removes energy, so a
+   run whose beam gets close to R does not conserve energy for a physical
+   reason.
+
+2. A joint saturation clamp on the populations. If N + N_STE exceeds N_at at
+   any time step, the CUDA kernel scales both down so that they sum to N_at.
+   Neither rate equation contains this, and it becomes active exactly in the
+   strongly ionized regime one usually cares about.
+
+3. The spectral mask is not a separate factor. It is folded into T^ and into
+   U^-1, so the Kerr term carries it squared while the ionization term carries
+   it once. More importantly, when enable_self_steepening is off T^ becomes a
+   plain 1 with no mask at all, and likewise for U^-1 when space time focusing
+   is off. Turning those two flags off therefore also removes the spectral
+   filter from the nonlinear step, even with enable_spectral_filter left on.
+   The linear step keeps its own mask either way.
+
+4. D^ is exact only inside the Sellmeier window. It is built from a frequency
+   axis clipped to lambda in [0.18, 5] um, so outside that band it is frozen at
+   the edge value rather than extrapolated. The spectral mask has normally
+   killed the field there already.
+
+
+HOW TO CHECK ANY OF THIS YOURSELF
+=================================
+The equations above were re-derived from the code, not copied from comments.
+The derivation is short enough to repeat, and worth repeating after any change.
+
+Start from Integrator.step. Over one z step the field is multiplied by
+exp(-alpha dz/2), integrated by RK4 on split(), multiplied by exp(-alpha dz/2)
+again, and passed through half_linear twice. The two exponentials contribute
+-alpha u to du/dz and split() ends with a + alpha * u that cancels them, so the
+whole nonlinear contribution to du/dz is exactly
+
+    ifft(NL_freq * inv_U_nl)
+
+and nothing else. Read NL_freq in split() as the equation, read alpha as a
+numerical device for applying the stiff part exponentially, and the field
+equation falls out directly. Then multiply through by U to compare with the
+form written above.
+
+For the linear part, read the phase built in half_linear, remember that rho^2
+in the Hankel basis is minus the transverse Laplacian, and do the same.
+
+For prefactors, do not read them, recompute them. Each one should reduce to a
+textbook expression: the Kerr prefactor to (w0/c) n2 I / |u|^2, sigma_w to the
+Drude cross section, ste_pref to k_vac times the Lorentz index change. A
+prefactor that does not reduce to something recognizable is the first place to
+look for a transcription error.
 
 To change what the solver integrates rather than only which terms are on, see
 MODIFYING_THE_EQUATIONS.md next to this file. It maps every term above to the

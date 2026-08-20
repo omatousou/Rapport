@@ -42,7 +42,7 @@ The equation, with the flag that switches each line off.
                                                                 enable_photoionization_loss
                  - (sigma_w / 2) N u                            enable_plasma_absorption
                  - i (sigma_w w0 tau_c / 2) N u                 enable_plasma_defocusing
-                 + i (w0 / 2 n0 rho_c) f_STE N_STE u            enable_ste_index
+                 + i (w0 / 2 n0 c rho_c) f_STE N_STE u          enable_ste_index
 
 | Term | Computed in | Prefactor built in | Flag |
 |---|---|---|---|
@@ -143,7 +143,9 @@ in `S`. Putting a term in the wrong one is not a small error, it changes the
 stiffness handling.
 
 The flags do not appear in the kernel. They are folded into the coefficients
-back in `grids.py:124-127`: `enable_avalanche` off simply makes `beta_g` zero,
+back in `grids.py:124-127`: `enable_avalanche` off makes both `beta_g` and
+`beta_s` zero, so it also removes the `beta_s I N` half of the STE
+re-ionization,
 `enable_recombination` off makes `inv_tau_r` zero. This is why the kernel has
 no branches for them.
 
@@ -153,6 +155,40 @@ but the kernel keeps making electrons at the same Keldysh rate. That is
 deliberate, it is what lets you ask "what does this loss channel do to the
 beam" separately from "how many electrons are there". It also means an ablation
 study never conserves energy, by construction.
+
+
+## 4b. Four things the solver does that are in no equation
+
+These are deliberate, but you will not find them by reading the equations, and
+two of them change the physics rather than only the numerics.
+
+**Radial absorbing boundary.** `integrator.py:149` ends every z step with
+`u = u * mask_r`, where `mask_r = exp(-(r / 0.9R)^20)` is built at
+`grids.py:138`. It stops light that reaches the edge of the box from wrapping
+around through the Hankel transform. It also removes energy, so a beam that
+spreads close to `R` will not conserve energy, for a reason that has nothing to
+do with ionization.
+
+**Joint saturation clamp.** `kernels.py:91-95`. If `N + N_STE` exceeds `N_at`
+at any time step, both are scaled down so they sum to `N_at`. Neither rate
+equation contains this, and it switches itself on exactly in the strongly
+ionized regime.
+
+**The spectral mask is not a separate factor.** It is folded into `T_op`
+(`grids.py:80`) and into `inv_U_nl` (`grids.py:109`). Two consequences. The
+Kerr term carries the mask squared, since it is multiplied by `T_op**2`, while
+the ionization term carries it once. And with `enable_self_steepening` off
+`T_op` becomes a plain array of ones with no mask, so turning that flag off
+also removes the spectral filter from the Kerr and ionization terms even though
+`enable_spectral_filter` is still on. The linear step keeps its own mask
+either way.
+
+**`D^` is exact only inside the Sellmeier window.** `delta_k` is built at
+`grids.py:59` from `omega_safe`, which `grids.py:46-47` clips to
+lambda in `[0.18, 5]` um. Outside that band the dispersion is frozen at the
+edge value rather than extrapolated. The mask has normally killed the field
+there already, but the two are separate mechanisms and only one of them has a
+flag.
 
 
 ## 5. Recipes
