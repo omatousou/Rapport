@@ -62,6 +62,11 @@ field term stops it acting on the beam, it does not stop carriers being made.
 W_PI is the Keldysh rate at the band gap Ui, W_STE the same formula evaluated
 at the shallower self-trapped exciton gap Us. Both are tabulated once before
 propagation and read by interpolation inside the CUDA kernel.
+
+To change what the solver integrates rather than only which terms are on, see
+MODIFYING_THE_EQUATIONS.md next to this file. It maps every term above to the
+line that computes it and explains the one piece of bookkeeping that is easy to
+get wrong, namely that split() does not return du/dz.
 """
 
 from __future__ import annotations
