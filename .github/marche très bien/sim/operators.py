@@ -1,11 +1,18 @@
 """
 Split-step operators: the linear half step (diffraction + dispersion, diagonal
-in the Hankel/frequency basis) and the nonlinear term (eq. 3, six switchable
-channels) together with the carrier update that drives the CUDA kernel.
+in the Hankel/frequency basis) and the nonlinear term (eq. 3) together with the
+carrier update that drives the CUDA kernel.
+
+The nonlinear term is written as a registry: each line of the field equation is
+one FieldTerm below, and split() is a loop over the enabled ones. See the block
+comment above FIELD_TERMS for the contract, and MODIFYING_THE_EQUATIONS.md for
+how to add a term.
 """
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
 import cupy as cp
@@ -30,7 +37,10 @@ class LinearOperator:
 
     The diffraction term uses inv_U_op = 1/U(Omega) (space-time focusing,
     U=1 when disabled) so its effective wavenumber is k0*U(Omega) instead of
-    a fixed k0 -- see Config.enable_space_time_focusing.
+    a fixed k0 -- see Config.enable_space_time_focusing. Note that inv_U_op
+    multiplies the diffraction term ONLY, not delta_k: diffraction goes as
+    1/k(omega) and dispersion does not. Written with U-hat moved to the left
+    of d/dz, that is why the dispersion term reads i D^ U^ u.
     """
     def __init__(self, cfg: Config, g: dict):
         self.komega   = g["komega"]
@@ -52,27 +62,152 @@ class LinearOperator:
         psik = cp.fft.ifft(psik_f, axis=1)
         return self.iRk * cp.dot(self.Y, psik)
 
+
 # ================================================================================
-#  7.  NONLINEAR OPERATOR  (eq. 3 -- six switchable channels)
+#  7.  NONLINEAR OPERATOR  (eq. 3, as a registry of terms)
 # ================================================================================
+#  One line of the field equation, one FieldTerm. A term declares WHAT it is,
+#  not how to apply it, and split() is a loop. The important field is `kind`.
+#
+#    kind = "phase"  fn returns the term's contribution to du/dz directly.
+#
+#    kind = "loss"   fn returns a non-negative absorption RATE, in 1/m. The
+#                    loop then does BOTH things a loss needs: it adds the rate
+#                    to alpha, which Integrator.step applies as the two
+#                    exp(-alpha dz/2) factors around the RK4 block, and it puts
+#                    -rate*u into the right-hand side so the RK4 does not apply
+#                    the same loss a second time.
+#
+#  That second point is the reason this file is a registry. The double
+#  bookkeeping used to be spelled out by hand for every dissipative channel,
+#  and forgetting either half made the absorption silently wrong by a factor
+#  of about two. A term now cannot be half registered: declaring a rate is the
+#  only way to declare a loss, and the loop derives both halves from it.
+#
+#  T_power is the power of T-hat in front of the term. Couairon 2005 Eq. (4)
+#  puts T^2 on the Kerr bracket, T^1 on the photoionization loss and T^0 on the
+#  rest, and those powers are not interchangeable. Terms are grouped by T_power
+#  before transforming, so the number of FFTs per call is at most three however
+#  many terms are enabled.
+#
+#  Everything here is the right-hand side BEFORE dividing by U-hat. split()
+#  applies inv_U_nl to the assembled sum, because Eq. (2) carries U-hat in
+#  front of d/dz and therefore divides the whole right-hand side.
+# ================================================================================
+
+@dataclass(frozen=True)
+class FieldTerm:
+    """One line of the field equation."""
+    name: str          # short label, also the key used by loss_rates()
+    flag: str          # Config field that switches it off
+    kind: str          # "phase" or "loss"
+    T_power: int       # 0, 1 or 2
+    fn: Callable       # (op, ctx) -> array, or None to contribute nothing
+    equation: str      # the line as it appears in the written equation
+
+
+class _Ctx:
+    """Quantities shared by several terms, each computed at most once.
+
+    Only `photo` is expensive (a spline lookup over the whole r,t plane), and
+    it is skipped entirely when the photoionization loss is disabled.
+    """
+    __slots__ = ("op", "u", "absu2", "rho", "rho_s", "_photo")
+
+    def __init__(self, op, u, absu2, rho, rho_s):
+        self.op, self.u, self.absu2 = op, u, absu2
+        self.rho, self.rho_s = rho, rho_s
+        self._photo = None
+
+    @property
+    def photo(self):
+        """Photoionization absorption rate, 1/m.
+
+        Ui * W_PI / (n0 c eps0 |u|^2), times the valence depletion factor.
+        The 1e6 converts the tabulated rate from cm^-3 s^-1 to m^-3 s^-1.
+        """
+        if self._photo is None:
+            op = self.op
+            W_PI = cp.nan_to_num(cp.abs(op.f_spline(
+                cp.clip(self.absu2 * op.invE2, op.Imin, op.Imax))),
+                nan=0.0, posinf=0.0, neginf=0.0)
+            depl = cp.clip(1.0 - self.rho / op.rho_max, 0.0, 1.0)
+            self._photo = ((W_PI * 1e6) * op.Ui
+                           / (op.n0 * c * epsilon_0 * (self.absu2 + 1e-30)) * depl)
+        return self._photo
+
+
+def _kerr_instantaneous(op, ctx):
+    return 1j * op.kerr_pref * (1.0 - op.f_R) * ctx.absu2 * ctx.u
+
+
+def _kerr_raman(op, ctx):
+    raman = cp.fft.ifft(cp.fft.fft(ctx.absu2, axis=1) * op.R_f, axis=1).real
+    return 1j * op.kerr_pref * op.f_R * raman * ctx.u
+
+
+def _photoionization_loss(op, ctx):
+    return ctx.photo
+
+
+def _plasma_absorption(op, ctx):
+    return op.plasma_pref * ctx.rho
+
+
+def _plasma_defocusing(op, ctx):
+    # plasma_phase - 1 = i w0 tau_c, so this is -i (sigma_w w0 tau_c / 2) N u.
+    return -op.plasma_pref * (op.plasma_phase - 1.0) * ctx.rho * ctx.u
+
+
+def _ste_index(op, ctx):
+    # ste_pref is already zero when enable_ste is off, and rho_s is absent on
+    # the loss_rates path, so both cases contribute nothing.
+    if not op.ste_pref or ctx.rho_s is None:
+        return None
+    return 1j * op.ste_pref * ctx.rho_s * ctx.u
+
+
+#  Order matters twice over: it is the order the equation is written in, and it
+#  is the order the floating point sums are accumulated in.
+FIELD_TERMS = (
+    FieldTerm("kerr_instantaneous", "enable_kerr_instantaneous", "phase", 2,
+              _kerr_instantaneous,
+              "+ i T^2 kerr_pref (1-f_R) |u|^2 u"),
+    FieldTerm("kerr_raman", "enable_kerr_raman", "phase", 2,
+              _kerr_raman,
+              "+ i T^2 kerr_pref f_R (R*|u|^2) u"),
+    FieldTerm("photoionization_loss", "enable_photoionization_loss", "loss", 1,
+              _photoionization_loss,
+              "- T^ (Ui W_PI / n0 c eps0 |u|^2) (1 - N/N_at) u"),
+    FieldTerm("plasma_absorption", "enable_plasma_absorption", "loss", 0,
+              _plasma_absorption,
+              "- (sigma_w / 2) N u"),
+    FieldTerm("plasma_defocusing", "enable_plasma_defocusing", "phase", 0,
+              _plasma_defocusing,
+              "- i (sigma_w w0 tau_c / 2) N u"),
+    FieldTerm("ste_index", "enable_ste_index", "phase", 0,
+              _ste_index,
+              "+ i (w0 / 2 n0 c rho_c) f_STE N_STE u"),
+)
+
+
 class NonlinearOperator:
     def __init__(self, cfg: Config, g: dict):
         self.n0, self.Ui, self.f_R = cfg.n0, cfg.Ui, cfg.f_R
         self.T_op, self.R_f, self.invE2 = g["T_op"], g["R_f"], g["invE2"]
         self.inv_U_nl = g["inv_U_nl"]      # U^-1 for the nonlinear step; see split()
-        # kerr_pref is the shared Kerr-phase prefactor; the two flags below
-        # gate the instantaneous / Raman *contributions* to kerr_I, not this
-        # prefactor, so partial disabling keeps the correct (1-f_R)/f_R weights.
+        # kerr_pref is the shared Kerr-phase prefactor. It is algebraically
+        # equal to (w0/c) n2 I / |u|^2, i.e. the Kerr term is i k_vac dn u.
         self.kerr_pref = 3 * cfg.chi3 * cfg.omega0**2 / (8 * g["komega"] * c**2)
         self.plasma_pref  = (g["sigmaomega"] / 2.0) * 100.0
         self.plasma_phase = 1.0 + 1j * cfg.omega0 * cfg.tau_c
-
-        self.en_kerr_inst     = bool(cfg.enable_kerr_instantaneous)
-        self.en_kerr_raman    = bool(cfg.enable_kerr_raman)
-        self.en_pi_loss       = bool(cfg.enable_photoionization_loss)
-        self.en_plasma_defoc  = bool(cfg.enable_plasma_defocusing)
-        self.en_plasma_absorb = bool(cfg.enable_plasma_absorption)
         self.ste_pref = g["ste_pref"]
+
+        # The registry, filtered once. A disabled term is simply absent, which
+        # is why split() has no branches on the flags.
+        self.terms = tuple(t for t in FIELD_TERMS if bool(getattr(cfg, t.flag)))
+        # T^ and T^2, precomputed. T^0 is handled by skipping the multiply.
+        self._T_pow = {1: self.T_op, 2: self.T_op**2}
 
         kel = g["keldysh"]
         self.f_spline = kel["f_spline"]
@@ -86,81 +221,87 @@ class NonlinearOperator:
         self.rho_max    = cfg.rho_max
         self.enable_ste = int(cfg.enable_ste)
 
+    def active_equation(self) -> str:
+        """The field equation as actually assembled, one enabled term per line."""
+        lines = ["U^ du/dz =   (i / 2k0) grad_perp^2 u",
+                 "           + i D^ U^ u"]
+        lines += [f"           {t.equation}" for t in self.terms]
+        return "\n".join(lines)
+
     def split(self, u, rho, rho_s=None):
+        """Right-hand side of the field equation, minus the part Integrator.step
+        already applies exponentially.
+
+        Returns (rhs, alpha). Over one z step the two exp(-alpha dz/2) factors
+        contribute -alpha*u and the trailing + alpha * u here cancels them, so
+        the net nonlinear contribution to du/dz is exactly
+        ifft(NL_freq * inv_U_nl) and nothing else. Splitting alpha out is a
+        numerical device for applying the stiff dissipative channels
+        exponentially rather than through the RK4, not physics.
+        """
         u = cp.ascontiguousarray(u.astype(cp.complex128, copy=False))
         absu2 = cp.abs(u)**2
-        W_PI  = cp.nan_to_num(cp.abs(self.f_spline(
-            cp.clip(absu2 * self.invE2, self.Imin, self.Imax))),
-            nan=0.0, posinf=0.0, neginf=0.0)
+        ctx = _Ctx(self, u, absu2, rho, rho_s)
 
-        depl_field = cp.clip(1.0 - rho / self.rho_max, 0.0, 1.0)
-        photo = (W_PI * 1e6) * self.Ui / (self.n0 * c * epsilon_0 * (absu2 + 1e-30)) * depl_field
-        if not self.en_pi_loss:
-            # Zeroing here removes the photoionization loss/phase term from the
-            # FIELD equation only; carrier generation (rate_eq_kernel, eq. 6-7)
-            # is untouched and keeps running off the same Keldysh rate W_PI.
-            photo = photo * 0.0
+        # One pass over the enabled terms. Phase terms go straight into their
+        # T_power group; loss terms go into alpha AND into their group as
+        # -rate*u, which is the whole point of the registry.
+        groups = {}
+        alpha = None
+        for term in self.terms:
+            v = term.fn(self, ctx)
+            if v is None:
+                continue
+            if term.kind == "loss":
+                alpha = v if alpha is None else alpha + v
+                v = -v * u
+            g = groups.get(term.T_power)
+            groups[term.T_power] = v if g is None else g + v
 
-        alpha = photo
-        if self.en_plasma_absorb:
-            alpha = alpha + self.plasma_pref * rho
+        if alpha is None:
+            alpha = cp.zeros_like(absu2)
         alpha = cp.maximum(cp.nan_to_num(alpha, nan=0.0, posinf=0.0, neginf=0.0), 0.0)
 
-        kerr_I = cp.zeros_like(absu2)
-        if self.en_kerr_inst:
-            kerr_I = kerr_I + (1.0 - self.f_R) * absu2
-        if self.en_kerr_raman:
-            kerr_I = kerr_I + self.f_R * cp.fft.ifft(cp.fft.fft(absu2, axis=1) * self.R_f, axis=1).real
+        # At most three FFTs, one per T-hat power, highest first so the sum is
+        # accumulated in the order the equation is written.
+        NL_freq = None
+        for p in (2, 1, 0):
+            v = groups.get(p)
+            if v is None:
+                continue
+            f = cp.fft.fft(v, axis=1)
+            if p:
+                f = f * self._T_pow[p]
+            NL_freq = f if NL_freq is None else NL_freq + f
 
-        # Couairon 2005 Eq. (4): T-hat^2 multiplies the Kerr bracket but only
-        # T-hat^1 multiplies the photoionization-loss term, so the two cannot
-        # share a single transform.
-        #
-        # Eq. (2) of the same paper carries U-hat in front of d/dz, so solving
-        # for du/dz divides the ENTIRE right-hand side by U -- Kerr, ionization,
-        # plasma and the STE polarizability alike, not just the Laplacian that
-        # half_linear already handles. Everything is therefore assembled in
-        # frequency space and multiplied by inv_U_nl in one go. Omitting that
-        # factor while keeping T^2 leaves the self-steepening roughly twice too
-        # strong, since U^-1 T^2 = 1 + 0.99*Omega/w0 whereas T^2 = 1 + 2*Omega/w0.
-        #
-        # The exp(-alpha*dz/2) channel in Integrator.step already applies the
-        # zeroth order of the two dissipative terms, so alpha*u is added back
-        # here and the net contribution to du/dz is exactly ifft(NL_freq*inv_U).
-        # With space-time focusing off inv_U_nl is 1 and this reduces
-        # algebraically to the previous expression.
-        plasma_coeff = ((1.0 if self.en_plasma_absorb else 0.0)
-                        + ((self.plasma_phase - 1.0) if self.en_plasma_defoc else 0.0))
-        # Bound (non-Drude) STE polarizability -- pure phase, no loss: the pump
-        # at 1.55 eV is far below the 4.2 eV STE resonance, so there is no
-        # single-photon STE absorption to account for here.
-        extra = -self.plasma_pref * plasma_coeff * rho * u
-        if self.ste_pref and rho_s is not None:
-            extra = extra + 1j * self.ste_pref * rho_s * u
-
-        NL_freq = (cp.fft.fft(1j * self.kerr_pref * kerr_I * u, axis=1) * self.T_op**2
-                   - cp.fft.fft(photo * u, axis=1) * self.T_op
-                   + cp.fft.fft(extra, axis=1))
-        rhs = cp.fft.ifft(NL_freq * self.inv_U_nl, axis=1) + alpha * u
-        rhs = cp.nan_to_num(cp.where(absu2 < 1e-30, 0.0 + 0.0j, rhs), nan=0.0, posinf=0.0, neginf=0.0)
+        if NL_freq is None:
+            rhs = alpha * u
+        else:
+            rhs = cp.fft.ifft(NL_freq * self.inv_U_nl, axis=1) + alpha * u
+        rhs = cp.nan_to_num(cp.where(absu2 < 1e-30, 0.0 + 0.0j, rhs),
+                            nan=0.0, posinf=0.0, neginf=0.0)
         return rhs, alpha
 
     def loss_rates(self, u, rho):
-        """r,t-resolved absorption-rate fields (1/m), photoionization and
-        plasma-absorption channels kept separate -- mirrors split()'s photo/
-        alpha computation exactly, so this matches what the field actually
-        loses. Used only for Fig. 12-style energy-loss bookkeeping
-        (Integrator._record), never on the hot RK4 path."""
+        """r,t-resolved absorption rates (1/m), one per dissipative channel.
+
+        Returns (photoionization, plasma) for the energy-loss bookkeeping of
+        Integrator._record. It calls the same term functions split() calls, so
+        the two cannot drift apart -- they used to be two copies of the same
+        arithmetic. Never on the hot RK4 path.
+        """
         absu2 = cp.abs(u) ** 2
-        W_PI = cp.nan_to_num(cp.abs(self.f_spline(
-            cp.clip(absu2 * self.invE2, self.Imin, self.Imax))),
-            nan=0.0, posinf=0.0, neginf=0.0)
-        depl_field = cp.clip(1.0 - rho / self.rho_max, 0.0, 1.0)
-        photo = (W_PI * 1e6) * self.Ui / (self.n0 * c * epsilon_0 * (absu2 + 1e-30)) * depl_field
-        if not self.en_pi_loss:
-            photo = photo * 0.0
-        plasma = self.plasma_pref * rho if self.en_plasma_absorb else cp.zeros_like(photo)
-        return photo, plasma
+        ctx = _Ctx(self, u, absu2, rho, None)
+        rates = {}
+        for term in self.terms:
+            if term.kind != "loss":
+                continue
+            v = term.fn(self, ctx)
+            if v is not None:
+                rates[term.name] = v
+        zero = cp.zeros_like(absu2)
+        return (rates.get("photoionization_loss", zero),
+                rates.get("plasma_absorption", zero))
 
     def update_plasma(self, u, rho, rho_s, dt, blocks, threads):
         rho  [:, 0] = 0.0
@@ -181,4 +322,3 @@ class NonlinearOperator:
              int(self._kel["NLUT"]),
              float(self._kel["logImin"]), float(self._kel["inv_dlog"]),
              float(self._kel["Imin"]), float(self._kel["Imax"])))
-

@@ -46,17 +46,23 @@ The equation, with the flag that switches each line off.
 
 | Term | Computed in | Prefactor built in | Flag |
 |---|---|---|---|
-| diffraction, `grad_perp^2` | `operators.py:50`, the `rhorho**2 / (2*komega)` part of `phase` | `grids.py:44` (`rholist`) | none |
-| dispersion `D^` | `operators.py:50`, the `delta_k` part of `phase` | `grids.py:59` | none |
-| Kerr, instantaneous | `operators.py:110-111` (`kerr_I`) | `operators.py:66` (`kerr_pref`) | `enable_kerr_instantaneous` |
-| Kerr, Raman | `operators.py:112-113` | `grids.py:113` (`R_f`) | `enable_kerr_raman` |
-| photoionization loss | `operators.py:97` (`photo`) | `grids.py:140-161` (Keldysh tables) | `enable_photoionization_loss` |
-| plasma absorption | `operators.py:132`, real part of `plasma_coeff` | `operators.py:67` (`plasma_pref`), `grids.py:121` (`sigmaomega`) | `enable_plasma_absorption` |
-| plasma defocusing | `operators.py:133`, imaginary part of `plasma_coeff` | `operators.py:68` (`plasma_phase`) | `enable_plasma_defocusing` |
-| STE index | `operators.py:138-139` | `grids.py:133-137` (`ste_pref`) | `enable_ste_index` |
-| `T^`, self steepening | applied at `operators.py:141-142` | `grids.py:79-82` | `enable_self_steepening` |
-| `U^`, space time focusing | applied at `operators.py:144` and `:50` | `grids.py:88-111` | `enable_space_time_focusing` |
+| diffraction, `grad_perp^2` | `LinearOperator.half_linear`, the `rhorho**2 / (2*komega)` part of `phase` | `grids.py:44` (`rholist`) | none |
+| dispersion `D^` | `LinearOperator.half_linear`, the `delta_k` part of `phase` | `grids.py:59` | none |
+| Kerr, instantaneous | `_kerr_instantaneous` | `kerr_pref`, in `NonlinearOperator.__init__` | `enable_kerr_instantaneous` |
+| Kerr, Raman | `_kerr_raman` | `grids.py:113` (`R_f`) | `enable_kerr_raman` |
+| photoionization loss | `_Ctx.photo`, returned by `_photoionization_loss` | `grids.py:140-161` (Keldysh tables) | `enable_photoionization_loss` |
+| plasma absorption | `_plasma_absorption` | `plasma_pref`, `grids.py:121` (`sigmaomega`) | `enable_plasma_absorption` |
+| plasma defocusing | `_plasma_defocusing` | `plasma_phase` | `enable_plasma_defocusing` |
+| STE index | `_ste_index` | `grids.py:133-137` (`ste_pref`) | `enable_ste_index` |
+| `T^`, self steepening | applied by `split()`, per term `T_power` | `grids.py:79-82` | `enable_self_steepening` |
+| `U^`, space time focusing | applied by `split()` and `half_linear` | `grids.py:88-111` | `enable_space_time_focusing` |
 | spectral mask | folded into `T_op` and `inv_U_nl` | `grids.py:66-73` | `enable_spectral_filter` |
+
+Each of the six nonlinear rows is one entry of `FIELD_TERMS` in `operators.py`,
+the tuple `split()` loops over. The function named in the second column is the
+term's `fn`, and the equation line in the first column is stored on the entry
+itself as its `equation` field, which is what `run_filament.py` prints in its
+ON/OFF listing.
 
 Two remarks on the table.
 
@@ -64,10 +70,10 @@ The depletion factor `(1 - N/N_at)` on the photoionization loss is
 `depl_field`, `operators.py:96`. It is clipped to `[0, 1]` so it can never go
 negative and turn a loss into a gain.
 
-The two plasma lines of the equation are **one** line of code. `plasma_coeff`
-at `operators.py:132-133` is a complex number whose real part is the absorption
-and whose imaginary part is the defocusing, and the two flags each contribute
-one part of it. Do not look for two separate terms, there are none.
+The two plasma lines of the equation are two separate registry entries, one a
+`loss` and one a `phase`, even though they are one physical process. They have
+separate flags, so they have to be separately switchable. Before the registry
+they were fused into a single complex coefficient called `plasma_coeff`.
 
 
 ## 3. The one thing that will catch you out
@@ -105,10 +111,17 @@ cancellation happens for `photo`: the `-fft(photo*u)*T_op` at line 142 cancels
 the `photo` part of `alpha*u`, to the extent that `T^` and `U^` are the
 identity.
 
-**The consequence.** If you add a new absorbing channel and only add it to
-`alpha`, it will be applied twice, once by the exponentials and once by the
-RK4, and your absorption will be about twice too strong. Nothing will warn you.
-Section 5 gives the recipe that avoids this.
+**Why you no longer have to get this right by hand.** A dissipative term does
+not declare its contribution to the field. It declares only its absorption
+rate, and `split()` derives both halves from that single declaration: it adds
+the rate to `alpha`, and it puts `-rate*u` into the sum. There is no way to
+register one without the other. Before the registry both halves were written
+out by hand for each channel, and adding a channel to `alpha` alone made the
+absorption about twice too strong with no warning.
+
+You still need to understand this section, because it is why `split()` returns
+what it returns, and because it is the reason the equivalence test can compare
+one array instead of two full simulations.
 
 
 ## 4. Carrier equations, term by term
@@ -216,48 +229,76 @@ by
 Nothing else needs touching, because the Kerr term is a pure phase and does not
 enter `alpha`.
 
-### 5.3 Add a new term that is a pure phase, no loss
+### 5.3 Add a new term to the field equation
 
-This is the easy case. Follow what the STE index term does, it is the most
-recent addition and the cleanest example.
+Write one `FieldTerm` and add it to the `FIELD_TERMS` tuple in `operators.py`.
+That is the whole edit to the solver.
 
-1. `config.py`: add the flag and any new parameter next to `enable_ste_index`.
-2. `grids.py`: build the prefactor near `ste_pref`, `grids.py:133-137`, and add
-   it to the dict returned at the end. Set it to `0.0` when the flag is off,
-   which is how every other prefactor disables itself.
-3. `operators.py`: read it in `__init__` next to `self.ste_pref`, and add your
-   contribution to `extra` at `operators.py:137-139`.
-4. `run_filament.py`: add the argument to `simulate()` and a line to
-   `_FIELD_TERMS` so it shows up in the ON/OFF listing.
-5. `integrator.py`: add the flag to the `toggles` dict at `:322-337`, so a
-   finished run records which physics produced it.
+    def _my_new_term(op, ctx):
+        return 1j * op.my_pref * ctx.rho_s * ctx.u        # a phase
 
-Do **not** add it to `alpha`. A pure phase is not a loss.
+    FieldTerm("my_new_term", "enable_my_new_term", "phase", 0,
+              _my_new_term, "+ i my_pref N_STE u")
 
-### 5.4 Add a new term that absorbs energy
+The four things the entry declares.
 
-Same five steps, plus the bookkeeping of section 3. You must do both of these:
+**`kind`** is `"phase"` or `"loss"`, and it is the field that matters.
 
-- add your absorption rate to `alpha`, next to `operators.py:105-106`, so the
-  exponential factors apply it;
-- add its **negative** to `extra` or to `NL_freq`, so the `+ alpha * u` at line
-  144 does not apply it a second time.
+- `"phase"`: `fn` returns the term's contribution to `du/dz` directly.
+- `"loss"`: `fn` returns a non-negative absorption **rate**, in 1/m, and
+  nothing else. `split()` then does both halves of the bookkeeping of
+  section 3 for you, adding the rate to `alpha` and putting `-rate*u` into the
+  sum. You cannot do one without the other, which is the point.
 
-If your term should also carry a phase, add the phase part only to `extra`,
-exactly as `plasma_coeff` puts the absorption in the real part and the phase in
-the imaginary part.
+So an absorbing term is written exactly like `_plasma_absorption`, one line
+returning a rate. Do not touch `alpha` yourself.
 
-Then decide whether `T^` applies to it. Look at `operators.py:141-143`: the
-Kerr bracket is multiplied by `T_op**2`, the ionization loss by `T_op`, and
-`extra` by neither. Those powers come from Couairon 2005 Eq. (4) and are not
-interchangeable. If your term needs a `T^`, give it its own `fft` line rather
-than folding it into an existing one.
+**`T_power`** is 0, 1 or 2, the power of `T^` in front of the term. Couairon
+2005 Eq. (4) puts `T^2` on the Kerr bracket and `T^1` on the ionization loss.
+Terms are grouped by this before transforming, so adding a term does not add an
+FFT unless it uses a power nothing else uses.
 
-Finally, if the term is a real energy loss you probably want it in
-`loss_rates()` too, `operators.py:148-163`. That function is only used for the
-energy bookkeeping figures, not for the propagation, but it is written to
-mirror `split()` exactly, and letting the two drift apart makes the energy
-budget silently wrong.
+**`flag`** is a `Config` field. A term whose flag is false is filtered out of
+the registry at construction, so `split()` never branches on it.
+
+**`equation`** is the line as it appears in the written equation. It is what
+`run_filament.py` prints in its ON/OFF listing, so the listing cannot drift
+from the code.
+
+Anything the term needs from the field or the densities comes through `ctx`,
+which carries `u`, `absu2`, `rho`, `rho_s`, and a lazily computed `photo`. Add
+a cached property there if your term needs a new shared quantity, and it will
+be computed at most once per call even if several terms want it.
+
+Around that one edit, three bits of plumbing.
+
+1. `config.py`: add the flag and any new parameter.
+2. `grids.py`: build the prefactor near `ste_pref`, and add it to the returned
+   dict. Set it to `0.0` when disabled, as every other prefactor does. Read it
+   in `NonlinearOperator.__init__`.
+3. `integrator.py`: add the flag to the `toggles` dict in `_dump_params`, so a
+   finished run records which physics produced it. And add the argument to
+   `simulate()` in `run_filament.py`.
+
+Then run the equivalence test with your term disabled. It must still pass:
+a new term that is off must change nothing.
+
+### 5.4 Change a term without changing the physics
+
+If you rearrange or optimize `split()` itself rather than adding a term, prove
+it neutral with `sim/test_operators_equivalence.py`. It compares `split()`
+against a frozen copy of a known-good version on random inputs, over all 64
+combinations of the six field flags, and runs on the CPU in a second with no
+GPU needed.
+
+Comparing that one return value is enough. As section 3 shows, the entire
+nonlinear contribution to `du/dz` over a step is `ifft(NL_freq * inv_U_nl)`, so
+two implementations that return the same `(rhs, alpha)` integrate the same
+equation. There is no need to run a propagation and compare pictures.
+
+When you deliberately change the physics, the test will fail, which is correct.
+Update the frozen reference copy in the test in the same commit, so it becomes
+the record of what the new physics is.
 
 ### 5.5 Add a term to the carrier equations
 
@@ -330,15 +371,20 @@ can quietly break the convergence of the split step, and the symptom is a
 result that keeps changing as you refine `dz`.
 
 
-## 8. A known rough edge
+## 8. What is still not pluggable
 
-The structure above works but it is not pluggable. Adding one term means
-editing five files, and the `alpha` bookkeeping of section 3 has to be got
-right by hand every time.
+The field equation is a registry. The rest is not.
 
-A term registry, where each term is one object carrying its own flag, its
-prefactor, its `T^` power and whether it is dissipative, would make
-sections 5.3 and 5.4 a single edit and would make the double counting
-structurally impossible. That is a real refactor of the hot path of a solver
-that currently reproduces the published figures, so it has not been done. It is
-worth doing if the model starts changing often.
+The carrier equations are still CUDA C with a positional, unchecked argument
+list, and section 5.5 is still a five-place edit. That is the next thing worth
+doing, and it is harder than the field equation was, because the `S`/`L`
+packing is load bearing rather than incidental.
+
+The prefactors are still built in `grids.py`, away from the term that uses
+them. A term declares its `fn` but not where its constants come from, so
+adding a term still means touching `grids.py` as well as `operators.py`.
+Letting a `FieldTerm` carry its own prefactor builder would close that, and it
+is a small change now that the registry exists.
+
+`half_linear` is untouched. Diffraction and dispersion have no flags and are
+never modified, so there was nothing to gain.

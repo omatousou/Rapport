@@ -187,14 +187,14 @@ def _add_package_dirs(sim_dir: Optional[str] = None) -> dict:
 #  Reporting which physics is active
 # ================================================================================
 #  (flag name, term as it appears in the equation, which equation)
-_FIELD_TERMS = [
-    ("enable_kerr_instantaneous", "i T^2 kerr_pref (1-f_R) |u|^2 u", "field"),
-    ("enable_kerr_raman",         "i T^2 kerr_pref f_R (R*|u|^2) u", "field"),
+#
+#  The six terms of the field equation are NOT listed here. They are read from
+#  operators.FIELD_TERMS, the registry the solver itself loops over, so this
+#  listing cannot drift from what split() actually assembles. Only the things
+#  that are not terms of that sum are listed below: the two operators, the
+#  spectral mask, and the carrier equation flags.
+_EXTRA_TERMS = [
     ("enable_self_steepening",    "T^ = 1 + (i/w0) d/dt   (else T^ = 1)", "field"),
-    ("enable_photoionization_loss", "- T^ (Ui W_PI / n0 c eps0 |u|^2) u", "field"),
-    ("enable_plasma_absorption",  "- (sigma_w/2) N u", "field"),
-    ("enable_plasma_defocusing",  "- i (sigma_w w0 tau_c/2) N u", "field"),
-    ("enable_ste_index",          "+ i (w0/2 n0 rho_c) f_STE N_STE u", "field"),
     ("enable_space_time_focusing", "U^ = 1 + (i k'/k0) d/dt   (else U^ = 1)", "field"),
     ("enable_spectral_filter",    "spectral mask on the Sellmeier window", "field"),
     ("enable_avalanche",          "+ beta_g I N (1 - N/N_at)", "carriers"),
@@ -203,15 +203,22 @@ _FIELD_TERMS = [
 ]
 
 
+def _term_table():
+    """The listing, with the field terms taken from the solver's own registry."""
+    from operators import FIELD_TERMS
+    return [(t.flag, t.equation, "field") for t in FIELD_TERMS] + _EXTRA_TERMS
+
+
 def print_active_physics(cfg_kwargs: dict, tau_ste: Optional[float]) -> None:
     """Print each term of both equations with ON or OFF next to it."""
+    table = _term_table()
     print("\n" + "=" * 74)
     print("PHYSICS ACTUALLY INTEGRATED")
     print("=" * 74)
     for eq_name, header in (("field", "Field envelope, Couairon 2005 Eq. (2)"),
                             ("carriers", "Carrier populations, Eqs. (6)-(7)")):
         print(f"\n{header}")
-        for flag, term, which in _FIELD_TERMS:
+        for flag, term, which in table:
             if which != eq_name:
                 continue
             on = bool(cfg_kwargs.get(flag, True))
