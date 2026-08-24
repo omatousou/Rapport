@@ -30,8 +30,10 @@ Quatre choses y figurent que le depot n'avait pas :
 
 1. La DEPLETION de la bande de valence, le facteur (N0 - N_CB - N_tr). Chaque
    electron promu ou piege est retire de l'oscillateur de valence, celui-la
-   meme qui fait n0 = 1.46. A 515 nm ce terme vaut 11 % du terme Drude et il a
-   le MEME signe : l'ignorer sous-estime la baisse d'indice.
+   meme qui fait n0 = 1.46. Il a le MEME signe que le terme Drude, donc
+   l'ignorer sous-estime la baisse d'indice. A 515 nm et rho = 1e20 cm^-3 il
+   vaut 1.6 % du terme Drude avec n_valence_per_unit = 8 (le defaut, voir
+   plus bas), et 12.7 % avec n_valence_per_unit = 1.
 2. Les STE forment DEUX bandes, pas une, avec des forces d'oscillateur
    inferieures a 1 : pour SiO2 l'article donne f = 0.40 a 5.2 eV et f = 0.15 a
    4.2 eV (Table II). Le depot utilisait une bande unique f = 1 a 4.2 eV, ce
@@ -150,8 +152,13 @@ def valence_depletion_delta_eps(rho_removed_cm3, omega, N0_cm3, eps_valence,
       force d'oscillateur deduite de eps_valence a la longueur d'onde donnee.
       Utile seulement si on veut la dispersion du terme de deplation.
 
-    A 515 nm et rho = 1e20 cm^-3, ce terme vaut -1.8e-3, soit 11 % du terme
-    Drude, avec le meme signe. Il etait absent du depot.
+    ATTENTION au denominateur : l'appelant doit passer le nombre d'OSCILLATEURS
+    par cm3, soit N0_cm3 * n_valence_per_unit, et non la densite moleculaire.
+    Voir la note sur n_valence_per_unit dans MaterialResponse.
+
+    A 515 nm et rho = 1e20 cm^-3, ce terme vaut -2.2e-4, soit 1.6 % du terme
+    Drude, avec le meme signe. Avec le mauvais denominateur (la densite
+    moleculaire seule) il vaudrait -1.8e-3, soit 12.7 %, huit fois trop.
     """
     x = np.asarray(rho_removed_cm3, float) / float(N0_cm3)
     if E_12_eV is None:
