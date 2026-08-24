@@ -1,21 +1,42 @@
 \section{Propagation Equation and Population Rate Equations}
 
-The electric field is written as a carrier wave modulated by a slowly varying envelope $u(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. For fused silica, the propagation equation solved by the code reads:
+The electric field is written as a carrier wave modulated by a slowly varying envelope $\mathcal{E}(r,t,z)$, and the wave equation is reduced under the slowly varying envelope approximation. The envelope is normalised so that its squared modulus is the local intensity,
+\begin{equation}
+\label{eq:envelope_norm}
+|\mathcal{E}|^2 = I = \tfrac{1}{2}n_0c\varepsilon_0|u|^2 ,
+\end{equation}
+where $u$ is the field amplitude in volts per metre that the code actually stores. Choosing $|\mathcal{E}|^2$ to be an intensity is what makes every coefficient below a plain inverse length, which is the form used by Couairon et al.~\cite{PhysRevB.71.125435}. With that convention the propagation equation solved by the code reads:
 \begin{align}
 \label{eq:master_propagation}
-\hat{U}\,\frac{\partial u}{\partial z} =\;
-&\underbrace{\frac{i}{2k_0}\nabla_\perp^2 u}_{\text{diffraction}}
+\hat{U}\,\frac{\partial \mathcal{E}}{\partial z} =\;
+&\underbrace{\frac{i}{2k_0}\nabla_\perp^2 \mathcal{E}}_{\text{diffraction}}
 \;+\;
-\underbrace{i\,\hat{D}\,\hat{U}\,u}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
-\text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 u}} \nonumber\\[4pt]
-&+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}(1-f_R)\,|u|^2\,u}_{\text{instantaneous Kerr effect and self-steepening}} \nonumber\\[4pt]
-&+\;\underbrace{i\,\hat{T}^{2}\,\frac{3\omega_0^2\chi^{(3)}}{8k_0c^2}\,f_R\,\big(R * |u|^2\big)\,u}_{\text{delayed Raman response}} \nonumber\\[4pt]
-&-\;\underbrace{\hat{T}\,\frac{U_i\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2}\left(1-\frac{N}{N_{at}}\right)u}_{\text{photoionization energy loss}}
-\;-\;\underbrace{\frac{\sigma_\omega}{2}\big(1+i\omega_0\tau_c\big)N\,u}_{\text{plasma absorption and defocusing}} \nonumber\\[4pt]
-&+\;\underbrace{i\,\frac{\omega_0}{2n_0c\,\rho_c}\frac{\omega_0^2}{\omega_{tr}^2-\omega_0^2}\,N_{STE}\,u}_{\text{bound STE polarizability, see Section~11.4}}
+\underbrace{i\,\hat{D}\,\hat{U}\,\mathcal{E}}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
+\text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 \mathcal{E}}} \nonumber\\[4pt]
+&+\;\underbrace{i\,k_{vac}\,n_2\,\hat{T}^{2}\Big[(1-f_R)\,|\mathcal{E}|^2 + f_R\big(R * |\mathcal{E}|^2\big)\Big]\mathcal{E}}_{\text{Kerr effect, instantaneous and delayed Raman, with self-steepening}} \nonumber\\[4pt]
+&-\;\underbrace{\frac{\hat{T}}{2}\,\frac{U_i\,W_{PI}(|\mathcal{E}|^2)}{|\mathcal{E}|^2}\left(1-\frac{N}{N_{at}}\right)\mathcal{E}}_{\text{photoionization energy loss}}
+\;-\;\underbrace{\frac{\sigma_\omega}{2}\big(1+i\omega_0\tau_c\big)N\,\mathcal{E}}_{\text{plasma absorption and defocusing}} \nonumber\\[4pt]
+&+\;\underbrace{i\,k_{vac}\,\frac{1}{2n_0\rho_c}\frac{\omega_0^2}{\omega_{tr}^2-\omega_0^2}\,N_{STE}\,\mathcal{E}}_{\text{bound STE polarizability, see Section~11.4}}
 \end{align}
 
-with, in the retarded frame $t\to t-z/v_g$ and writing $\Omega=\omega-\omega_0$,
+The two wavenumbers appearing here are not the same quantity, and keeping them apart is the whole point of writing the equation this way:
+\begin{equation}
+\label{eq:two_wavenumbers}
+k_0 = \frac{n_0\omega_0}{c}\quad\text{(in the medium)},
+\qquad
+k_{vac} = \frac{\omega_0}{c} = \frac{k_0}{n_0}\quad\text{(in vacuum)} .
+\end{equation}
+Diffraction and the operator $\hat{U}$ use the wavenumber in the medium, because they describe how a wave already inside the glass spreads and how its group delay varies. The two index changing terms use the vacuum wavenumber, because a change of refractive index $\Delta n$ over a length $L$ produces a phase $\Delta\varphi = (\omega_0/c)\,\Delta n\,L$, with no extra factor of $n_0$. Writing both as $k_0$ would make the Kerr term too large by $n_0 = 1.45$.
+
+The remaining symbols are
+\begin{equation}
+n_2 : \Delta n = n_2 I,
+\qquad
+\sigma_\omega : \text{Drude cross section, Section~7},
+\qquad
+\rho_c = \frac{\varepsilon_0 m_e \omega_0^2}{e^2},
+\end{equation}
+and the operators, in the retarded frame $t\to t-z/v_g$ with $\Omega=\omega-\omega_0$,
 \begin{equation}
 \hat{T} = 1+\frac{i}{\omega_0}\frac{\partial}{\partial t} \;\longleftrightarrow\; 1+\frac{\Omega}{\omega_0},
 \qquad
@@ -26,17 +47,21 @@ with, in the retarded frame $t\to t-z/v_g$ and writing $\Omega=\omega-\omega_0$,
 \end{equation}
 where $k(\omega)$ comes from the Sellmeier relation and is not truncated at any order.
 
+Every coefficient in Eq.~\eqref{eq:master_propagation} is an inverse length, which makes the equation easy to check. In the Kerr term $n_2 I$ is a dimensionless index change and $k_{vac}$ carries the inverse metre. In the photoionization term $U_i W_{PI}$ is an absorbed power per unit volume, in watts per cubic metre, and dividing by the intensity in watts per square metre leaves an inverse metre. In the plasma term $\sigma_\omega$ is an area and $N$ a volume density, so their product is again an inverse metre. The factor of one half on the last two terms is not cosmetic. Those two channels remove energy, and the equation propagates an amplitude rather than an intensity, so a coefficient $\alpha$ acting on $\mathcal{E}$ attenuates $I$ at the rate $2\alpha$. The Kerr and STE terms carry no such factor because they are pure phases and remove nothing.
+
+The relation to the susceptibility form is $n_2 = 3\chi^{(3)}/(4n_0^2c\varepsilon_0)$, already given in Section~6. The code stores $\chi^{(3)}$ internally and builds the prefactor $3\omega_0^2\chi^{(3)}/(8k_0c^2)$, which multiplies $|u|^2$ rather than $|\mathcal{E}|^2$. Substituting Eq.~\eqref{eq:envelope_norm} turns it into $k_{vac}n_2$ exactly, and the script \texttt{check\_prefactors\dotb py} verifies the identity numerically to twelve digits against the constants the solver is given.
+
 This is the form used by Couairon et al.~\cite{PhysRevB.71.125435}. Their Eq.~(2) is introduced with exactly that wording, namely that the equation accounts for space-time focusing through the operator $\hat{U}$ sitting in front of $\partial/\partial z$. The reason to prefer this form over the algebraically equivalent one obtained by dividing by $\hat{U}$ is that it contains no inverse operator, so there is no ambiguity about which terms $\hat{U}$ acts on. If one does divide by $\hat{U}$, it has to be applied to every term on the right hand side, which gives
 \begin{equation}
 \label{eq:master_divided}
-\frac{\partial u}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 u + i\hat{D}u
+\frac{\partial \mathcal{E}}{\partial z} = \frac{i}{2k_0}\hat{U}^{-1}\nabla_\perp^2 \mathcal{E} + i\hat{D}\mathcal{E}
  + \hat{U}^{-1}\Big\{\text{Kerr} + \text{Raman} + \text{ionization} + \text{plasma} + \text{STE}\Big\},
 \end{equation}
 where $\hat{U}$ cancels on the dispersion term alone. Since $\hat{U}\simeq\hat{T}$ to within one percent for fused silica at $800\ \text{nm}$ (with $n_g/n_0=1.0095$), the Kerr operator in that form becomes $\hat{U}^{-1}\hat{T}^2\simeq\hat{T}$ and the ionization operator becomes $\hat{U}^{-1}\hat{T}\simeq1$, which is how the single $\hat{T}$ expressions found in review papers arise. Applying $\hat{U}^{-1}$ to the Laplacian only, while leaving $\hat{T}^2$ on the Kerr term, is not one of these two forms and leaves every nonlinear term with one power of $\hat{T}$ too many.
 
 Two smaller points about notation are worth stating clearly. First, the depletion factor is the dimensionless $1-N/N_{at}$, not $N_{at}-N$. The Keldysh rate $W_{PI}$ returned by the lookup table is already a volumetric rate in $\text{cm}^{-3}\text{s}^{-1}$, so multiplying it by a density would leave the term with an extra $\text{cm}^{-3}$. The other convention, in which $W_{PI}$ is a per atom rate in $\text{s}^{-1}$ multiplied by $N_{at}-N$, is equally valid but is not what the code computes. Second, the group delay $k'_\omega\Omega$ does not appear as a separate term because it has been absorbed into $\hat{D}$. The code works in the retarded frame and subtracts it inside \texttt{delta\_k}, so writing it again outside would count it twice.
 
-Equation~\eqref{eq:master_propagation} cannot be stepped forward as written, because it gives $\hat{U}\partial_z u$ rather than $\partial_z u$. The code therefore integrates the divided form~\eqref{eq:master_divided}. The linear half step in \texttt{LinearOperator\dotb half\_linear} supplies the first two terms, applying \texttt{inv\_U\_op} to the Laplacian and leaving \texttt{delta\_k} bare. The nonlinear step in \texttt{NonlinearOperator\dotb split} assembles the whole brace in frequency space and multiplies it by $\hat{U}^{-1}$ in one operation, so that the Kerr, Raman, ionization, plasma and STE terms all receive it. Because $\hat{U}^{-1}$ here multiplies source terms directly rather than sitting inside a phase factor $e^{i\varphi}$, it is floored and masked before use. The operator $\hat{U}$ vanishes at $\Omega=-k'_\omega{}^{-1}k_0\simeq-0.99\,\omega_0$, that is at essentially zero absolute frequency. The floor only acts beyond $\lambda=7.4\ \mu\text{m}$, outside the Sellmeier window where the spectral mask has already suppressed the field, so within the physical band $\hat{U}^{-1}$ stays between $0.22$ and $6.6$ and is not distorted.
+Equation~\eqref{eq:master_propagation} cannot be stepped forward as written, because it gives $\hat{U}\partial_z \mathcal{E}$ rather than $\partial_z \mathcal{E}$. The code therefore integrates the divided form~\eqref{eq:master_divided}. The linear half step in \texttt{LinearOperator\dotb half\_linear} supplies the first two terms, applying \texttt{inv\_U\_op} to the Laplacian and leaving \texttt{delta\_k} bare. The nonlinear step in \texttt{NonlinearOperator\dotb split} assembles the whole brace in frequency space and multiplies it by $\hat{U}^{-1}$ in one operation, so that the Kerr, Raman, ionization, plasma and STE terms all receive it. Because $\hat{U}^{-1}$ here multiplies source terms directly rather than sitting inside a phase factor $e^{i\varphi}$, it is floored and masked before use. The operator $\hat{U}$ vanishes at $\Omega=-k'_\omega{}^{-1}k_0\simeq-0.99\,\omega_0$, that is at essentially zero absolute frequency. The floor only acts beyond $\lambda=7.4\ \mu\text{m}$, outside the Sellmeier window where the spectral mask has already suppressed the field, so within the physical band $\hat{U}^{-1}$ stays between $0.22$ and $6.6$ and is not distorted.
 
 \subsection{Where the Self-Steepening Operator Comes From, and Why It Is Squared on Some Terms}
 
@@ -50,7 +75,7 @@ Physically, $T$ being larger than one on the blue side of the spectrum ($\Omega>
 
 Each underbraced term maps onto a specific piece of the code. Diffraction and dispersion are applied together by \texttt{LinearOperator\dotb half\_linear}, in the quasi discrete Hankel basis described in Section~12. The space-time focusing factor enters this same step as \texttt{inv\_U\_op} $=1/\hat{U}(\Omega)$ multiplying the transverse Laplacian, and reduces to the identity when \texttt{enable\_space\_time\_focusing} is off. Rather than truncating the Taylor expansion of $k(\omega)$ at second order as was done analytically in Section~6, the code evaluates $k(\omega)$ directly from the Sellmeier relation for every frequency component and subtracts the linear term $k_0+k'_\omega\Omega$, so the operator \texttt{delta\_k} already contains dispersion to all orders and not just group velocity dispersion.
 
-The Kerr, self-steepening and Raman terms are computed together, inside the function \texttt{split} of \texttt{NonlinearOperator}. The instantaneous part $(1-f_R)|u|^2$ and the delayed Raman part $f_R\,(R * |u|^2)$, obtained by convolving the intensity with the retarded Raman response function $R(t)$, are summed into a single quantity \texttt{kerr\_I} before being multiplied by $u$, which is why they appear here as two lines of one mechanism rather than as two independent effects. The self-steepening operator is applied in the frequency domain as \texttt{T\_op} $= 1+\Omega/\omega_0$, following the same operator introduced by Mao et al.~\cite{mao2004} for free carrier absorption and used identically here for the Kerr response.
+The Kerr, self-steepening and Raman terms are computed together, inside the function \texttt{split} of \texttt{NonlinearOperator}. The instantaneous part $(1-f_R)|\mathcal{E}|^2$ and the delayed Raman part $f_R\,(R * |\mathcal{E}|^2)$, obtained by convolving the intensity with the retarded Raman response function $R(t)$, are summed into a single quantity \texttt{kerr\_I} before being multiplied by the field, which is why they appear here as two lines of one mechanism rather than as two independent effects. The self-steepening operator is applied in the frequency domain as \texttt{T\_op} $= 1+\Omega/\omega_0$, following the same operator introduced by Mao et al.~\cite{mao2004} for free carrier absorption and used identically here for the Kerr response.
 
 The photoionization loss term removes energy from the field at exactly the rate needed to promote electrons to the conduction band at the Keldysh rate $W_{PI}$, throttled by the fraction $1-N/N_{at}$ of ionizable sites still neutral. In the code this factor is \texttt{depl\_field = clip(1 - rho/rho\_max, 0, 1)}, where $N_{at}$ is \texttt{rho\_max} and $N$ is the current free electron density. The plasma absorption and the plasma induced defocusing are written as one term above because the code computes them together, as the real and imaginary parts of the same Drude response derived in Section~7, with $\sigma_\omega$ the inverse Bremsstrahlung cross section introduced in Section~5.
 
@@ -63,18 +88,18 @@ The solver also keeps a spectral mask, \texttt{spec\_mask}, multiplying \texttt{
 The code integrates two coupled populations, the free electron density $N$ and the self-trapped exciton density $N_{STE}$, following the two population model of Mao et al.~\cite{mao2004}:
 \begin{align}
 \frac{dN}{dt} =\;
-&\underbrace{W_{PI}(|u|)\left(1-\frac{N}{N_{at}}\right)}_{\text{direct photoionization, depletes available sites}} \nonumber\\[4pt]
-&+\;\underbrace{\Big[W_{PI}(|u_x|)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization of trapped excitons}} \nonumber\\[4pt]
+&\underbrace{W_{PI}(I)\left(1-\frac{N}{N_{at}}\right)}_{\text{direct photoionization, depletes available sites}} \nonumber\\[4pt]
+&+\;\underbrace{\Big[W_{STE}(I)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization of trapped excitons}} \nonumber\\[4pt]
 &+\;\underbrace{\beta_g\, I\, N\left(1-\frac{N}{N_{at}}\right)}_{\text{avalanche ionization}}
 \;-\;\underbrace{\frac{N}{\tau_r}}_{\text{trapping into the STE channel}}
 \end{align}
 \begin{align}
 \frac{dN_{STE}}{dt} =\;
 &\underbrace{\frac{N}{\tau_r}}_{\text{trapping}}
-\;-\;\underbrace{\Big[W_{PI}(|u_x|)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization}}
+\;-\;\underbrace{\Big[W_{STE}(I)+\beta_s I\, N\Big]\frac{N_{STE}}{N_{at}}}_{\text{re-ionization}}
 \;-\;\underbrace{\frac{N_{STE}}{\tau_{STE}}}_{\text{decay to the ground state}}
 \end{align}
-Here $I=n_0c\varepsilon_0|u|^2/2$ is the local intensity, $u_x$ is the field evaluated with the smaller gap $U_s$ of the trapped state instead of $U_i$, so that $W_{PI}(|u_x|)$ is the Keldysh rate computed for the shallower STE gap, and $\beta_g=\sigma_\omega/U_i$ is the avalanche coefficient with $\beta_s$ its counterpart for the STE channel. In the CUDA kernel these two coefficients appear as \texttt{beta\_g} and \texttt{beta\_s}, the trapping rate as \texttt{inv\_tau\_r}, and the decay rate as \texttt{inv\_tau\_ste}.
+Here $I=|\mathcal{E}|^2$ is the local intensity, $W_{STE}$ is the same Keldysh formula evaluated at the smaller gap $U_s$ of the trapped state instead of $U_i$, and $\beta_g=\sigma_\omega/U_i$ is the avalanche coefficient with $\beta_s$ its counterpart for the STE channel. In the CUDA kernel these two coefficients appear as \texttt{beta\_g} and \texttt{beta\_s}, the trapping rate as \texttt{inv\_tau\_r}, and the decay rate as \texttt{inv\_tau\_ste}.
 
 The two populations exchange carriers in both directions. Trapping moves electrons out of the conduction band into the STE state at the rate $N/\tau_r$, and that same quantity reappears as a gain term in the second equation, so nothing is lost in the transfer. Laser driven re-ionization sends them back the other way, and again the term appears with opposite signs in the two equations. Only the last term of the second equation, $-N_{STE}/\tau_{STE}$, genuinely removes carriers from the pair of populations, since it returns them to the ground state. The kernel also rescales both populations if their sum ever exceeds $N_{at}$, which keeps the model from producing more carriers than there are sites.
 
@@ -107,13 +132,14 @@ The two loss terms of the second equation are easy to read as the same thing wri
 
 For completeness we derive the photoionization loss term used above, since it does not appear explicitly in the earlier sections. Each ionization event removes one photoelectron from the neutral population and costs at least the gap energy $U_i$, which is taken directly from the field. The absorbed power per unit volume is
 \begin{equation}
-\mathcal{P}_{ion} = U_i\,\left(1-\frac{N}{N_{at}}\right)W_{PI}(|u|)
+\mathcal{P}_{ion} = U_i\,\left(1-\frac{N}{N_{at}}\right)W_{PI}(I)
 \end{equation}
-Writing this as a loss term $-\alpha_{ion}I$ acting on the intensity $I=n_0c\varepsilon_0|u|^2/2$ and solving for $\alpha_{ion}$ gives the coefficient used above,
+The equation propagates an amplitude, not an intensity, so a coefficient $\alpha_{ion}$ acting on $\mathcal{E}$ attenuates $I$ at the rate $2\alpha_{ion}$. Setting $2\alpha_{ion}I$ equal to the absorbed power density and solving gives the coefficient used above,
 \begin{equation}
-\alpha_{ion} = \frac{U_i\,W_{PI}(|u|)}{n_0c\varepsilon_0|u|^2/2}\left(1-\frac{N}{N_{at}}\right)
+\label{eq:alpha_ion}
+\alpha_{ion} = \frac{U_i\,W_{PI}(I)}{2I}\left(1-\frac{N}{N_{at}}\right)
 \end{equation}
-which is exactly the \texttt{photo} variable computed inside \texttt{NonlinearOperator\dotb split}.
+which is the \texttt{photo} variable computed inside \texttt{NonlinearOperator\dotb split}. In the code the same expression appears as $U_iW_{PI}/(n_0c\varepsilon_0|u|^2)$, with no explicit one half, because $n_0c\varepsilon_0|u|^2$ is already $2I$ by Eq.~\eqref{eq:envelope_norm}. The factor is easy to lose, and the check that it is right is in \texttt{Integrator\dotb \_record}, which weights the local energy loss by $2\alpha$ when it accumulates the energy budget.
 
 \subsection{Bound Polarizability of Self-Trapped Excitons}
 
