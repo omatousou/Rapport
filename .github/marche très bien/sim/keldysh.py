@@ -19,8 +19,49 @@ from scipy.constants import elementary_charge as q_e
 # ================================================================================
 #  Sellmeier dispersion of fused silica
 # ================================================================================
+#  THE dispersion of the run. This module is the single source of truth: every
+#  other module reads it from here at call time rather than keeping a copy, so
+#  set_dispersion() below reaches the whole solver.
+#
+#  Defaults are Malitson, JOSA 55, 1205 (1965), for fused silica.
 SELLMEIER_B  = np.array([0.6961663, 0.4079426, 0.8974794])
 SELLMEIER_L2 = np.array([0.0684043, 0.1162414, 9.896161]) ** 2
+
+#  Where the fit is meaningful, in micrometres. Used by grids.py to clip the
+#  frequency axis before evaluating the fit and to place the spectral mask.
+#  Outside it the Sellmeier form is not merely inaccurate, it has poles: for
+#  silica at 0.0684, 0.1162 and 9.896 um.
+SELLMEIER_RANGE_UM = (0.18, 5.0)
+
+
+def set_dispersion(B, L2, range_um=None):
+    """Install another material's Sellmeier fit for the rest of the process.
+
+    Call this BEFORE building a Config, since Config.__post_init__ evaluates
+    n_sellmeier to get n0. grids.py reads the module attributes at call time,
+    so a change here reaches the solver.
+
+    `L2` is the squared pole positions, matching SELLMEIER_L2 above.
+    """
+    global SELLMEIER_B, SELLMEIER_L2, SELLMEIER_RANGE_UM
+    B = np.asarray(B, dtype=float)
+    L2 = np.asarray(L2, dtype=float)
+    if B.shape != L2.shape:
+        raise ValueError(f"B and L2 must have the same length, got {B.shape} and {L2.shape}")
+    SELLMEIER_B, SELLMEIER_L2 = B, L2
+    if range_um is not None:
+        lo, hi = float(range_um[0]), float(range_um[1])
+        if not 0 < lo < hi:
+            raise ValueError(f"bad Sellmeier range {range_um}")
+        SELLMEIER_RANGE_UM = (lo, hi)
+
+
+def get_dispersion():
+    """The fit currently installed, as plain tuples, for recording in a file."""
+    return (tuple(float(x) for x in SELLMEIER_B),
+            tuple(float(x) for x in SELLMEIER_L2),
+            tuple(float(x) for x in SELLMEIER_RANGE_UM))
+
 
 def n_sellmeier(lam_m):
     lam_um = lam_m * 1e6

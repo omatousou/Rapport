@@ -46,8 +46,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import Config, code_fingerprint                    # noqa: E402,F401
-from keldysh import (SELLMEIER_B, SELLMEIER_L2, n_sellmeier,   # noqa: E402,F401
-                     KeldyshSiO2, keldysh_multiphoton, keldysh_tunnel)
+import keldysh                                                 # noqa: E402
+from keldysh import (n_sellmeier, set_dispersion,              # noqa: E402,F401
+                     get_dispersion, KeldyshSiO2,
+                     keldysh_multiphoton, keldysh_tunnel)
+
+
+def __getattr__(name):
+    """Forward the Sellmeier constants to keldysh, live.
+
+    They used to be re-exported by value, which turned this module into a
+    second copy that set_dispersion() could not reach. Resolving them on
+    attribute access keeps the old public names working and always current.
+    """
+    if name in ("SELLMEIER_B", "SELLMEIER_L2", "SELLMEIER_RANGE_UM"):
+        return getattr(keldysh, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 from kernels import rate_eq_kernel                             # noqa: E402,F401
 from grids import build_grids, envelope_gaussian_focused, ENVELOPES  # noqa: E402,F401
 from operators import LinearOperator, NonlinearOperator        # noqa: E402,F401

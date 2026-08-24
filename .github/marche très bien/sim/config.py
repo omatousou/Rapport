@@ -124,6 +124,30 @@ class Config:
     # behaviour; set e.g. 1e-12 to enable it.
     tau_ste: Optional[float] = None
 
+    material_name: str = "fused silica (SiO2)"
+
+    # ---- probe-side dielectric model (sim/permittivity.py) ----
+    # These do NOT affect the propagation. They describe what the PROBE sees in
+    # the excited medium, and are used after the run to turn rho_e and rho_s
+    # into the phase and transmittance maps of the HTML pages.
+    #
+    # They live here so that _dump_params writes them into params.json and the
+    # explorer builds the same model, instead of falling back to its own copy
+    # of the defaults. Defaults are Table II of Martin, Guizard, Daguzan,
+    # Petite et al., PRB 55, 5799 (1997), for SiO2.
+    valence_N0_cm3: float = 2.2e22        # molecular density, ionizable units
+    # Valence ELECTRONS per formula unit. N0 plays two different roles in the
+    # paper under one symbol: the density of ionizable centres (2.2e22 for
+    # SiO2) and the number of valence oscillators carrying the polarizability,
+    # which is 8 per SiO2, four Si-O bonds of two electrons. The depletion
+    # factor needs the second. Using the first overestimates that term
+    # eightfold and flips the sign of the long-delay plateau.
+    n_valence_per_unit: float = 8.0
+    probe_meff_rel: float = 0.5           # conduction mass in the probe Drude term
+    tau_ep_s: float = 1.0 / 1.5e15        # electron-phonon collisions, 0.67 fs
+    # STE absorption bands: (resonance_eV, oscillator_strength, width_eV)
+    ste_bands: tuple = ((5.2, 0.40, 1.5), (4.2, 0.15, 1.0))
+
     # ---- physics switches: field-propagation equation (eq. 3) ----
     # Kerr = instantaneous electronic response + delayed Raman/molecular response.
     enable_kerr_instantaneous: bool = True

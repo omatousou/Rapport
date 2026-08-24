@@ -1,122 +1,171 @@
 """
-parameters.py -- every number of the experiment, in one editable place.
+parameters.py -- every number of the experiment, in one place.
 
-The solver takes all its parameters as arguments, so nothing here is magic.
-These are named bundles of values, and `simulate_kwargs()` turns a set of
-bundles into the keyword arguments of `simulate()`.
+Two dataclasses. `Material` is everything that changes when you swap the
+sample, `Experiment` is everything that changes when you change the setup.
+Nothing here computes physics: this file is data, and `simulate_kwargs()`
+turns a (material, experiment) pair into the call to `simulate()`.
 
-    from parameters import MATERIAL, LASER, BOX, GRID, simulate_kwargs
+    from parameters import FUSED_SILICA, EXP_1030_4UJ, simulate_kwargs
     from run_filament import simulate
 
-    res = simulate(**simulate_kwargs(MATERIAL, LASER, BOX, GRID))
+    res = simulate(**simulate_kwargs(FUSED_SILICA, EXP_1030_4UJ))
 
-Edit a value by editing it here. Nothing else reads these numbers, so a change
-here is the only change needed.
+Swap the sample by swapping one argument:
 
-Override without editing, for a one-off:
+    res = simulate(**simulate_kwargs(SAPPHIRE, EXP_1030_4UJ))
 
-    res = simulate(**simulate_kwargs(MATERIAL, LASER, BOX, GRID,
-                                     energy_incident_uJ=2.0,
+Override anything for one run without editing the presets:
+
+    res = simulate(**simulate_kwargs(FUSED_SILICA, EXP_1030_4UJ,
+                                     energy_incident_uJ=8.0,
                                      enable_kerr_raman=False))
 
-Make a variant, since the bundles are frozen dataclasses:
 
-    import dataclasses
-    softer = dataclasses.replace(MATERIAL, n2_m2W=2.4e-20)
+HOW SURE ARE THESE NUMBERS
+==========================
+Not equally. Every field carries a provenance tag in `SOURCES`, and
+`Material.show()` prints it next to the value. The tags:
 
-Run `python parameters.py` to print every value with where it comes from, and
-to check that the bundles still match the solver's signature.
+    measured   a direct measurement, reproduced in several places
+    fitted     obtained by fitting a model to data, so it depends on that model
+    derived    computed here from other quantities, no new information
+    assumed    carried over from another material or a plausible guess
+    unknown    a placeholder. Results that depend on it are not predictions
 
+`Material.audit()` lists everything not measured, fitted or derived. Run it
+before trusting a run in a material other than fused silica.
 
-WHY THE SOURCES ARE IN HERE
-===========================
-A number in a simulation is worth little without knowing where it came from.
-Each bundle carries a `sources` dict keyed by field name. Three of the silica
-values are genuinely disputed in the literature, and the code has to pick one:
-see the notes on `tau_c_s`, `meff_drude_rel` and `n2_m2W`.
+Fused silica is the calibrated case: it reproduces the published figures. The
+sapphire entry is a starting point, not a validated parameter set, and its
+weak fields are tagged accordingly.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace   # noqa: F401  (replace is for callers)
-from typing import Dict, Optional, Tuple
-
-import numpy as np
+from dataclasses import dataclass, field, replace, fields as _fields
+from typing import Dict, Optional, Sequence, Tuple
 
 
 # ================================================================================
-#  MATERIAL
+#  Material
 # ================================================================================
 @dataclass(frozen=True)
 class Material:
-    """Everything that changes when you change the sample.
-
-    `sellmeier_*` is carried here because it IS a property of the material, but
-    be aware that it is not yet plumbed through to the solver: the dispersion
-    is still a module constant in sim/keldysh.py. `simulate_kwargs()` refuses
-    to build arguments for a material whose Sellmeier fit differs from the one
-    the solver has compiled in, rather than silently running the wrong
-    dispersion. See the note at the bottom of this file.
-    """
+    """Everything that changes when the sample changes."""
 
     name: str
 
-    # ---- linear dispersion -------------------------------------------------------
-    # n^2 - 1 = sum_i B_i lam^2 / (lam^2 - L_i^2),  lam in micrometres
-    sellmeier_B: Tuple[float, ...]
-    sellmeier_L_um: Tuple[float, ...]
-    sellmeier_range_um: Tuple[float, float]
+    # ---- linear dispersion -----------------------------------------------
+    # Sellmeier: n^2 - 1 = sum_j B_j lam^2 / (lam^2 - L2_j), lam in micrometres.
+    # L2 is the SQUARE of the pole positions.
+    sellmeier_B: Tuple[float, ...] = ()
+    sellmeier_L2: Tuple[float, ...] = ()
+    # Where that fit means anything, in micrometres. The solver clips its
+    # frequency axis to this window before evaluating the fit, and puts the
+    # edges of its spectral mask here. See the note at the end of this file.
+    sellmeier_range_um: Tuple[float, float] = (0.18, 5.0)
 
-    # ---- Kerr ---------------------------------------------------------------------
-    n2_m2W: float          # nonlinear index
-    f_R: float             # fraction of the Kerr response that is delayed
-    tau_d_s: float         # Raman damping time
-    tau_s_s: float         # Raman oscillation period
+    # ---- nonlinear response ------------------------------------------------
+    n2_m2W: float = 0.0                  # Kerr index
+    f_R: float = 0.0                     # fraction of the Kerr that is Raman
+    tau_d_s: float = 32e-15              # Raman damping time
+    tau_s_s: float = 12e-15              # Raman oscillation period
 
-    # ---- photoionization ------------------------------------------------------------
-    Ui_eV: float           # band gap, sets the Keldysh rate W_PI
-    meff_rel: float        # reduced mass in the Keldysh rate, in units of m_e
-    rho_max_cm3: float     # N_at, density of ionizable units
+    # ---- ionization and carriers -------------------------------------------
+    Ui_eV: float = 9.0                   # band gap, drives the Keldysh rate
+    Us_eV: float = 6.0                   # gap seen by a trapped exciton
+    meff_rel: float = 0.64               # reduced mass in the Keldysh rate
+    meff_drude_rel: float = 1.0          # effective mass in sigma_w
+    tau_c_s: float = 1.7e-15             # electron collision time in sigma_w
+    tau_r_s: float = 330e-15             # trapping, conduction band -> STE
+    tau_ste_s: Optional[float] = 1e-12   # STE decay to the ground state
+    rho_max_cm3: float = 2.1e22          # N_at, saturation density
+    E_tr_eV: float = 4.2                 # STE resonance seen by the pump
 
-    # ---- Drude response of the free carriers ------------------------------------------
-    meff_drude_rel: float  # effective mass in sigma_w, in units of m_e
-    tau_c_s: float         # electron collision time
+    # ---- probe-side dielectric model (sim/permittivity.py) -----------------
+    # Not used by the propagation. Turns the densities into the phase and
+    # transmittance maps of the HTML pages.
+    valence_N0_cm3: float = 2.2e22       # density of ionizable units
+    n_valence_per_unit: float = 8.0      # valence ELECTRONS per unit, see below
+    probe_meff_rel: float = 0.5          # conduction mass in the probe Drude term
+    tau_ep_s: float = 1.0 / 1.5e15       # electron-phonon collisions
+    ste_bands: Tuple[Tuple[float, float, float], ...] = ()   # (E_eV, f, gamma_eV)
 
-    # ---- self-trapped excitons ----------------------------------------------------------
-    has_ste: bool
-    Us_eV: Optional[float] = None       # gap seen by a trapped exciton
-    E_tr_eV: Optional[float] = None     # STE resonance, sets the pump-side index
-    tau_r_s: Optional[float] = None     # trapping time, N -> N_STE
-    tau_ste_s: Optional[float] = None   # STE decay to the ground state
+    # ---- interfaces --------------------------------------------------------
+    n_fresnel: float = 1.45              # index used for the entrance Fresnel loss
 
-    # ---- entrance face -------------------------------------------------------------------
-    n_fresnel: float = 1.45
+    # ---- is the STE channel meaningful in this material? -------------------
+    enable_ste: bool = True
 
+    # ---- provenance --------------------------------------------------------
     sources: Dict[str, str] = field(default_factory=dict)
     notes: str = ""
 
-    @property
-    def sellmeier_L2(self) -> Tuple[float, ...]:
-        return tuple(float(x) ** 2 for x in self.sellmeier_L_um)
+    # ------------------------------------------------------------------
+    def with_(self, **changes) -> "Material":
+        """A copy with some fields changed. Materials are frozen on purpose."""
+        known = {f.name for f in _fields(self)}
+        bad = set(changes) - known
+        if bad:
+            raise TypeError(f"not Material fields: {sorted(bad)}")
+        return replace(self, **changes)
 
-    def n(self, lam_m: float) -> float:
-        """Linear index at `lam_m`, from this material's Sellmeier fit."""
-        lam_um = lam_m * 1e6
-        lo, hi = self.sellmeier_range_um
-        if not (lo <= lam_um <= hi):
-            raise ValueError(
-                f"{self.name}: {lam_um:.3f} um is outside the Sellmeier window "
-                f"[{lo}, {hi}] um, the index would be extrapolated")
-        n2m1 = sum(B * lam_um**2 / (lam_um**2 - L2)
-                   for B, L2 in zip(self.sellmeier_B, self.sellmeier_L2))
-        return float(np.sqrt(1.0 + n2m1))
+    def provenance(self, field_name: str) -> str:
+        return self.sources.get(field_name, "unknown  (no source recorded)")
+
+    def show(self) -> None:
+        """Print every value with where it comes from."""
+        print("=" * 78)
+        print(f"MATERIAL: {self.name}")
+        print("=" * 78)
+        for f in _fields(self):
+            if f.name in ("name", "sources", "notes"):
+                continue
+            v = getattr(self, f.name)
+            if isinstance(v, float):
+                vs = f"{v:.6g}"
+            elif isinstance(v, tuple):
+                vs = "(" + ", ".join(f"{x:.6g}" if isinstance(x, float) else str(x)
+                                     for x in v) + ")"
+            else:
+                vs = str(v)
+            if len(vs) > 34:
+                vs = vs[:31] + "..."
+            print(f"  {f.name:22s} {vs:36s} {self.provenance(f.name)}")
+        if self.notes:
+            print("\nNOTES")
+            for line in self.notes.strip().split("\n"):
+                print("  " + line)
+        print("=" * 78)
+
+    def audit(self, quiet: bool = False):
+        """Field names whose value is assumed, unknown, or unsourced."""
+        weak = []
+        for f in _fields(self):
+            if f.name in ("name", "sources", "notes"):
+                continue
+            tag = self.provenance(f.name).split()[0]
+            if tag not in ("measured", "fitted", "derived"):
+                weak.append((f.name, self.provenance(f.name)))
+        if not quiet:
+            if not weak:
+                print(f"{self.name}: every field is measured, fitted or derived.")
+            else:
+                print(f"{self.name}: {len(weak)} field(s) NOT on solid ground.")
+                for n, s in weak:
+                    print(f"  {n:22s} {s}")
+        return [n for n, _ in weak]
 
 
+# ================================================================================
+#  Fused silica -- the calibrated case
+# ================================================================================
 FUSED_SILICA = Material(
     name="fused silica (SiO2)",
 
     sellmeier_B=(0.6961663, 0.4079426, 0.8974794),
-    sellmeier_L_um=(0.0684043, 0.1162414, 9.896161),
+    sellmeier_L2=(0.0684043**2, 0.1162414**2, 9.896161**2),
     sellmeier_range_um=(0.18, 5.0),
 
     n2_m2W=2.74e-20,
@@ -125,419 +174,364 @@ FUSED_SILICA = Material(
     tau_s_s=12e-15,
 
     Ui_eV=9.0,
+    Us_eV=6.0,
     meff_rel=0.64,
-    rho_max_cm3=2.1e22,
-
     meff_drude_rel=1.0,
     tau_c_s=1.7e-15,
-
-    has_ste=True,
-    Us_eV=6.0,
-    E_tr_eV=4.2,
     tau_r_s=330e-15,
     tau_ste_s=1e-12,
+    rho_max_cm3=2.1e22,
+    E_tr_eV=4.2,
+
+    valence_N0_cm3=2.2e22,
+    n_valence_per_unit=8.0,
+    probe_meff_rel=0.5,
+    tau_ep_s=1.0 / 1.5e15,
+    ste_bands=((5.2, 0.40, 1.5), (4.2, 0.15, 1.0)),
 
     n_fresnel=1.45,
+    enable_ste=True,
 
     sources={
-        "sellmeier_B": "Malitson, JOSA 55, 1205 (1965)",
-        "n2_m2W": "used by the runs of this repository; Couairon 2005 uses 3.54e-20 at 800 nm",
-        "f_R": "Couairon et al., PRB 71, 125435 (2005), delayed Raman fraction",
-        "tau_d_s": "Couairon 2005, Raman damping time",
-        "tau_s_s": "Couairon 2005, Raman oscillation period",
-        "Ui_eV": "Couairon 2005, band gap",
-        "meff_rel": "Couairon 2005, reduced mass in the Keldysh rate",
-        "rho_max_cm3": "molecular density of SiO2",
-        "meff_drude_rel": "bare electron mass; Martin et al. 1997 Table II give 0.5",
-        "tau_c_s": "Bulgakova convention; Couairon 2005 fit 10 fs, Martin 1997 give 0.67 fs",
-        "Us_eV": "re-ionization of a trapped exciton, Mao et al., Appl. Phys. A 79, 1695 (2004)",
-        "E_tr_eV": "STE resonance, Martin et al., PRB 55, 5799 (1997), Table II",
-        "tau_r_s": "trapping into the STE state",
-        "tau_ste_s": "non-radiative STE decay, Sakurai et al.",
-        "n_fresnel": "index at 1030 nm, for the entrance-face transmission",
+        "sellmeier_B":        "measured  Malitson, JOSA 55, 1205 (1965)",
+        "sellmeier_L2":       "measured  Malitson, JOSA 55, 1205 (1965)",
+        "sellmeier_range_um": "derived   the range Malitson's fit covers",
+        "n2_m2W":             "measured  standard value for fused silica near 1 um",
+        "f_R":                "fitted    Couairon et al., PRB 71, 125435 (2005)",
+        "tau_d_s":            "fitted    Couairon et al., PRB 71, 125435 (2005)",
+        "tau_s_s":            "fitted    Couairon et al., PRB 71, 125435 (2005)",
+        "Ui_eV":              "measured  band gap of fused silica",
+        "Us_eV":              "fitted    STE gap, Mao et al., Appl. Phys. A 79, 1695 (2004)",
+        "meff_rel":           "fitted    Couairon et al., PRB 71, 125435 (2005)",
+        "meff_drude_rel":     "assumed   bare mass in sigma_w, the solver's convention",
+        "tau_c_s":            "fitted    Couairon et al., PRB 71, 125435 (2005)",
+        "tau_r_s":            "measured  trapping time, several fs-pump-probe studies",
+        "tau_ste_s":          "measured  Sakurai et al., ~1 ps in fused silica",
+        "rho_max_cm3":        "derived   molecular density of SiO2",
+        "E_tr_eV":            "measured  STE first excited level, Mao et al. (2004)",
+        "valence_N0_cm3":     "derived   molecular density of SiO2",
+        "n_valence_per_unit": "derived   4 Si-O bonds x 2 electrons, see the note",
+        "probe_meff_rel":     "fitted    Martin et al., PRB 55, 5799 (1997), Table II",
+        "tau_ep_s":           "fitted    Martin et al. (1997) Table II, 1/tau = 1.5e15 /s",
+        "ste_bands":          "fitted    Martin et al. (1997) Table II",
+        "n_fresnel":          "derived   n at the pump, rounded",
+        "enable_ste":         "measured  STEs are well established in a-SiO2",
     },
+
     notes="""
-Every published figure in this repository was produced with these numbers, so
-changing one changes results you may want to compare against.
+This is the calibrated material. It reproduces the published figures, and the
+other entries in this file should be read against it.
 
-Three of them are disputed and the code simply has to pick one.
+n_valence_per_unit deserves its own note, because N0 carries two different
+meanings in Martin et al. under one symbol.
 
-tau_c_s is 1.7 fs here, 10 fs in Couairon 2005 and 0.67 fs in Martin 1997. All
-three fit the same physical quantity to a different measurement. It sets
-sigma_w, so it drives both plasma absorption and defocusing.
+  (a) The density of ionizable centres, in the source term N0 sigma_K F^K.
+      That is the MOLECULAR density, 2.2e22 cm^-3 for SiO2.
+  (b) The number of valence oscillators, in the depletion factor
+      (N0 - N_CB - N_tr). That is the number of ELECTRONS carrying the
+      polarizability, which is 8 per SiO2: four Si-O bonds of two electrons.
 
-meff_drude_rel is the bare mass here, 0.5 in Martin 1997. Do not confuse it
-with meff_rel, which is the reduced mass in the Keldysh rate and is a
-different quantity.
-
-n2_m2W is 2.74e-20 here against Couairon's 3.54e-20 at 800 nm.
+Removing one electron removes 1/N_oscillators of the total polarizability, so
+the depletion term needs (b). Using (a) overestimates it eightfold and flips
+the sign of the long-delay plateau, which contradicts Fig. 6 of the paper
+itself. Hence valence_N0_cm3 * n_valence_per_unit = 1.76e23 as the denominator.
+Set n_valence_per_unit to 1.0 to reproduce the older, wrong behaviour.
 """,
 )
 
 
 # ================================================================================
-#  LASER
+#  Sapphire -- a starting point, NOT a validated parameter set
 # ================================================================================
-@dataclass(frozen=True)
-class Laser:
-    """Pump pulse and probe wavelengths."""
-    name: str
-    wavelength_m: float
-    energy_incident_uJ: float      # energy BEFORE the entrance face
-    spot_sx_um: float              # measured spot sizes, w0 = sqrt(sx*sy)
-    spot_sy_um: float
-    delta_t_s: float               # FWHM of the intensity
-    probe_wavelengths_nm: Tuple[float, ...]
-    apply_fresnel: bool = True
-    sources: Dict[str, str] = field(default_factory=dict)
+SAPPHIRE = Material(
+    name="sapphire (Al2O3), ordinary ray",
 
-    @property
-    def w0_m(self) -> float:
-        return float(np.sqrt(self.spot_sx_um * self.spot_sy_um) * 1e-6)
+    # Ordinary ray. Sapphire is birefringent and this file has no notion of
+    # that: the solver is scalar. Fine for o-ray propagation along the c axis,
+    # wrong for anything else.
+    sellmeier_B=(1.4313493, 0.65054713, 5.3414021),
+    sellmeier_L2=(0.0726631**2, 0.1193242**2, 18.028251**2),
+    sellmeier_range_um=(0.20, 5.0),
 
+    n2_m2W=3.1e-20,
+    f_R=0.0,
+    tau_d_s=32e-15,
+    tau_s_s=12e-15,
 
-PUMP_1030_4UJ = Laser(
-    name="1030 nm, 4 uJ, 263 fs",
-    wavelength_m=1030e-9,
-    energy_incident_uJ=4.0,
-    spot_sx_um=11.5,
-    spot_sy_um=11.0,
-    delta_t_s=263e-15,
-    probe_wavelengths_nm=(490.0, 620.0, 690.0),
-    apply_fresnel=True,
+    Ui_eV=8.8,
+    Us_eV=6.0,
+    meff_rel=0.4,
+    meff_drude_rel=1.0,
+    tau_c_s=1.7e-15,
+    tau_r_s=330e-15,
+    tau_ste_s=None,
+    rho_max_cm3=2.35e22,
+    E_tr_eV=4.2,
+
+    valence_N0_cm3=2.35e22,
+    n_valence_per_unit=12.0,
+    probe_meff_rel=0.4,
+    tau_ep_s=1.0 / 1.5e15,
+    ste_bands=(),
+
+    n_fresnel=1.7551,
+    enable_ste=False,
+
     sources={
-        "spot_sx_um": "measured beam profile, w0 = sqrt(sx*sy) = 11.25 um",
-        "delta_t_s": "FWHM of the intensity; the solver uses tp = FWHM/sqrt(2 ln2)",
-        "energy_incident_uJ": "before the sample; apply_fresnel removes the reflected part",
-        "probe_wavelengths_nm": "probe crosses the pump at 90 degrees, Nomarski interferometry",
+        "sellmeier_B":        "measured  Malitson & Dodge (1972), ordinary ray",
+        "sellmeier_L2":       "measured  Malitson & Dodge (1972), ordinary ray",
+        "sellmeier_range_um": "derived   the range that fit covers",
+        "n2_m2W":             "measured  reported 2.8-3.2e-20 near 800 nm, spread ~15%",
+        "f_R":                "assumed   set to zero, see the note",
+        "tau_d_s":            "unknown   silica's value, meaningless while f_R = 0",
+        "tau_s_s":            "unknown   silica's value, meaningless while f_R = 0",
+        "Ui_eV":              "measured  8.8 eV common in damage work, 9.9 also quoted",
+        "Us_eV":              "unknown   no STE channel here, see the note",
+        "meff_rel":           "assumed   ~0.4 is quoted, but not a Keldysh fit",
+        "meff_drude_rel":     "assumed   bare mass, the solver's convention",
+        "tau_c_s":            "unknown   carried over from silica, not measured here",
+        "tau_r_s":            "unknown   no STE channel here, see the note",
+        "tau_ste_s":          "unknown   no STE channel here, see the note",
+        "rho_max_cm3":        "derived   3.98 g/cm3 / 101.96 g/mol x N_A",
+        "E_tr_eV":            "unknown   no STE channel here, see the note",
+        "valence_N0_cm3":     "derived   same formula-unit density",
+        "n_valence_per_unit": "assumed   6 Al-O bonds x 2 electrons, by analogy",
+        "probe_meff_rel":     "assumed   same as meff_rel above",
+        "tau_ep_s":           "unknown   carried over from silica",
+        "ste_bands":          "assumed   empty, no STE absorption modelled",
+        "n_fresnel":          "derived   n(1030 nm) from the Sellmeier fit above",
+        "enable_ste":         "assumed   switched off deliberately, see the note",
     },
+
+    notes="""
+Do not read a sapphire run as a prediction. Run SAPPHIRE.audit() and look at
+what it lists before drawing any conclusion.
+
+What is solid: the dispersion. The Malitson and Dodge fit is the standard
+reference and gives n(1030 nm) = 1.7551, and the formula-unit density follows
+from the density and the molar mass. Those two are as good as silica's.
+
+What is not: everything in the carrier model. The numbers below are either
+carried over from silica or quoted from a range.
+
+The STE channel is switched off, and that is a physics decision rather than
+missing data. The self-trapped exciton of a-SiO2 is a specific defect, a
+dangling Si-O bond pair, with a measured trapping time and measured absorption
+bands. Crystalline Al2O3 traps carriers through a different set of colour
+centres, mostly F and F+ centres, on different timescales. Reusing silica's
+tau_r, tau_ste, E_tr and band table would produce plausible-looking curves
+built on nothing. If you need trapping in sapphire, put in the F-centre
+parameters and turn the channel back on:
+
+    SAPPHIRE.with_(enable_ste=True, tau_r_s=..., E_tr_eV=...,
+                   ste_bands=((..., ..., ...),))
+
+f_R is set to zero for the same reason. Silica's 0.18 was fitted to silica, and
+sapphire's Raman response is not the same. Zero means a purely electronic Kerr,
+which is a defensible approximation rather than a borrowed number.
+
+Sapphire is birefringent and this solver is scalar. These are ordinary-ray
+values, so they apply to propagation along the c axis and not otherwise.
+""",
 )
 
 
+MATERIALS = {m.name: m for m in (FUSED_SILICA, SAPPHIRE)}
+
+
 # ================================================================================
-#  BOX AND GRID
+#  Experiment
 # ================================================================================
 @dataclass(frozen=True)
-class Geometry:
-    """Where the simulation box starts and ends, in the medium."""
+class Experiment:
+    """Everything that changes when the setup changes, not the sample."""
+
     name: str
-    begin_m: float
-    end_m: float
-    z_focus_air_um: Optional[float] = None   # overrides begin_m when set
+
+    # ---- pump --------------------------------------------------------------
+    wavelength_m: float = 1030e-9
+    energy_incident_uJ: float = 4.0      # BEFORE the entrance face
+    apply_fresnel: bool = True
+    spot_sx_um: float = 11.5
+    spot_sy_um: float = 11.0
+    delta_t_s: float = 263e-15           # FWHM in intensity
+    w0_m: Optional[float] = None         # None: sqrt(sx*sy)
+
+    # ---- probe, 90 degrees from the pump (Nomarski / Abel) -----------------
+    probe_wavelengths_nm: Tuple[float, ...] = (490.0, 620.0, 690.0)
+
+    # ---- box ---------------------------------------------------------------
+    begin_m: float = 0.0
+    end_m: float = 350e-6
+    z_focus_air_um: Optional[float] = None
+
+    # ---- numerical grid ----------------------------------------------------
+    Nz: int = 9000
+    Nt: int = 4096
+    Nr: int = 1024
+    R_factor: float = 8.0
+    tmax_factor: float = 10.0
+    save_stride: int = 20
+    rho_t_stride: int = 8
+    rho_r_stride: int = 2
+
+    # ---- HTML --------------------------------------------------------------
+    html_t_step_fs: float = 67.0
+    html_coarsen_z: int = 4
+    html_phase_clip: float = 0.2
+    html_t_min: Optional[float] = None
+    html_z_lim_um: Tuple[float, float] = (0.0, 350.0)
+    html_x_lim_um: Tuple[float, float] = (-50.0, 50.0)
+
+    notes: str = ""
+
+    def with_(self, **changes) -> "Experiment":
+        known = {f.name for f in _fields(self)}
+        bad = set(changes) - known
+        if bad:
+            raise TypeError(f"not Experiment fields: {sorted(bad)}")
+        return replace(self, **changes)
+
+    def show(self) -> None:
+        print("=" * 78)
+        print(f"EXPERIMENT: {self.name}")
+        print("=" * 78)
+        for f in _fields(self):
+            if f.name in ("name", "notes"):
+                continue
+            v = getattr(self, f.name)
+            vs = f"{v:.6g}" if isinstance(v, float) else str(v)
+            print(f"  {f.name:22s} {vs}")
+        if self.notes:
+            print("\nNOTES")
+            for line in self.notes.strip().split("\n"):
+                print("  " + line)
+        print("=" * 78)
 
 
-BOX_350UM = Geometry(name="0 to 350 um", begin_m=0.0, end_m=350e-6)
+EXP_1030_4UJ = Experiment(
+    name="1030 nm, 4 uJ, z0 to 350 um, probes at 490/620/690 nm",
+    notes="""
+The pump energy is what arrives at the sample. apply_fresnel takes off the
+reflection at the entrance face, using the material's n_fresnel, so the solver
+gets the energy actually inside.
 
+tmax_factor sets the comoving window, tmax = tmax_factor * tp. At the historical
+5.0 it spans only about +/-1.1 ps for a 263 fs pulse, too short to see the STE
+decay of roughly 1 ps: past tmax the recorded cube has no data and the HTML
+cursor plateaus. Raising it to 10 and Nt to 4096 together keeps the same dt and
+doubles the window, for roughly twice the run time.
 
-@dataclass(frozen=True)
-class Numerics:
-    """Grid and output sampling. No physics here.
+html_t_step_fs is the cursor step, not the resolution of the cube. Leaving it
+at None puts every recorded instant in the page, several hundred of them, each
+carrying a phase map and a density map, and the file runs into gigabytes.
+""",
+)
 
-    tmax_factor sets the comoving window, tmax = tmax_factor * tp. At the
-    historical 5.0 it covers only about +/-1.1 ps for a 263 fs pulse, too short
-    to see the STE decay of roughly 1 ps: past tmax the recorded cube has no
-    data and the HTML cursor plateaus. Raise Nt with it to keep the same dt.
-    """
-    name: str
-    Nz: int
-    Nt: int
-    Nr: int
-    R_factor: float          # R_max = R_factor * w0
-    tmax_factor: float       # tmax = tmax_factor * tp
-    save_stride: int
-    rho_t_stride: int        # 0 disables the (z, r, t) cube entirely
-    rho_r_stride: int
-    ckpt_every: int = 200
-
-
-GRID_PRODUCTION = Numerics(
-    name="production", Nz=9000, Nt=4096, Nr=1024, R_factor=8.0,
-    tmax_factor=10.0, save_stride=20, rho_t_stride=8, rho_r_stride=2)
-
-GRID_QUICK = Numerics(
-    name="quick look", Nz=1500, Nt=2048, Nr=512, R_factor=8.0,
-    tmax_factor=10.0, save_stride=10, rho_t_stride=16, rho_r_stride=4)
-
-
-# ================================================================================
-#  HTML OUTPUT
-# ================================================================================
-@dataclass(frozen=True)
-class HtmlOptions:
-    """Options of the interactive explorer pages.
-
-    t_step_fs is the delay cursor step, NOT the resolution of the recorded
-    cube. None would put every cube instant in the page, several hundred of
-    them, each carrying a phase map and a density map, and the file would run
-    into gigabytes.
-    """
-    t_step_fs: float = 67.0
-    coarsen_z: int = 4
-    coarsen_r: int = 1
-    phase_clip: float = 0.2
-    t_min: Optional[float] = None   # None = transmittance colorbar floor auto
-    z_lim_um: Tuple[float, float] = (0.0, 350.0)
-    x_lim_um: Tuple[float, float] = (-50.0, 50.0)
-
-
-HTML_DEFAULT = HtmlOptions()
-
-
-# ================================================================================
-#  PHYSICS SWITCHES
-# ================================================================================
-@dataclass(frozen=True)
-class Physics:
-    """Which terms of the two equations are integrated.
-
-    The field flags act only on the propagation equation. Switching one off
-    stops that channel acting on the beam, it does not stop carriers being
-    created: that is what makes an ablation study possible, and it also means
-    such a run does not conserve energy by construction.
-    """
-    # field equation
-    enable_kerr_instantaneous: bool = True
-    enable_kerr_raman: bool = True
-    enable_self_steepening: bool = True
-    enable_photoionization_loss: bool = True
-    enable_plasma_absorption: bool = True
-    enable_plasma_defocusing: bool = True
-    enable_ste_index: bool = True
-    enable_space_time_focusing: bool = True
-    enable_spectral_filter: bool = True
-    # carrier equations
-    enable_avalanche: bool = True
-    enable_recombination: bool = True
-    enable_ste: bool = True
-
-
-PHYSICS_ALL_ON = Physics()
+EXPERIMENTS = {e.name: e for e in (EXP_1030_4UJ,)}
 
 
 # ================================================================================
-#  Turning bundles into simulate() arguments
+#  Turning a pair into a call
 # ================================================================================
-def simulate_kwargs(material: Material = FUSED_SILICA,
-                    laser: Laser = PUMP_1030_4UJ,
-                    geometry: Geometry = BOX_350UM,
-                    numerics: Numerics = GRID_PRODUCTION,
-                    html: HtmlOptions = HTML_DEFAULT,
-                    physics: Physics = PHYSICS_ALL_ON,
-                    check_dispersion: bool = True,
+def simulate_kwargs(material: Material, experiment: Experiment,
                     **overrides) -> dict:
-    """Flatten the bundles into the keyword arguments of `simulate()`.
+    """Arguments for run_filament.simulate(), from a material and a setup.
 
-    Anything passed as a keyword wins over the bundles, so a one-off variation
-    needs no new bundle.
-
-    `check_dispersion` compares the material's Sellmeier fit against the one
-    compiled into the solver and raises if they differ, because the solver
-    would otherwise run the wrong dispersion without saying so. Pass False only
-    if you have wired the new coefficients in yourself.
+    `overrides` go in last and win, so a one-off change needs no edit to the
+    presets. An override that is not an argument of simulate() raises there,
+    not silently here.
     """
-    if check_dispersion:
-        _assert_dispersion_matches(material)
+    if not material.sellmeier_B or not material.sellmeier_L2:
+        raise ValueError(f"{material.name}: no Sellmeier fit, cannot propagate")
 
     kw = dict(
-        # pump
-        wavelength_m=laser.wavelength_m,
-        energy_incident_uJ=laser.energy_incident_uJ,
-        apply_fresnel=laser.apply_fresnel,
-        n_glass_fresnel=material.n_fresnel,
-        spot_sx_um=laser.spot_sx_um,
-        spot_sy_um=laser.spot_sy_um,
-        delta_t_s=laser.delta_t_s,
+        # dispersion, installed into the solver before anything reads an index
+        material_name=material.name,
+        sellmeier_B=tuple(material.sellmeier_B),
+        sellmeier_L2=tuple(material.sellmeier_L2),
+        sellmeier_range_um=tuple(material.sellmeier_range_um),
 
-        # material
+        # material, solver side
         n2_m2W=material.n2_m2W,
-        Ui_eV=material.Ui_eV,
-        meff_rel=material.meff_rel,
-        meff_drude_rel=material.meff_drude_rel,
-        tau_c_s=material.tau_c_s,
-        rho_max_cm3=material.rho_max_cm3,
-        f_R=material.f_R,
-        tau_d_s=material.tau_d_s,
-        tau_s_s=material.tau_s_s,
+        f_R=material.f_R, tau_d_s=material.tau_d_s, tau_s_s=material.tau_s_s,
+        Ui_eV=material.Ui_eV, Us_eV=material.Us_eV, E_tr_eV=material.E_tr_eV,
+        meff_rel=material.meff_rel, meff_drude_rel=material.meff_drude_rel,
+        tau_c_s=material.tau_c_s, tau_r_s=material.tau_r_s,
+        tau_ste_s=material.tau_ste_s, rho_max_cm3=material.rho_max_cm3,
+        enable_ste=material.enable_ste,
 
-        # box
-        begin_m=geometry.begin_m,
-        end_m=geometry.end_m,
-        z_focus_air_um=geometry.z_focus_air_um,
+        # material, probe side
+        valence_N0_cm3=material.valence_N0_cm3,
+        n_valence_per_unit=material.n_valence_per_unit,
+        probe_meff_rel=material.probe_meff_rel,
+        tau_ep_s=material.tau_ep_s,
+        ste_bands=tuple(tuple(b) for b in material.ste_bands),
 
-        # grid
-        Nz=numerics.Nz, Nt=numerics.Nt, Nr=numerics.Nr,
-        R_factor=numerics.R_factor, tmax_factor=numerics.tmax_factor,
-        save_stride=numerics.save_stride,
-        rho_t_stride=numerics.rho_t_stride,
-        rho_r_stride=numerics.rho_r_stride,
-        ckpt_every=numerics.ckpt_every,
+        # interface
+        n_glass_fresnel=material.n_fresnel,
 
-        # probes and HTML
-        probe_wavelengths_nm=laser.probe_wavelengths_nm,
-        html_t_step_fs=html.t_step_fs,
-        html_coarsen_z=html.coarsen_z,
-        html_coarsen_r=html.coarsen_r,
-        html_phase_clip=html.phase_clip,
-        html_t_min=html.t_min,
-        html_z_lim_um=html.z_lim_um,
-        html_x_lim_um=html.x_lim_um,
+        # setup
+        wavelength_m=experiment.wavelength_m,
+        energy_incident_uJ=experiment.energy_incident_uJ,
+        apply_fresnel=experiment.apply_fresnel,
+        spot_sx_um=experiment.spot_sx_um, spot_sy_um=experiment.spot_sy_um,
+        delta_t_s=experiment.delta_t_s, w0_m=experiment.w0_m,
+        probe_wavelengths_nm=tuple(experiment.probe_wavelengths_nm),
+        begin_m=experiment.begin_m, end_m=experiment.end_m,
+        z_focus_air_um=experiment.z_focus_air_um,
+        Nz=experiment.Nz, Nt=experiment.Nt, Nr=experiment.Nr,
+        R_factor=experiment.R_factor, tmax_factor=experiment.tmax_factor,
+        save_stride=experiment.save_stride,
+        rho_t_stride=experiment.rho_t_stride,
+        rho_r_stride=experiment.rho_r_stride,
+        html_t_step_fs=experiment.html_t_step_fs,
+        html_coarsen_z=experiment.html_coarsen_z,
+        html_phase_clip=experiment.html_phase_clip,
+        html_t_min=experiment.html_t_min,
+        html_z_lim_um=tuple(experiment.html_z_lim_um),
+        html_x_lim_um=tuple(experiment.html_x_lim_um),
     )
-
-    # STE constants only when the material has the channel.
-    if material.has_ste:
-        kw.update(Us_eV=material.Us_eV, E_tr_eV=material.E_tr_eV,
-                  tau_r_s=material.tau_r_s, tau_ste_s=material.tau_ste_s)
-    else:
-        # tau_r still has to be a number because it appears in the rate
-        # equations, so the recombination term is switched off with the rest
-        # rather than fed a made-up time constant.
-        kw.update(Us_eV=material.Ui_eV, E_tr_eV=1.0,
-                  tau_r_s=1.0, tau_ste_s=None)
-
-    for f in Physics.__dataclass_fields__:
-        kw[f] = getattr(physics, f)
-    if not material.has_ste:
-        kw.update(enable_ste=False, enable_ste_index=False,
-                  enable_recombination=False)
-
     kw.update(overrides)
     return kw
 
 
-def _assert_dispersion_matches(material: Material) -> None:
-    """Refuse to run a material whose Sellmeier fit the solver does not have."""
-    try:
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent / "sim"))
-        import keldysh
-    except ImportError:
-        return    # solver not importable from here, nothing to compare against
-
-    same = (np.allclose(np.asarray(material.sellmeier_B, float),
-                        np.asarray(keldysh.SELLMEIER_B, float))
-            and np.allclose(np.asarray(material.sellmeier_L2, float),
-                            np.asarray(keldysh.SELLMEIER_L2, float)))
-    if not same:
-        raise ValueError(
-            f"{material.name} carries a Sellmeier fit that the solver does not "
-            f"have compiled in.\n"
-            f"  parameters.py : B = {tuple(material.sellmeier_B)}\n"
-            f"  sim/keldysh.py: B = {tuple(float(x) for x in keldysh.SELLMEIER_B)}\n"
-            f"\n"
-            f"The dispersion is still a module constant, so the solver would run\n"
-            f"the wrong one without saying so. To use this material, change\n"
-            f"SELLMEIER_B and SELLMEIER_L2 in sim/keldysh.py and the copy in\n"
-            f"web/abel_phase_explorer.py, then pass check_dispersion=False.\n"
-            f"See NOT YET WIRED at the bottom of parameters.py.")
-
-
 # ================================================================================
-#  Defaults, so a caller can write simulate(**simulate_kwargs())
+#  A note on sellmeier_range_um, since it is the least obvious field here
 # ================================================================================
-MATERIAL = FUSED_SILICA
-LASER    = PUMP_1030_4UJ
-BOX      = BOX_350UM
-GRID     = GRID_PRODUCTION
-HTML     = HTML_DEFAULT
-PHYSICS  = PHYSICS_ALL_ON
-
-
-# ================================================================================
-#  NOT YET WIRED
-# ================================================================================
-#  Three numbers of the experiment are NOT read from this file, because they
-#  are still module constants inside the solver. Changing them here alone will
-#  do nothing, which is why simulate_kwargs() checks the first one and raises.
+#  It is not a physical property of the material, it is where the FIT is
+#  meaningful, and the solver needs it for two separate reasons.
 #
-#  1. The Sellmeier coefficients, in sim/keldysh.py lines 22-23. They are also
-#     duplicated in web/abel_phase_explorer.py lines 91-92, so a change has to
-#     be made twice.
+#  The time grid gives the solver a frequency axis far wider than the pulse. At
+#  Nt = 4096 and 1030 nm the absolute frequency omega0 + Omega runs from about
+#  -170 to +750 THz, so roughly a fifth of the bins sit at NEGATIVE absolute
+#  frequency, which is an artifact of writing an envelope equation on a
+#  discrete grid.
 #
-#  2. The Sellmeier validity window, hardcoded as 0.18 to 5 um in
-#     sim/grids.py, both in the omega_safe clip and in the spectral mask.
+#  First, the Sellmeier form has poles, at lambda^2 = L2_j. Silica's are at
+#  0.068, 0.116 and 9.90 um. Evaluating the fit near one returns a divergence
+#  and beyond one returns a negative index. grids.py therefore clips the
+#  frequency axis to this window before evaluating the fit, which freezes the
+#  index at the edge value instead of letting it explode. The 0.18 and 5 um
+#  bounds for silica sit safely between the second and third pole.
 #
-#  3. The probe-side dielectric model of sim/permittivity.py, whose defaults
-#     are Table II of Martin et al. 1997 for SiO2: valence density 2.2e22,
-#     conduction mass 0.5, electron-phonon time 0.67 fs, and the two STE bands
-#     at 5.2 and 4.2 eV. That file takes them as a dataclass, so they are
-#     already editable, but they live there and not here.
+#  Second, the self-steepening operator is T^ = omega/omega0, which changes
+#  SIGN wherever the absolute frequency is negative, down to -0.58 on this
+#  grid. An operator standing for d/dt that changes sign is meaningless. At the
+#  other end T^ reaches 2.58, so T^2 reaches 6.6, and anything that aliases up
+#  there is amplified by that factor at every step, which is a feedback loop.
+#  The spectral mask kills both regions, about a quarter of the grid, with tanh
+#  edges rather than a hard cut so the truncation does not ring.
 #
-#  Wiring them through is a small change to four files. It has not been done
-#  because it touches the solver, and nothing so far needed it.
-# ================================================================================
-
-
-def _main():
-    import textwrap
-
-    def block(title):
-        print("\n" + "=" * 78)
-        print(title)
-        print("=" * 78)
-
-    block("MATERIAL")
-    m = MATERIAL
-    print(f"  {m.name}\n")
-    rows = [("n at 1030 nm", f"{m.n(1030e-9):.4f}", None),
-            ("n2", f"{m.n2_m2W:.3e} m2/W", "n2_m2W"),
-            ("band gap Ui", f"{m.Ui_eV:.2f} eV", "Ui_eV"),
-            ("reduced mass", f"{m.meff_rel:.3f} m_e", "meff_rel"),
-            ("Drude mass", f"{m.meff_drude_rel:.3f} m_e", "meff_drude_rel"),
-            ("collision time", f"{m.tau_c_s*1e15:.2f} fs", "tau_c_s"),
-            ("N_at", f"{m.rho_max_cm3:.3e} cm-3", "rho_max_cm3"),
-            ("Raman fraction", f"{m.f_R:.3f}", "f_R"),
-            ("Raman damping", f"{m.tau_d_s*1e15:.0f} fs", "tau_d_s"),
-            ("Raman period", f"{m.tau_s_s*1e15:.0f} fs", "tau_s_s"),
-            ("STE gap Us", f"{m.Us_eV:.2f} eV", "Us_eV"),
-            ("STE resonance", f"{m.E_tr_eV:.2f} eV", "E_tr_eV"),
-            ("trapping time", f"{m.tau_r_s*1e15:.0f} fs", "tau_r_s"),
-            ("STE decay", f"{m.tau_ste_s*1e15:.0f} fs", "tau_ste_s")]
-    for label, value, key in rows:
-        print(f"  {label:16s} {value:>16s}    {m.sources.get(key, '') if key else 'derived'}")
-    print(textwrap.indent(m.notes.strip(), "  "))
-
-    block("LASER")
-    L = LASER
-    print(f"  {L.name}")
-    print(f"  w0               = {L.w0_m*1e6:.2f} um   from sx={L.spot_sx_um}, sy={L.spot_sy_um} um")
-    print(f"  energy incident  = {L.energy_incident_uJ} uJ")
-    print(f"  FWHM             = {L.delta_t_s*1e15:.0f} fs")
-    print(f"  probes           = {', '.join(f'{p:.0f}' for p in L.probe_wavelengths_nm)} nm")
-    print("\n  index seen by each beam:")
-    print(f"    pump {L.wavelength_m*1e9:.0f} nm : n = {MATERIAL.n(L.wavelength_m):.4f}")
-    for p in L.probe_wavelengths_nm:
-        print(f"    probe {p:.0f} nm : n = {MATERIAL.n(p*1e-9):.4f}")
-
-    block("BOX AND GRID")
-    print(f"  box   {BOX.name}: {BOX.begin_m*1e6:.0f} to {BOX.end_m*1e6:.0f} um")
-    for g in (GRID_PRODUCTION, GRID_QUICK):
-        tp = LASER.delta_t_s / np.sqrt(2*np.log(2))
-        tmax = g.tmax_factor * tp
-        print(f"  grid  {g.name:12s} Nz={g.Nz:<6d} Nt={g.Nt:<5d} Nr={g.Nr:<5d} "
-              f"window=+/-{tmax*1e15:.0f} fs  dt={2*tmax/g.Nt*1e15:.2f} fs")
-
-    block("PHYSICS SWITCHES")
-    for f in Physics.__dataclass_fields__:
-        print(f"  {'[ON ]' if getattr(PHYSICS, f) else '[OFF]'}  {f}")
-
-    block("CHECK AGAINST simulate()")
-    kw = simulate_kwargs()
-    print(f"  simulate_kwargs() produces {len(kw)} arguments")
-    try:
-        import inspect
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import run_filament
-        sig = set(inspect.signature(run_filament.simulate).parameters)
-        bad = sorted(set(kw) - sig)
-        print(f"  not in simulate() signature: {bad or 'none'}")
-        print(f"  left at simulate() defaults: {sorted(sig - set(kw))}")
-    except Exception as e:
-        print(f"  could not import run_filament ({type(e).__name__}), "
-              f"signature not checked")
+#  So the window is material-dependent through the fit, not through the physics
+#  of the sample. A material whose published fit covers a different range needs
+#  a different window here.
 
 
 if __name__ == "__main__":
-    _main()
+    for m in MATERIALS.values():
+        m.show()
+        print()
+        m.audit()
+        print()
+    EXP_1030_4UJ.show()

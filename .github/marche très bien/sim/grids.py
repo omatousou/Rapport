@@ -20,8 +20,14 @@ from scipy.constants import c, epsilon_0, m_e
 from scipy.constants import elementary_charge as q_e
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from keldysh import SELLMEIER_B, SELLMEIER_L2, n_sellmeier, KeldyshSiO2  # noqa: E402
+import keldysh                                                           # noqa: E402
+from keldysh import n_sellmeier, KeldyshSiO2                             # noqa: E402,F401
 from config import Config  # noqa: E402
+
+# The Sellmeier coefficients are deliberately NOT imported by name. `from
+# keldysh import SELLMEIER_B` would bind a copy at import time, and
+# keldysh.set_dispersion() would then never reach this module. They are read as
+# keldysh.SELLMEIER_B inside build_grids, i.e. at call time.
 
 # ================================================================================
 #  4.  GRIDS
@@ -43,17 +49,29 @@ def build_grids(cfg: Config) -> dict:
     rlist   = j1l[0:N - 1] * R / j1l[N - 1]
     rholist = j1l[0:N - 1] / R
 
+    # Read at call time, so keldysh.set_dispersion() reaches this run.
+    SELL_B, SELL_L2 = keldysh.SELLMEIER_B, keldysh.SELLMEIER_L2
+    lam_lo_um, lam_hi_um = keldysh.SELLMEIER_RANGE_UM
+
+    # The frequency axis of the time grid is far wider than the pulse: at
+    # Nt=4096 and 1030 nm the absolute frequency omega0 + Omega runs from about
+    # -170 to +750 THz, so roughly a fifth of the bins sit at NEGATIVE absolute
+    # frequency. The Sellmeier form has poles (silica: 0.068, 0.116, 9.90 um)
+    # and returns nonsense out there, so the axis is clipped to the window where
+    # the fit is defined before it is evaluated. Clipping freezes n at the edge
+    # value; the spectral mask below is what actually removes the field there.
     omega_safe = np.clip(omega0 + 2 * np.pi * cp.asnumpy(ff),
-                         2 * np.pi * c / 5.0e-6, 2 * np.pi * c / 0.18e-6)
+                         2 * np.pi * c / (lam_hi_um * 1e-6),
+                         2 * np.pi * c / (lam_lo_um * 1e-6))
     lam_um = (2 * np.pi * c / omega_safe) * 1e6
     n2m1 = np.zeros_like(lam_um)
-    for B, L2 in zip(SELLMEIER_B, SELLMEIER_L2):
+    for B, L2 in zip(SELL_B, SELL_L2):
         n2m1 += B * lam_um**2 / (lam_um**2 - L2)
 
     def _k_of(w):
         lu = 2 * np.pi * c / w * 1e6
         return (w / c) * np.sqrt(1.0 + sum(B * lu**2 / (lu**2 - L2)
-                                           for B, L2 in zip(SELLMEIER_B, SELLMEIER_L2)))
+                                           for B, L2 in zip(SELL_B, SELL_L2)))
     dw = omega0 / 1000.0
     k1 = (_k_of(omega0 + dw) - _k_of(omega0 - dw)) / (2 * dw)
     delta_k = cp.asarray((omega_safe / c) * np.sqrt(1.0 + n2m1)
@@ -64,8 +82,8 @@ def build_grids(cfg: Config) -> dict:
     # with smooth tanh edges to avoid Gibbs ringing. u = omega/omega0.
     u_norm = (cfg.frequency + ff) / cfg.frequency
     if cfg.enable_spectral_filter:
-        u_lo = (c / 5.0e-6) / cfg.frequency          # ~0.16  (lambda = 5 um)
-        u_hi = (c / 0.18e-6) / cfg.frequency         # ~4.44  (lambda = 0.18 um)
+        u_lo = (c / (lam_hi_um * 1e-6)) / cfg.frequency   # ~0.16 at 5 um
+        u_hi = (c / (lam_lo_um * 1e-6)) / cfg.frequency   # ~4.44 at 0.18 um
         w_edge = 0.05
         spec_mask = 0.25 * (1.0 + cp.tanh((u_norm - u_lo) / w_edge)) \
                          * (1.0 + cp.tanh((u_hi - u_norm) / w_edge))
@@ -150,7 +168,9 @@ def build_grids(cfg: Config) -> dict:
         cp.asarray(I_cpu, dtype=cp.float64), cp.asarray(W_cpu_s, dtype=cp.float64))
 
     logI = cp.linspace(float(np.log10(I_cpu[0])), float(np.log10(I_cpu[-1])), 4096, dtype=cp.float64)
-    keldysh = dict(
+    # NOT named `keldysh`: that would shadow the module for the whole function,
+    # including the attribute reads at the top.
+    keldysh_tables = dict(
         f_spline=f_spline_g,
         W_LUT=cp.nan_to_num(cp.abs(f_spline_g(10.0**logI)).astype(cp.float64), nan=0.0, posinf=0.0, neginf=0.0),
         W_LUT_s=cp.nan_to_num(cp.abs(f_spline_s(10.0**logI)).astype(cp.float64), nan=0.0, posinf=0.0, neginf=0.0),
@@ -171,7 +191,7 @@ def build_grids(cfg: Config) -> dict:
         inv_taur_eff=inv_taur_eff, inv_tau_ste=inv_tau_ste,
         ste_pref=ste_pref, f_ste=f_ste,
         invE2=invE2, mask_r=mask_r,
-        b=cfg.b, E0=cfg.E0, keldysh=keldysh,
+        b=cfg.b, E0=cfg.E0, keldysh=keldysh_tables,
     )
 
 # ================================================================================

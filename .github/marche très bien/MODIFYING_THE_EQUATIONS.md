@@ -197,11 +197,50 @@ also removes the spectral filter from the Kerr and ionization terms even though
 either way.
 
 **`D^` is exact only inside the Sellmeier window.** `delta_k` is built at
-`grids.py:59` from `omega_safe`, which `grids.py:46-47` clips to
-lambda in `[0.18, 5]` um. Outside that band the dispersion is frozen at the
+`grids.py:59` from `omega_safe`, which is clipped to the window where the
+Sellmeier fit is defined. Outside that band the dispersion is frozen at the
 edge value rather than extrapolated. The mask has normally killed the field
 there already, but the two are separate mechanisms and only one of them has a
 flag.
+
+The window is no longer hardcoded. It is `keldysh.SELLMEIER_RANGE_UM`, set
+together with the coefficients by `keldysh.set_dispersion()` and exposed as
+`Material.sellmeier_range_um` in `parameters.py`. It is not a property of the
+sample, it is where the published fit means anything: the Sellmeier form has
+poles at `lambda^2 = L2_j`, silica's at 0.068, 0.116 and 9.90 um, and the
+window is chosen to sit safely between them.
+
+
+## 4c. Changing material
+
+`parameters.py` holds the numbers, `Material` is one sample and `Experiment`
+one setup, and `simulate_kwargs()` turns a pair into a call.
+
+    from parameters import SAPPHIRE, EXP_1030_4UJ, simulate_kwargs
+    simulate(**simulate_kwargs(SAPPHIRE, EXP_1030_4UJ))
+
+Three things used to make this a trap, and all three are wired now.
+
+`keldysh` is the single source of truth for the dispersion.
+`keldysh.set_dispersion()` reaches the solver because `grids.py` reads
+`keldysh.SELLMEIER_B` at call time rather than importing it by name. Importing
+it by name would bind a copy at import time and the setter would never arrive,
+which is why `grids.py` carries a comment saying exactly that.
+
+The coefficients are written into `params.json` by `Integrator._dump_params`,
+and `web/abel_phase_explorer.py` reads them from there. A page therefore
+describes the dispersion of the run that produced it. Its own copy is a
+fallback for runs made before the recording existed, and it warns when it
+falls back. Scenarios with different fits on one page raise.
+
+The probe-side dielectric model travels the same way. `Config` carries the
+fields, `_dump_params` writes them under `probe_model`, and the explorer builds
+its `MaterialResponse` from that instead of from the SiO2 defaults.
+
+One thing that is still on you: `code_fingerprint()` only hashes source files,
+and swapping material changes no source file. The material name therefore goes
+into the default `run_tag`, so a cached silica result is not reused for
+sapphire. If you pass an explicit `run_tag`, keep them distinct yourself.
 
 
 ## 5. Recipes

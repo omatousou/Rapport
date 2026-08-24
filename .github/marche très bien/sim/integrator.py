@@ -302,11 +302,14 @@ class Integrator:
         active), consumed by web/abel_phase_explorer.py to compute Delta n and
         to label ablation scenarios without re-deriving them from the npz."""
         cfg = self.cfg
+        from keldysh import get_dispersion
+        sell_B, sell_L2, sell_range = get_dispersion()
         params = dict(
             n0=cfg.n0, n0_probe=cfg.n0_probe,
             nc_probe_cm3=cfg.nc_probe,
             lambda_probe_nm=cfg.lambda_probe * 1e9,
             wavelength_nm=cfg.wavelength * 1e9,
+            material_name=cfg.material_name,
             n2=cfg.n2, U_g_eV=cfg.Ui_eV, Us_eV=cfg.Us_eV,
             energy_uJ=cfg.energy_uJ, w0_um=cfg.w0 * 1e6,
             delta_t_fs=cfg.delta_t * 1e15,
@@ -319,6 +322,20 @@ class Integrator:
             code_fingerprint=code_fingerprint(),
             begin_um=cfg.begin * 1e6, end_um=cfg.end * 1e6,
             z_focus_air_um=cfg.z_focus_air_um,
+            # The dispersion this run actually used. Recorded so the HTML
+            # explorer reads it instead of keeping its own copy, which used to
+            # mean a page could describe a run with the wrong index.
+            sellmeier_B=list(sell_B),
+            sellmeier_L2=list(sell_L2),
+            sellmeier_range_um=list(sell_range),
+            # The probe-side dielectric model, same reason.
+            probe_model=dict(
+                N0_cm3=cfg.valence_N0_cm3,
+                n_valence_per_unit=cfg.n_valence_per_unit,
+                meff_rel=cfg.probe_meff_rel,
+                tau_ep_s=cfg.tau_ep_s,
+                ste_bands=[list(b) for b in cfg.ste_bands],
+            ),
             toggles=dict(
                 enable_kerr_instantaneous=cfg.enable_kerr_instantaneous,
                 enable_kerr_raman=cfg.enable_kerr_raman,

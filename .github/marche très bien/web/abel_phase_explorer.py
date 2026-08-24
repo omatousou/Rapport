@@ -87,9 +87,66 @@ USE_PERMITTIVITY_MODEL = True   # False -> legacy manual calculation
 X_SIM_HALF_UM = 50.0
 DX_SIM_UM     = 0.2
 
-# --- Pump group index (Sellmeier, silica) ------------------------------------
-_SELLMEIER_B  = np.array([0.6961663, 0.4079426, 0.8974794])
-_SELLMEIER_L2 = np.array([0.0684043, 0.1162414, 9.896161]) ** 2
+# --- Sellmeier dispersion -----------------------------------------------------
+# FALLBACK ONLY, for fused silica. The authoritative coefficients are the ones
+# the run used, recorded in its params.json; build_explorer_html() reads them
+# from there and installs them through set_dispersion() below. These defaults
+# apply only when a page is built from an older params.json that predates the
+# recording, and a warning is printed when that happens.
+_SILICA_B  = np.array([0.6961663, 0.4079426, 0.8974794])
+_SILICA_L2 = np.array([0.0684043, 0.1162414, 9.896161]) ** 2
+
+_SELLMEIER_B  = _SILICA_B
+_SELLMEIER_L2 = _SILICA_L2
+
+
+def set_dispersion(B, L2):
+    """Install the Sellmeier fit that a given run used."""
+    global _SELLMEIER_B, _SELLMEIER_L2
+    B = np.asarray(B, dtype=float)
+    L2 = np.asarray(L2, dtype=float)
+    if B.shape != L2.shape:
+        raise ValueError(f"B and L2 must have the same length, got {B.shape} and {L2.shape}")
+    _SELLMEIER_B, _SELLMEIER_L2 = B, L2
+
+
+def _material_response(params, n2_m2W):
+    """Build the probe-side dielectric model THIS run was configured with.
+
+    The parameters come from the run's params.json, written by
+    Integrator._dump_params from the Config fields. Older runs did not record
+    them, and those fall back to the MaterialResponse defaults, which are
+    Table II of Martin et al. 1997 for SiO2 and are what the explorer used to
+    hardcode for every run.
+    """
+    pm = params.get("probe_model")
+    if not pm:
+        return MaterialResponse(n2_m2W=n2_m2W)
+    bands = tuple(tuple(float(x) for x in b) for b in pm["ste_bands"])
+    return MaterialResponse(
+        name=params.get("material_name", "from params.json"),
+        N0_cm3=float(pm["N0_cm3"]),
+        n_valence_per_unit=float(pm["n_valence_per_unit"]),
+        meff_rel=float(pm["meff_rel"]),
+        tau_ep_s=float(pm["tau_ep_s"]),
+        ste_bands=bands,
+        n2_m2W=n2_m2W,
+    )
+
+
+def _adopt_dispersion_from_params(params, label=""):
+    """Take the dispersion out of a run's params.json, if it recorded one."""
+    B, L2 = params.get("sellmeier_B"), params.get("sellmeier_L2")
+    if B is None or L2 is None:
+        # Reset, do not simply leave whatever the previous call installed.
+        # Otherwise a legacy run plotted after a sapphire one would silently
+        # inherit sapphire's index.
+        set_dispersion(_SILICA_B, _SILICA_L2)
+        print(f"[warn] {label}: params.json carries no Sellmeier fit (run predates "
+              f"the recording). Falling back to fused silica.")
+        return False
+    set_dispersion(B, L2)
+    return True
 _C_UM_FS = 299792458.0 * 1e-9  # um/fs
 _C_M_S = 299792458.0
 _EPS0 = 8.8541878128e-12
@@ -375,7 +432,7 @@ def channel_phases_2d(sim, t_exp_fs, *,
     lmd_probe_m = lmd_probe_nm * 1e-9
     alpha_cm_rz = None
     if USE_PERMITTIVITY_MODEL and SIO2_MARTIN1997 is not None:
-        mat = MaterialResponse(n2_m2W=n2_m2W)
+        mat = _material_response(params, n2_m2W)
         z0 = np.zeros_like(rho_e_rz)
 
         def _dn(rho_e=z0, rho_s=z0, I=z0, inc=()):
@@ -1070,6 +1127,25 @@ def build_explorer_html(sim_dirs, save="abel_phase_explorer.html", *,
     z_focus_by_scenario = {}
     probe_nm_by_scenario = {}
     t0_ref_by_scenario = {}
+
+    # Install the dispersion of the runs being plotted BEFORE loading them,
+    # since the group index and the probe optics are computed on the way in.
+    # Every scenario on one page must share it: comparing runs made in
+    # different materials on shared axes would be meaningless.
+    _disp_seen = {}
+    for name, sim_dir in sim_dirs.items():
+        pj = Path(sim_dir) / "params.json"
+        if not pj.exists():
+            continue
+        with open(pj) as f:
+            _p = json.load(f)
+        _adopt_dispersion_from_params(_p, label=name)
+        _disp_seen[name] = (tuple(_p.get("sellmeier_B") or ()),
+                            tuple(_p.get("sellmeier_L2") or ()))
+    if len(set(_disp_seen.values())) > 1:
+        raise ValueError(
+            "the scenarios on this page were run with different Sellmeier fits, "
+            f"so they are different materials: {_disp_seen}")
 
     for name, sim_dir in sim_dirs.items():
         try:

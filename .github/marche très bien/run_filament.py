@@ -247,6 +247,24 @@ def simulate(
     delta_t_s: float = 263e-15,
     peak_power_W: Optional[float] = None,
 
+    # ---------------- dispersion ----------------
+    # Pass both, or neither. Given, they are installed into the solver through
+    # keldysh.set_dispersion() before anything reads an index, and recorded in
+    # params.json so the HTML pages use the same fit. None keeps fused silica.
+    material_name: str = "fused silica (SiO2)",
+    sellmeier_B: Optional[Sequence[float]] = None,
+    sellmeier_L2: Optional[Sequence[float]] = None,   # squared pole positions
+    sellmeier_range_um: Optional[Sequence[float]] = None,
+
+    # ---------------- probe-side dielectric model ----------------
+    # Not used by the propagation. Turns the densities into what the probe
+    # sees, i.e. the phase and transmittance maps. Martin et al. 1997 Table II.
+    valence_N0_cm3: float = 2.2e22,
+    n_valence_per_unit: float = 8.0,
+    probe_meff_rel: float = 0.5,
+    tau_ep_s: float = 1.0 / 1.5e15,
+    ste_bands: Sequence = ((5.2, 0.40, 1.5), (4.2, 0.15, 1.0)),
+
     # ---------------- material, SiO2 ----------------
     n2_m2W: float = 2.74e-20,          # nonlinear index, Kerr term
     Ui_eV: float = 9.0,                # band gap, Keldysh rate W_PI
@@ -347,10 +365,26 @@ def simulate(
     """
     dirs = _add_package_dirs(sim_dir)
 
+    import keldysh
+    import abel_phase_explorer as _explorer
     from config import Config
     from keldysh import n_sellmeier
     import figures_filament as ff
     from abel_phase_explorer import build_explorer_html, probe_optics
+
+    # ---- dispersion, before anything reads an index --------------------------
+    # keldysh is the single source of truth; grids.py reads it at call time and
+    # Integrator records it in params.json. The explorer keeps its own copy so
+    # it can be used without the solver, so it is put in step here too, which
+    # matters for the probe_optics table printed below.
+    if (sellmeier_B is None) != (sellmeier_L2 is None):
+        raise ValueError("pass both sellmeier_B and sellmeier_L2, or neither")
+    if sellmeier_B is not None:
+        keldysh.set_dispersion(sellmeier_B, sellmeier_L2, sellmeier_range_um)
+    elif sellmeier_range_um is not None:
+        keldysh.set_dispersion(keldysh.SELLMEIER_B, keldysh.SELLMEIER_L2,
+                               sellmeier_range_um)
+    _explorer.set_dispersion(*keldysh.get_dispersion()[:2])
 
     # ---- derived laser quantities -------------------------------------------
     if w0_m is None:
@@ -383,6 +417,10 @@ def simulate(
         wavelength=wavelength_m, energy_uJ=energy_in_glass_uJ,
         peak_power_W=peak_power_W, w0=w0_m, delta_t=delta_t_s,
         tmax_factor=tmax_factor,
+        material_name=material_name,
+        valence_N0_cm3=valence_N0_cm3, n_valence_per_unit=n_valence_per_unit,
+        probe_meff_rel=probe_meff_rel, tau_ep_s=tau_ep_s,
+        ste_bands=tuple(tuple(b) for b in ste_bands),
         n2=n2_m2W, Ui_eV=Ui_eV, Us_eV=Us_eV, E_tr_eV=E_tr_eV,
         meff_rel=meff_rel, meff_drude_rel=meff_drude_rel,
         tau_c=tau_c_s, tau_r=tau_r_s, tau_ste=tau_ste_s,
@@ -444,7 +482,13 @@ def simulate(
     html_dir.mkdir(parents=True, exist_ok=True)
 
     if run_tag is None:
-        run_tag = (f"z0_{(end_m-begin_m)*1e6:.0f}um_{energy_incident_uJ:g}uJ"
+        # The material goes in the tag. Without it a cached result made in one
+        # material would be reused for another: code_fingerprint() only covers
+        # the source files, and swapping material changes no source file.
+        slug = "".join(ch if ch.isalnum() else "_" for ch in material_name).strip("_")
+        while "__" in slug:
+            slug = slug.replace("__", "_")
+        run_tag = (f"{slug}_z0_{(end_m-begin_m)*1e6:.0f}um_{energy_incident_uJ:g}uJ"
                    f"_pump{wavelength_m*1e9:.0f}nm")
     out_dir = out_root_p / run_tag
     cfg_kwargs["out_dir"] = str(out_dir)
