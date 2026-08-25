@@ -313,6 +313,9 @@ out = simulate(
     enable_ste_index=True,
     enable_space_time_focusing=True,
     enable_spectral_filter=True,
+    # the L^2/2k0 piece of the dispersion bracket of Couairon Eq. (2).
+    # False reproduces runs made before it was implemented.
+    enable_dispersion_l2=True,
 
     # every term of the carrier equations, on
     enable_avalanche=True,
