@@ -26,7 +26,7 @@ The operators do not commute, so this product differs from the exact evolution, 
 
 The linear half step applies diffraction and dispersion together in a single operation rather than one after the other. This is exact and not an extra approximation, because once the field is expressed in the combined basis of Hankel radial modes and temporal frequencies $\Omega$, both operators are diagonal and therefore commute. Concretely, \texttt{half\_linear} multiplies by the QDHT matrix, takes the FFT along time, multiplies by the single combined phase
 \begin{equation}
-\exp\!\left[i\left(\hat{D}(\Omega) - \frac{\rho^2}{2k_0}\hat{U}^{-1}(\Omega)\right)\frac{dz}{2}\right],
+\exp\!\left[i\left(\hat{L}(\Omega) - \frac{\rho^2}{2k_0}\hat{U}^{-1}(\Omega)\right)\frac{dz}{2}\right],
 \end{equation}
 applies the spectral mask, then transforms back. Doing it this way costs one FFT and inverse FFT pair per call instead of the two pairs a separate frequency resolved diffraction step would need on top of the dispersion step.
 
