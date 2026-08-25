@@ -14,7 +14,7 @@ where $u$ is the field amplitude in volts per metre that the code actually store
 \underbrace{i\,\hat{D}\,\hat{U}\,\mathcal{E}}_{\substack{\text{dispersion: exact Sellmeier, all orders}\\
 \text{leading term } -\tfrac{i}{2}k''_\omega\,\partial_t^2 \mathcal{E}}} \nonumber\\[4pt]
 &+\;\underbrace{i\,k_{vac}\,n_2\,\hat{T}^{2}\Big[(1-f_R)\,|\mathcal{E}|^2 + f_R\big(R * |\mathcal{E}|^2\big)\Big]\mathcal{E}}_{\text{Kerr effect, instantaneous and delayed Raman, with self-steepening}} \nonumber\\[4pt]
-&-\;\underbrace{\frac{\hat{T}}{2}\,\frac{U_i\,W_{PI}(|\mathcal{E}|^2)}{|\mathcal{E}|^2}\left(1-\frac{N}{N_{at}}\right)\mathcal{E}}_{\text{photoionization energy loss}}
+&-\;\underbrace{\frac{\hat{T}}{2}\,\frac{U_i\,W_{PI}(I)}{I}\left(1-\frac{N}{N_{at}}\right)\mathcal{E}}_{\text{photoionization energy loss}}
 \;-\;\underbrace{\frac{\sigma_\omega}{2}\big(1+i\omega_0\tau_c\big)N\,\mathcal{E}}_{\text{plasma absorption and defocusing}} \nonumber\\[4pt]
 &+\;\underbrace{i\,k_{vac}\,\frac{1}{2n_0\rho_c}\frac{\omega_0^2}{\omega_{tr}^2-\omega_0^2}\,N_{STE}\,\mathcal{E}}_{\text{bound STE polarizability, see Section~11.4}}
 \end{align}
@@ -36,7 +36,9 @@ n_2 : \Delta n = n_2 I,
 \qquad
 \rho_c = \frac{\varepsilon_0 m_e \omega_0^2}{e^2},
 \end{equation}
-and the operators, in the retarded frame $t\to t-z/v_g$ with $\Omega=\omega-\omega_0$,
+The Keldysh rate is written as a function of the intensity, $W_{PI}(I)$, because that is how it is tabulated and how the solver calls it. The rate is of course driven by the field amplitude, through the Keldysh parameter $\gamma=\omega_0\sqrt{m^*U_i}/(eE)$, but that conversion happens inside \texttt{KeldyshSiO2\dotb rate}, which takes an intensity, recovers $E=\sqrt{2I/n_0c\varepsilon_0}$ and builds $\gamma$ from it. Writing $W_{PI}(|u|)$ would name a different function of a different argument.
+
+The operators, in the retarded frame $t\to t-z/v_g$ with $\Omega=\omega-\omega_0$, are
 \begin{equation}
 \hat{T} = 1+\frac{i}{\omega_0}\frac{\partial}{\partial t} \;\longleftrightarrow\; 1+\frac{\Omega}{\omega_0},
 \qquad
