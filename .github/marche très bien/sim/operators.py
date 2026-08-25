@@ -35,12 +35,30 @@ class LinearOperator:
     instead of the two pairs a naive frequency-resolved diffraction step
     would need on top of the existing dispersion step.
 
-    The diffraction term uses inv_U_op = 1/U(Omega) (space-time focusing,
-    U=1 when disabled) so its effective wavenumber is k0*U(Omega) instead of
-    a fixed k0 -- see Config.enable_space_time_focusing. Note that inv_U_op
-    multiplies the diffraction term ONLY, not delta_k: diffraction goes as
-    1/k(omega) and dispersion does not. Written with U-hat moved to the left
-    of d/dz, that is why the dispersion term reads i D^ U^ u.
+    Couairon 2005 Eq. (2) writes the linear part as
+
+        U^ du/dz = i [ grad_perp^2 / 2k0 + (U^ + L^/2k0) L^ ] u
+
+    with L^ = k(omega) - k0 - k' Omega, which is `delta_k` here. Dividing by
+    U^ and using grad_perp^2 <-> -rho^2 in the Hankel basis gives what this
+    step actually applies,
+
+        du/dz = i [ L^ + (U^-1 / 2k0) (L^^2 - rho^2) ] u
+
+    so BOTH the diffraction term and the L^^2 correction carry U^-1, while
+    the plain L^ does not. That is the space-time focusing statement:
+    diffraction goes as 1/k(omega) and dispersion does not.
+
+    NOTE ON `rho`. In this class rho is the Hankel conjugate of r, a radial
+    SPATIAL FREQUENCY in 1/m (`rholist` = Bessel zeros over R). It has
+    nothing to do with the carrier density, also called rho elsewhere in the
+    solver, nor with the critical density rho_c. Here -rho^2 IS the transverse
+    Laplacian.
+
+    The L^^2 term is fourth order in Omega and small: over the 350 um box it
+    contributes under 1e-5 rad between 900 and 1200 nm, 2e-3 rad at 700 nm,
+    and 0.74 rad at 400 nm. It was omitted until now. Set
+    Config.enable_dispersion_l2 = False to get the previous behaviour back.
     """
     def __init__(self, cfg: Config, g: dict):
         self.komega   = g["komega"]
@@ -49,16 +67,20 @@ class LinearOperator:
         self.R        = g["R"]
         self.Rk       = self.R**2 / self.j1last
         self.iRk      = self.j1last / self.R**2
-        self.rhorho   = g["rhorho"]
-        self.delta_k  = g["delta_k"]
-        self.inv_U_op = g["inv_U_op"]
         self.spec_mask = g["spec_mask"]
+        self.enable_l2 = bool(cfg.enable_dispersion_l2)
+
+        # The whole frequency and radial mode dependence, built once. It used
+        # to be rebuilt on every call, twice per z step.
+        num = -g["rhorho"]**2
+        if self.enable_l2:
+            num = num + g["delta_k"]**2
+        self.phase_coeff = g["delta_k"] + num * g["inv_U_op"] / (2 * self.komega)
 
     def half_linear(self, u, dz):
         psik = self.Rk * cp.dot(self.Y, u)
         psik_f = cp.fft.fft(psik, axis=1)
-        phase = (self.delta_k - self.rhorho**2 / (2 * self.komega) * self.inv_U_op) * dz / 2
-        psik_f = psik_f * cp.exp(1j * phase) * self.spec_mask
+        psik_f = psik_f * cp.exp(1j * self.phase_coeff * (dz / 2)) * self.spec_mask
         psik = cp.fft.ifft(psik_f, axis=1)
         return self.iRk * cp.dot(self.Y, psik)
 

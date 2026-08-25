@@ -46,8 +46,9 @@ The equation, with the flag that switches each line off.
 
 | Term | Computed in | Prefactor built in | Flag |
 |---|---|---|---|
-| diffraction, `grad_perp^2` | `LinearOperator.half_linear`, the `rhorho**2 / (2*komega)` part of `phase` | `grids.py:44` (`rholist`) | none |
-| dispersion `D^` | `LinearOperator.half_linear`, the `delta_k` part of `phase` | `grids.py:59` | none |
+| diffraction, `grad_perp^2` | `LinearOperator.__init__`, the `-rhorho**2` part of `phase_coeff` | `grids.py:44` (`rholist`) | none |
+| dispersion correction `L^2/2k` | `LinearOperator.__init__`, the `+delta_k**2` part of `phase_coeff` | `grids.py:59` | `enable_dispersion_l2` |
+| dispersion `L^` | `LinearOperator.__init__`, the bare `delta_k` of `phase_coeff` | `grids.py:59` | none |
 | Kerr, instantaneous | `_kerr_instantaneous` | `kerr_pref`, in `NonlinearOperator.__init__` | `enable_kerr_instantaneous` |
 | Kerr, Raman | `_kerr_raman` | `grids.py:113` (`R_f`) | `enable_kerr_raman` |
 | photoionization loss | `_Ctx.photo`, returned by `_photoionization_loss` | `grids.py:140-161` (Keldysh tables) | `enable_photoionization_loss` |
@@ -196,7 +197,7 @@ also removes the spectral filter from the Kerr and ionization terms even though
 `enable_spectral_filter` is still on. The linear step keeps its own mask
 either way.
 
-**`D^` is exact only inside the Sellmeier window.** `delta_k` is built at
+**`L^` is exact only inside the Sellmeier window.** `delta_k` is built at
 `grids.py:59` from `omega_safe`, which is clipped to the window where the
 Sellmeier fit is defined. Outside that band the dispersion is frozen at the
 edge value rather than extrapolated. The mask has normally killed the field

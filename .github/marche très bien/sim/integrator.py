@@ -344,6 +344,7 @@ class Integrator:
                 enable_plasma_defocusing=cfg.enable_plasma_defocusing,
                 enable_plasma_absorption=cfg.enable_plasma_absorption,
                 enable_space_time_focusing=cfg.enable_space_time_focusing,
+                enable_dispersion_l2=cfg.enable_dispersion_l2,
                 enable_spectral_filter=cfg.enable_spectral_filter,
                 tau_ste_fs=(cfg.tau_ste * 1e15 if cfg.tau_ste else None),
                 enable_ste_index=cfg.enable_ste_index,

@@ -148,6 +148,15 @@ class Config:
     # STE absorption bands: (resonance_eV, oscillator_strength, width_eV)
     ste_bands: tuple = ((5.2, 0.40, 1.5), (4.2, 0.15, 1.0))
 
+    # ---- physics switch: linear step ----
+    # The L^^2/2k0 piece of the dispersion bracket of Couairon 2005 Eq. (2),
+    # (U^ + L^/2k0) L^. Fourth order in Omega and small: over a 350 um box it
+    # is under 1e-5 rad between 900 and 1200 nm and 2e-3 rad at 700 nm, but it
+    # reaches 0.74 rad at 400 nm, so it matters for the blue edge of a
+    # supercontinuum and not for the pump. Omitted before this flag existed;
+    # set False to reproduce runs made then.
+    enable_dispersion_l2: bool = True
+
     # ---- physics switches: field-propagation equation (eq. 3) ----
     # Kerr = instantaneous electronic response + delayed Raman/molecular response.
     enable_kerr_instantaneous: bool = True

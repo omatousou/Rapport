@@ -31,7 +31,7 @@ Each line carries the flag that switches it off, so the equation below and the
 signature of `simulate()` can be read side by side.
 
   U^ du/dz =   (i / 2k0) grad_perp^2 u                      always on
-             + i D^ U^ u                                    always on
+             + i (U^ + L^/2k0) L^ u                        L^2 part: enable_dispersion_l2
              + i T^^2 (3 w0^2 chi3 / 8 k0 c^2) (1-f_R) |u|^2 u
                                                             enable_kerr_instantaneous
              + i T^^2 (3 w0^2 chi3 / 8 k0 c^2) f_R (R*|u|^2) u
@@ -44,13 +44,19 @@ signature of `simulate()` can be read side by side.
 
   T^ = 1 + (i/w0) d/dt                 enable_self_steepening   (T^ = 1 when off)
   U^ = 1 + (i k'/k0) d/dt              enable_space_time_focusing (U^ = 1 when off)
-  D^ = k(w) - k0 - k' Omega            Sellmeier, no Taylor truncation
+  L^ = k(w) - k0 - k' Omega            Sellmeier, no Taylor truncation
   f_STE = w0^2 / (w_tr^2 - w0^2)       Lorentz factor at the STE level w_tr
   rho_c = eps0 m_e w0^2 / q^2          critical density at the pump, bare mass
 
-Note on U^. In half_linear the factor U^-1 multiplies the diffraction term
-only, not D^, which is why D^ picks up a U^ once U^ is moved to the left. That
-is the standard form: diffraction goes as 1/k(w) and dispersion does not.
+Note on U^. Dividing Eq. (2) by U^ gives what half_linear applies,
+
+    du/dz = i [ L^ + (U^-1 / 2k0) (L^^2 - rho^2) ] u
+
+so U^-1 multiplies the diffraction term AND the L^^2 correction, but not the
+plain L^. That is the standard form: diffraction goes as 1/k(w) and dispersion
+does not. Here rho is the Hankel conjugate of r, a radial spatial frequency in
+1/m, and -rho^2 IS the transverse Laplacian. It is unrelated to the carrier
+density, also written rho in this solver, and to the critical density rho_c.
 
 Note on the Kerr prefactor. 3 w0^2 chi3 / 8 k0 c^2 with chi3 = (4/3) eps0 n0^2
 c n2 is algebraically equal to (w0/c) n2 I / |u|^2, so the Kerr term is
@@ -104,7 +110,7 @@ deliberate, but none of them can be found by reading the equations alone.
    filter from the nonlinear step, even with enable_spectral_filter left on.
    The linear step keeps its own mask either way.
 
-4. D^ is exact only inside the Sellmeier window. It is built from a frequency
+4. L^ is exact only inside the Sellmeier window. It is built from a frequency
    axis clipped to lambda in [0.18, 5] um, so outside that band it is frozen at
    the edge value rather than extrapolated. The spectral mask has normally
    killed the field there already.
@@ -196,6 +202,7 @@ def _add_package_dirs(sim_dir: Optional[str] = None) -> dict:
 _EXTRA_TERMS = [
     ("enable_self_steepening",    "T^ = 1 + (i/w0) d/dt   (else T^ = 1)", "field"),
     ("enable_space_time_focusing", "U^ = 1 + (i k'/k0) d/dt   (else U^ = 1)", "field"),
+    ("enable_dispersion_l2",      "+ i (U^-1/2k0) L^2   (Couairon Eq. 2 bracket)", "field"),
     ("enable_spectral_filter",    "spectral mask on the Sellmeier window", "field"),
     ("enable_avalanche",          "+ beta_g I N (1 - N/N_at)", "carriers"),
     ("enable_recombination",      "- N / tau_r   (trapping into STE)", "carriers"),
@@ -304,6 +311,7 @@ def simulate(
     enable_plasma_defocusing: bool = True,
     enable_plasma_absorption: bool = True,
     enable_space_time_focusing: bool = True,
+    enable_dispersion_l2: bool = True,
     enable_spectral_filter: bool = True,
     enable_ste_index: bool = True,
 
@@ -432,6 +440,7 @@ def simulate(
         enable_plasma_defocusing=enable_plasma_defocusing,
         enable_plasma_absorption=enable_plasma_absorption,
         enable_space_time_focusing=enable_space_time_focusing,
+        enable_dispersion_l2=enable_dispersion_l2,
         enable_spectral_filter=enable_spectral_filter,
         enable_ste_index=enable_ste_index,
         enable_avalanche=enable_avalanche,
